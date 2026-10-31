@@ -107,10 +107,10 @@ export function forecastText(
     return w.temperature > 22 ? 'Close and showery' : 'Cloudy with scattered rain';
   }
   if (w.temperature < 3) {
-    return 'Clear and bitterly cold';
+    return `Clear and bitterly cold${turning}`;
   }
   if (w.temperature < 10) {
-    return `Clear, turning cold${turning}`;
+    return `Clear and cold${turning}`;
   }
   if (w.temperature > 29) {
     return 'Hot and dry, hazy at noon';

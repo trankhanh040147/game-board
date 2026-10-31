@@ -1,0 +1,33 @@
+/* ==========================================================================
+   FIRST HEARTH — almanac charts refinements
+   ========================================================================== */
+
+.fh-chart-card {
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.fh-chart-card:hover {
+  border-color: rgba(201, 165, 91, 0.3);
+}
+.fh-chart-canvas {
+  image-rendering: auto;
+  border-radius: 3px;
+}
+.fh-chart-value small.is-good {
+  color: var(--good);
+}
+.fh-chart-value small.is-bad {
+  color: var(--bad-soft);
+}
+.fh-chart-value small.is-neutral {
+  color: var(--ink-ghost);
+}
+
+/* Almanac toolbar sticky on long pages */
+.fh-almanac-toolbar {
+  position: sticky;
+  top: -12px;
+  z-index: 3;
+  padding: 6px 0;
+  margin: -6px 0 0;
+  background: linear-gradient(180deg, rgba(23, 19, 15, 0.97) 60%, rgba(23, 19, 15, 0));
+}

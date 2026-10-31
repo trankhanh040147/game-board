@@ -33,6 +33,7 @@ import {
   stockSnapshot,
   tileAt,
   tileIndex,
+  inBounds,
   waterDaysOf,
   yearOf,
 } from './core';
@@ -610,7 +611,7 @@ export function revealArea(state: GameState, cx: number, cy: number, radius: num
       if (dx * dx + dy * dy > radius * radius) continue;
       const x = cx + dx;
       const y = cy + dy;
-      if (!claimableTile(w, content, x, y, true)) continue;
+      if (!inBounds(w, x, y)) continue;
       const idx = tileIndex(w, x, y);
       if (w.explored[idx] === 1) continue;
       w.explored[idx] = 1;

@@ -421,6 +421,7 @@ export function stockSnapshot(st: Settlement): Record<ResourceId, number> {
 
 /** Days of food remaining, counting edible stock. */
 export function foodDaysOf(s: GameState, c: Content, st: Settlement): number {
+  if (st.population <= 0) return 0;
   let food = 0;
   for (const res in st.stock) {
     const def = c.resources[res];
@@ -431,6 +432,7 @@ export function foodDaysOf(s: GameState, c: Content, st: Settlement): number {
 }
 
 export function waterDaysOf(s: GameState, st: Settlement): number {
+  if (st.population <= 0) return 0;
   const need = Math.max(0.001, st.population * 0.9);
   return (st.stock.water ?? 0) / need;
 }
@@ -566,12 +568,30 @@ export function hasPolicy(s: GameState, policy: PolicyId): boolean {
   return !!s.society.policies[policy];
 }
 
+/** Tech requirements where unknown/unwritten tech ids are treated as satisfied (era gating still applies). */
+export function techRequirementsMet(s: GameState, c: Content, techs: TechId[]): boolean {
+  for (const t of techs) {
+    if (!c.techs[t]) continue;
+    if (!hasTech(s, t)) return false;
+  }
+  return true;
+}
+
+/** Building availability: era gate + tech gate + event-granted unlock flags. */
+export function isBuildingUnlocked(s: GameState, c: Content, buildingId: string): boolean {
+  const def = c.buildings[buildingId];
+  if (!def) return false;
+  if (def.era > s.research.era) return false;
+  if (s.flags['unlock_building:' + buildingId]) return true;
+  return techRequirementsMet(s, c, def.requiresTech ?? []);
+}
+
 export function isPolicyUnlocked(s: GameState, c: Content, policy: PolicyId): boolean {
   const p = c.policies[policy];
   if (!p) return false;
   if (p.era > s.research.era) return false;
-  for (const req of p.requiresTech) if (!hasTech(s, req)) return false;
-  return true;
+  if (s.flags['unlock_policy:' + policy]) return true;
+  return techRequirementsMet(s, c, p.requiresTech ?? []);
 }
 
 // ---------------------------------------------------------------------------

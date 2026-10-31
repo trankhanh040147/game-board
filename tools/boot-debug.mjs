@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const browser = await puppeteer.launch({headless:true, executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args:['--no-sandbox','--enable-unsafe-swiftshader','--use-angle=metal']});
+const page = await browser.newPage();
+await page.setViewport({width:1600,height:900});
+page.on('pageerror', e => console.log('PAGEERROR:', e.message, '\nSTACK:', e.stack?.slice(0,2500)));
+page.on('console', m => { if(m.type()==='error') console.log('CONSOLE:', m.text().slice(0,1500)); });
+await page.goto('http://127.0.0.1:5280/', {waitUntil:'networkidle2', timeout:60000});
+await new Promise(r=>setTimeout(r,5000));
+const info = await page.evaluate(()=>({ ready: window.__FIRST_HEARTH__, hasGame: !!window.__game, boot: document.getElementById('boot-screen')?.innerText }));
+console.log('INFO', JSON.stringify(info).slice(0,1200));
+await browser.close();

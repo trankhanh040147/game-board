@@ -25,6 +25,7 @@ import {
   capitalOf,
   claimableTile,
   hasTech,
+  isBuildingUnlocked,
   isPolicyUnlocked,
   missingCost,
   modOfState,
@@ -38,6 +39,7 @@ import {
   settlementById,
   stockOf,
   techAvailable,
+  techRequirementsMet,
   tileAt,
   tileIndex,
 } from './core';
@@ -80,8 +82,9 @@ export function placementCheck(a: ActionContext, typeId: BuildingId, x: number, 
   const st = settlementById(state, settlementId);
   if (!st) return { ...empty, reason: 'No settlement selected' };
   if (def.era > state.research.era) return { ...empty, reason: `Requires era ${def.era + 1}` };
-  for (const tech of def.requiresTech) {
-    if (!hasTech(state, tech)) return { ...empty, reason: `Requires ${content.techs[tech]?.name ?? tech}` };
+  if (!isBuildingUnlocked(state, content, typeId)) {
+    const missing = def.requiresTech.find((t) => content.techs[t] && !hasTech(state, t));
+    return { ...empty, reason: missing ? `Requires ${content.techs[missing]?.name ?? missing}` : 'Not yet available' };
   }
   const w = state.world;
   const tiles = footprint(def.size, x, y);
@@ -222,7 +225,7 @@ export function setBuildingRecipe(a: ActionContext, buildingId: number, recipeId
   const recipe = content.recipes[recipeId];
   if (!recipe) return fail('Unknown recipe');
   if (!def.recipes.includes(recipeId)) return fail('That recipe is not available in this building');
-  if (recipe.requiresTech && !recipe.requiresTech.every((t) => hasTech(state, t))) return fail('Recipe not yet discovered');
+  if (recipe.requiresTech && !techRequirementsMet(state, content, recipe.requiresTech)) return fail('Recipe not yet discovered');
   b.recipeId = recipeId;
   return { ok: true, message: `Now producing ${recipe.name}` };
 }
@@ -352,6 +355,11 @@ export function setWorkHours(a: ActionContext, hours: number): ActionResult {
   return { ok: true };
 }
 
+/** Influence cost actually charged for a policy (content cost with the society discount). */
+export function policyInfluenceCost(policy: { cost: number }): number {
+  return Math.max(1, Math.round(policy.cost * 0.6));
+}
+
 export function setPolicy(a: ActionContext, policyId: PolicyId, on: boolean): ActionResult {
   const { state, content } = a;
   const p = content.policies[policyId];
@@ -366,8 +374,9 @@ export function setPolicy(a: ActionContext, policyId: PolicyId, on: boolean): Ac
         if (state.society.policies[cid]) return fail(`Conflicts with ${content.policies[cid]?.name ?? cid}. Repeal it first.`);
       }
     }
-    if ((cap.influence ?? 0) < p.cost) return fail(`Needs ${p.cost} influence`);
-    cap.influence -= p.cost;
+    const cost = policyInfluenceCost(p);
+    if ((cap.influence ?? 0) < cost) return fail(`Needs ${cost} influence`);
+    cap.influence -= cost;
     state.society.policies[policyId] = true;
     state.society.policyHistory.push({ policy: policyId, tick: state.tick, on: true });
     pushNotification(state, `Policy enacted: ${p.name}`, 'info', 'crown');
@@ -549,6 +558,163 @@ export function plantForest(a: ActionContext, x: number, y: number, settlementId
   }
   state.stats.treesPlanted++;
   return { ok: true, message: 'Saplings planted' };
+}
+
+// ---------------------------------------------------------------------------
+// Diplomacy — responding to neighbour offers
+// ---------------------------------------------------------------------------
+
+/**
+ * Accept or decline one of a neighbour's pending offers.
+ * Offer shapes are authored by the neighbours system:
+ *   gift    — they give `resource` x `amount` (or coin)
+ *   trade   — favourable exchange of `resource` x `amount`
+ *   demand  — they demand `resource` x `amount` (tribute)
+ *   alliance— mutual defence and open markets
+ *   war     — pay tribute or face war
+ */
+export function respondToNeighborOffer(a: ActionContext, neighborId: number, offerIndex: number, accept: boolean): ActionResult {
+  const { state, content } = a;
+  const civ = state.neighbors.civs.find((c) => c.id === neighborId);
+  if (!civ) return fail('No such people');
+  const offer = civ.offers[offerIndex];
+  if (!offer) return fail('That offer is no longer on the table');
+  if (offer.expiresTick > 0 && offer.expiresTick < state.tick) {
+    civ.offers.splice(offerIndex, 1);
+    return fail('That offer has expired');
+  }
+  const cap = capitalOf(state);
+  if (!cap) return fail('No settlement');
+  const def = offer.resource ? content.resources[offer.resource] : undefined;
+  const amount = Math.max(0, offer.amount ?? 0);
+  const unit = offer.resource ? state.market.prices[offer.resource]?.price ?? def?.basePrice ?? 1 : 1;
+  const bestow = (): void => {
+    if (offer.resource && def) addStock(cap, offer.resource, Math.max(1, amount));
+    else cap.treasury += Math.max(10, amount || 20);
+  };
+  if (accept) {
+    switch (offer.kind) {
+      case 'gift': {
+        bestow();
+        civ.attitude = Math.min(100, civ.attitude + 8);
+        civ.lastContactTick = state.tick;
+        pushNotification(state, `Gift accepted from ${civ.name}.`, 'good', 'handshake');
+        addChronicle(state, `A Gift from ${civ.name}`, `Envoys of ${civ.name} laid gifts at our hearth. Goodwill is cheaper than war.`, 'trade', 1);
+        break;
+      }
+      case 'trade': {
+        if (!offer.resource || !def || amount <= 0) return fail('This trade offer is malformed');
+        if (stockOf(cap, offer.resource) >= amount) {
+          removeStock(cap, offer.resource, amount);
+          const profit = unit * amount * 1.24;
+          cap.treasury += profit;
+          civ.attitude = Math.min(100, civ.attitude + 5);
+          pushNotification(state, `Sold ${amount} ${def.name} to ${civ.name} for ${Math.round(profit)} coin.`, 'good', 'coin');
+        } else {
+          const cost = unit * amount * 1.12;
+          if (cap.treasury < cost) return fail(`Need ${Math.round(cost)} coin for this trade`);
+          cap.treasury -= cost;
+          addStock(cap, offer.resource, amount);
+          civ.attitude = Math.min(100, civ.attitude + 4);
+          pushNotification(state, `Bought ${amount} ${def.name} from ${civ.name} for ${Math.round(cost)} coin.`, 'good', 'coin');
+        }
+        break;
+      }
+      case 'demand': {
+        if (offer.resource && def && amount > 0) {
+          if (!canAfford(cap, { [offer.resource]: amount })) return fail(`Cannot afford to meet the demand for ${def.name}`);
+          payCost(cap, { [offer.resource]: amount });
+        } else {
+          const tribute = Math.max(20, Math.round(amount || 40));
+          if (cap.treasury < tribute) return fail(`Cannot afford the tribute of ${tribute} coin`);
+          cap.treasury -= tribute;
+        }
+        civ.attitude = Math.min(100, civ.attitude + 6);
+        pushNotification(state, `Tribute sent to ${civ.name}. The frontier is quiet — for now.`, 'info', 'coin');
+        break;
+      }
+      case 'alliance': {
+        civ.relation = 'alliance';
+        civ.attitude = Math.max(30, civ.attitude) + 12;
+        civ.lastContactTick = state.tick;
+        pushNotification(state, `Alliance sworn with ${civ.name}.`, 'good', 'handshake');
+        addChronicle(state, `The Pact of ${civ.name}`, `Our hearth and the halls of ${civ.name} are bound by oath. Their enemies are ours; ours are theirs.`, 'society', 3);
+        break;
+      }
+      case 'war': {
+        if (offer.resource && def && amount > 0) {
+          if (!canAfford(cap, { [offer.resource]: amount })) return fail(`Cannot afford the tribute of ${def.name}`);
+          payCost(cap, { [offer.resource]: amount });
+        } else {
+          const tribute = Math.max(30, Math.round(amount || 60));
+          if (cap.treasury < tribute) return fail(`Cannot afford the tribute of ${tribute} coin`);
+          cap.treasury -= tribute;
+        }
+        civ.attitude = Math.min(100, civ.attitude + 4);
+        pushNotification(state, `${civ.name} withdraws its warband, satisfied.`, 'warn', 'shield');
+        break;
+      }
+    }
+  } else {
+    switch (offer.kind) {
+      case 'demand':
+      case 'war': {
+        civ.attitude = Math.max(-100, civ.attitude - 18);
+        if (offer.kind === 'war') {
+          civ.relation = 'war';
+          pushNotification(state, `${civ.name} declares war. Their warbands are marching.`, 'bad', 'sword');
+          addChronicle(state, `War with ${civ.name}`, `The demands of ${civ.name} were refused. Their banners now cross our fields.`, 'conflict', 3);
+        } else {
+          pushNotification(state, `We refuse the demands of ${civ.name}.`, 'warn', 'warning');
+        }
+        break;
+      }
+      case 'gift': {
+        civ.attitude = Math.max(-100, civ.attitude - 4);
+        pushNotification(state, `Gift returned to ${civ.name}.`, 'info', 'handshake');
+        break;
+      }
+      case 'trade': {
+        civ.attitude = Math.max(-100, civ.attitude - 3);
+        pushNotification(state, `Trade with ${civ.name} declined.`, 'info', 'coin');
+        break;
+      }
+      case 'alliance': {
+        civ.attitude = Math.max(-100, civ.attitude - 5);
+        pushNotification(state, `The alliance of ${civ.name} was politely declined.`, 'info', 'handshake');
+        break;
+      }
+    }
+  }
+  civ.offers.splice(offerIndex, 1);
+  return { ok: true, message: accept ? 'Offer accepted' : 'Offer declined' };
+}
+
+/** Send a goodwill gift of goods or coin to a neighbour. */
+export function giftToNeighbor(a: ActionContext, neighborId: number, resource: ResourceId | null, amount: number): ActionResult {
+  const { state, content } = a;
+  const civ = state.neighbors.civs.find((c) => c.id === neighborId);
+  if (!civ) return fail('No such people');
+  const cap = capitalOf(state);
+  if (!cap) return fail('No settlement');
+  let value = 0;
+  if (resource) {
+    const def = content.resources[resource];
+    if (!def) return fail('Unknown gift');
+    if (!canAfford(cap, { [resource]: amount })) return fail('Not enough to give');
+    payCost(cap, { [resource]: amount });
+    value = (state.market.prices[resource]?.price ?? def.basePrice) * amount;
+  } else {
+    const coin = Math.max(1, Math.round(amount));
+    if (cap.treasury < coin) return fail('Not enough coin');
+    cap.treasury -= coin;
+    value = coin;
+  }
+  const gain = Math.min(20, 4 + value / 25);
+  civ.attitude = Math.min(100, civ.attitude + gain);
+  civ.lastContactTick = state.tick;
+  pushNotification(state, `Gift sent to ${civ.name}. (+${Math.round(gain)} regard)`, 'good', 'handshake');
+  return { ok: true, message: 'Gift sent' };
 }
 
 // ---------------------------------------------------------------------------

@@ -43,7 +43,7 @@ export class GameApp {
   renderer: WorldRenderer | null = null;
   ui: UIController | null = null;
   paused = false;
-  speed = 1;
+  speed = 2;
   private listeners = new Map<AppEventName, Set<Listener>>();
   private accumulator = 0;
   private lastFrame = 0;
@@ -167,6 +167,19 @@ export class GameApp {
       this.lastAutosaveDay = s.tick;
       saveToStorage(s, AUTOSAVE_KEY);
     }
+    // A settler expedition has reached its destination: found the new settlement.
+    const readyX = s.flags['exploration.settleReadyX'];
+    const readyY = s.flags['exploration.settleReadyY'];
+    if (typeof readyX === 'number' && typeof readyY === 'number') {
+      delete s.flags['exploration.settleReadyX'];
+      delete s.flags['exploration.settleReadyY'];
+      const fromId = s.flags['exploration.settleReadyFrom'] ?? capitalOf(s)?.id ?? 0;
+      delete s.flags['exploration.settleReadyFrom'];
+      if (s.settlements.length < LIMITS.maxSettlements) {
+        Actions.foundSettlementAt({ state: s, content: this.content, rules: RULES }, Math.round(readyX), Math.round(readyY), fromId);
+        this.renderer?.invalidateTerrain();
+      }
+    }
     // Game over: the last hearth goes dark.
     if (totalPopulation(s) === 0 && !s.gameOver) {
       s.gameOver = { tick: s.tick, cause: 'The last hearth went dark.' };
@@ -248,8 +261,8 @@ export class GameApp {
     this.paused = false;
     this.view.paused = false;
     if (this.speed === 0) {
-      this.speed = 1;
-      this.state.settings.speed = 1;
+      this.speed = 2;
+      this.state.settings.speed = 2;
     }
     this.emit('paused', false);
     this.emit('speed', this.speed);
@@ -314,8 +327,8 @@ export class GameApp {
   newGame(seed?: string, difficulty: Difficulty = 'balanced', announce = true): void {
     const chosenSeed = (seed ?? '').trim() || randomSeed();
     this.state = createNewGame(this.content, { seed: chosenSeed, difficulty });
-    this.speed = 1;
-    this.state.settings.speed = 1;
+    this.speed = 2;
+    this.state.settings.speed = 2;
     this.paused = false;
     this.decisionPause = false;
     this.accumulator = 0;
@@ -508,6 +521,14 @@ export class GameApp {
 
   plantForest(x: number, y: number): ActionResult {
     return this.run((a) => Actions.plantForest(a, x, y, this.view.selectedSettlementId));
+  }
+
+  respondToOffer(neighborId: number, offerIndex: number, accept: boolean): ActionResult {
+    return this.run((a) => Actions.respondToNeighborOffer(a, neighborId, offerIndex, accept));
+  }
+
+  giftToNeighbor(neighborId: number, resource: ResourceId | null, amount: number): ActionResult {
+    return this.run((a) => Actions.giftToNeighbor(a, neighborId, resource, amount));
   }
 
   // ------------------------------------------------------------------

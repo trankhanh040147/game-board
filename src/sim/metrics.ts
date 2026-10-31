@@ -24,13 +24,24 @@ function capital(s: GameState): Settlement | null {
   return capitalOf(s);
 }
 
-function avgCitizens(s: GameState, sel: (c: { morale: number; health: number; hunger: number; thirst: number }) => number): number {
+function avgCitizens(
+  s: GameState,
+  sel: (c: { morale: number; health: number; hunger: number; thirst: number }) => number,
+  cohortSel?: (co: { morale: number; health: number }) => number,
+): number {
   let sum = 0;
   let n = 0;
   for (const c of s.citizens) {
     if (!c.alive) continue;
     sum += sel(c);
     n++;
+  }
+  if (cohortSel) {
+    for (const co of s.cohorts) {
+      if (co.count <= 0) continue;
+      sum += cohortSel(co) * co.count;
+      n += co.count;
+    }
   }
   return n ? sum / n : 0;
 }
@@ -82,9 +93,9 @@ export function computeMetric(s: GameState, c: Content, metric: string): number 
       return st ? waterDaysOf(s, st) : 0;
     }
     case 'morale':
-      return avgCitizens(s, (x) => x.morale);
+      return avgCitizens(s, (x) => x.morale, (co) => co.morale);
     case 'health':
-      return avgCitizens(s, (x) => x.health);
+      return avgCitizens(s, (x) => x.health, (co) => co.health);
     case 'hunger':
       return avgCitizens(s, (x) => x.hunger);
     case 'thirst':

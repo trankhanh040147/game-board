@@ -101,6 +101,7 @@ export const TECHS: TechDef[] = [
     desc: 'Read the grain of a stone and strike once, truly. The edge that follows does the rest.',
     effects: { craftSpeed: 0.08, mineYield: 0.04 },
     bonus: { stock: { tools: 3 } },
+    unlocksBuildings: ['coal_mine', 'iron_mine'],
   },
   {
     id: 'sheltercraft',
@@ -132,7 +133,7 @@ export const TECHS: TechDef[] = [
     desc: 'Square a beam, cut a joint that locks without nails, and raise a roof that will outlive you.',
     flavor: 'The forest is not a wall. It is a warehouse with the door still standing open.',
     effects: { lumberYield: 0.1, buildSpeed: 0.06 },
-    unlocksBuildings: ['sawmill'],
+    unlocksBuildings: ['house', 'palisade'],
   },
   {
     id: 'masonry',
@@ -143,6 +144,7 @@ export const TECHS: TechDef[] = [
     requires: ['knapping'],
     desc: 'Dress a stone true, lay it on a bed of clay, and stop building things the weather can undo.',
     effects: { quarryYield: 0.1, buildSpeed: 0.05 },
+    unlocksBuildings: ['fountain', 'house', 'temple', 'wall', 'watchtower', 'water_tower'],
   },
   {
     id: 'pottery',
@@ -153,7 +155,6 @@ export const TECHS: TechDef[] = [
     requires: ['firekeeping'],
     desc: 'Coil, dry, fire. A pot is a granary that fits in your arms.',
     effects: { storageCap: 0.05, spoilageRate: -0.05 },
-    unlocksBuildings: ['pottery_kiln'],
   },
   {
     id: 'roadbuilding',
@@ -175,7 +176,6 @@ export const TECHS: TechDef[] = [
     requires: ['carpentry', 'pottery'],
     desc: 'Raise a dry floor, a tight roof and a tally-marked door. Surplus is only real if it survives the year.',
     effects: { storageCap: 0.12, spoilageRate: -0.06 },
-    unlocksBuildings: ['warehouse'],
   },
   {
     id: 'hydraulics',
@@ -187,7 +187,6 @@ export const TECHS: TechDef[] = [
     desc: 'Water will climb if you give it a channel, a drop and a reason. The town stops queueing at the well.',
     flavor: 'The river was never ours. The pipes are.',
     effects: { waterAvailability: 0.12, waterConsumption: -0.05 },
-    unlocksBuildings: ['water_tower'],
   },
   {
     id: 'aqueduct_engineering',
@@ -199,7 +198,6 @@ export const TECHS: TechDef[] = [
     desc: 'Survey a fall of one hand per thousand paces, and carry a river across a valley on stone legs.',
     flavor: 'We built it to water a field. It became the reason the field could feed a city.',
     effects: { waterAvailability: 0.15, healthRate: 0.05, disasterResist: 0.04 },
-    unlocksBuildings: ['aqueduct'],
     unlocksMechanics: ['gravity_water'],
     quote: 'Find the height. Everything else is arithmetic.',
   },
@@ -212,7 +210,7 @@ export const TECHS: TechDef[] = [
     requires: ['masonry', 'carpentry'],
     desc: 'The arch, the vault, the deliberate empty space. A building can be a sentence about what a town believes.',
     effects: { beauty: 0.08, buildSpeed: 0.08, housingQuality: 0.05 },
-    unlocksBuildings: ['theatre'],
+    unlocksBuildings: ['monument'],
   },
   {
     id: 'concrete',
@@ -234,7 +232,7 @@ export const TECHS: TechDef[] = [
     requires: ['architecture', 'concrete', 'hydraulics'],
     desc: 'Set the street before the house, the drain before the street, the garden where the wind will carry the smoke away.',
     effects: { housingQuality: 0.1, beauty: 0.1, upkeepCost: -0.08 },
-    unlocksBuildings: ['park'],
+    unlocksBuildings: ['apartment', 'arcology'],
   },
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -261,7 +259,7 @@ export const TECHS: TechDef[] = [
     desc: 'Notice that a dropped seed becomes a plant, and that the plant is where you left it. Come back for it.',
     flavor: 'The first field was an accident that someone was honest enough to repeat.',
     effects: { farmYield: 0.08 },
-    unlocksBuildings: ['farm'],
+    unlocksBuildings: ['garden'],
   },
   {
     id: 'tending',
@@ -282,7 +280,6 @@ export const TECHS: TechDef[] = [
     requires: ['cultivation'],
     desc: 'Dry it, raise it off the floor, keep the rats out and the damp down. A full granary is a quiet argument against fear.',
     effects: { storageCap: 0.06, spoilageRate: -0.08 },
-    unlocksBuildings: ['granary'],
   },
   {
     id: 'animal_husbandry',
@@ -305,6 +302,7 @@ export const TECHS: TechDef[] = [
     desc: 'Take the river where the rain did not go. A ditch is a small, patient promise to the field.',
     effects: { farmYield: 0.12, waterAvailability: 0.06 },
     unlocksMechanics: ['irrigation'],
+    unlocksBuildings: ['aqueduct', 'water_tower'],
   },
   {
     id: 'crop_rotation',
@@ -336,7 +334,6 @@ export const TECHS: TechDef[] = [
     requires: ['tending', 'pottery'],
     desc: 'Grind a day of grain in an hour of water. The flour keeps better than the sheaf, and the oven follows the mill.',
     effects: { inputEfficiency: 0.05, spoilageRate: -0.03 },
-    unlocksBuildings: ['mill', 'bakery'],
   },
   {
     id: 'sacred_groves',
@@ -350,6 +347,7 @@ export const TECHS: TechDef[] = [
     excludes: ['clear_cutting'],
     unlocksPolicies: ['forest_charter'],
     quote: 'Some trees are ancestors. The ones that are not still deserve a vote.',
+    unlocksBuildings: ['root_sanctuary'],
   },
   {
     id: 'clear_cutting',
@@ -402,6 +400,7 @@ export const TECHS: TechDef[] = [
     requires: ['crop_rotation', 'chemistry'],
     desc: 'Ask what a plant actually eats, then feed it that and nothing else. The field answers in weight.',
     effects: { farmYield: 0.15, soilRegen: 0.08, pollutionRate: 0.05 },
+    unlocksBuildings: ['fertilizer_plant'],
   },
   {
     id: 'precision_agriculture',
@@ -450,7 +449,6 @@ export const TECHS: TechDef[] = [
     requires: ['firekeeping'],
     desc: 'Stack the wood tight, seal it with turf, and watch it smoke for three days and nights. What comes out burns hotter than the tree did.',
     effects: { inputEfficiency: 0.05, pollutionRate: 0.04 },
-    unlocksBuildings: ['charcoal_kiln'],
   },
   {
     id: 'smelting',
@@ -462,7 +460,7 @@ export const TECHS: TechDef[] = [
     desc: 'Air, ore and a stubborn fire. The grey stone weeps something bright, and it can be beaten into an edge.',
     flavor: 'The first copper was a mistake in a cooking fire. We have been repeating that mistake on purpose ever since.',
     effects: { craftSpeed: 0.08, mineYield: 0.04 },
-    unlocksBuildings: ['smithy'],
+    unlocksBuildings: ['foundry'],
   },
   {
     id: 'bronze_working',
@@ -494,7 +492,6 @@ export const TECHS: TechDef[] = [
     requires: ['masonry', 'charcoal_burning'],
     desc: 'Mould the clay, dry it slow, fire it hard. A brick is a stone you can make anywhere there is mud.',
     effects: { constructionCost: -0.05, buildSpeed: 0.04 },
-    unlocksBuildings: ['brickworks'],
   },
   {
     id: 'weaving',
@@ -505,7 +502,6 @@ export const TECHS: TechDef[] = [
     requires: ['animal_husbandry'],
     desc: 'Warp and weft, a weighted loom, a patient wrist. Fleece becomes cloth, and cloth becomes a kind of wealth that walks around on its own.',
     effects: { craftSpeed: 0.06, byproductYield: 0.05 },
-    unlocksBuildings: ['weaver'],
   },
   {
     id: 'iron_working',
@@ -517,6 +513,7 @@ export const TECHS: TechDef[] = [
     desc: 'Iron is stubborn. Heat it, fold it, heat it again, and curse the slag until the blade rings clean.',
     effects: { craftSpeed: 0.1, mineYield: 0.05 },
     unlocksMechanics: ['iron_tools'],
+    unlocksBuildings: ['barracks'],
   },
   {
     id: 'steel_working',
@@ -528,7 +525,7 @@ export const TECHS: TechDef[] = [
     desc: 'Drive the carbon in, then drive it out. Steel is iron that has been argued into agreement with itself.',
     flavor: 'Three hundred folds, and still the smith says: once more.',
     effects: { craftSpeed: 0.1, mineYield: 0.05, inputEfficiency: 0.04 },
-    unlocksBuildings: ['foundry'],
+    unlocksBuildings: ['blast_furnace', 'coke_oven', 'forge_cathedral'],
     quote: 'A good blade is a conversation between fire and patience.',
   },
   {
@@ -575,7 +572,7 @@ export const TECHS: TechDef[] = [
     requires: ['chemistry', 'steel_working'],
     desc: 'Heat the black liquor and take it apart in order: light, middle, heavy. Every fraction is a different century.',
     effects: { inputEfficiency: 0.08, pollutionRate: 0.1, upkeepCost: -0.03 },
-    unlocksBuildings: ['refinery'],
+    unlocksBuildings: ['oil_derrick', 'refinery'],
   },
   {
     id: 'mass_production',
@@ -599,7 +596,7 @@ export const TECHS: TechDef[] = [
     desc: 'Two iron lines, a surveyor with a level, and a town that is suddenly four days closer to the sea.',
     effects: { transportCapacity: 0.15, tradeSellPrice: 0.05, roadSpeed: 0.05 },
     excludes: ['canals'],
-    unlocksBuildings: ['rail_depot'],
+    unlocksBuildings: ['logistics_hub', 'rail_depot'],
     unlocksMechanics: ['rail'],
   },
   {
@@ -612,7 +609,7 @@ export const TECHS: TechDef[] = [
     desc: 'Wire, coil, current. Power stops being a place you stand next to and becomes a thing you can send down a street.',
     flavor: 'We spent the first night turning it on and off just to see. Then we got back to work.',
     effects: { workSpeed: 0.1, upkeepCost: -0.05, pollutionRate: -0.04 },
-    unlocksBuildings: ['power_plant'],
+    unlocksBuildings: ['fusion_plant', 'power_plant', 'radio_tower'],
     unlocksMechanics: ['electrification'],
   },
   {
@@ -624,7 +621,7 @@ export const TECHS: TechDef[] = [
     requires: ['electricity', 'computing'],
     desc: 'Teach the machine the motion once. It will repeat the motion ten thousand times without resentment.',
     effects: { workSpeed: 0.15, upkeepCost: -0.08, craftSpeed: 0.08 },
-    unlocksBuildings: ['automation_hub'],
+    unlocksBuildings: ['automation_hub', 'automaton_hall'],
     unlocksMechanics: ['automation'],
   },
   {
@@ -662,7 +659,7 @@ export const TECHS: TechDef[] = [
     desc: 'A mark for a thing, a mark for a number, a mark for the man who owes you grain. Memory becomes portable.',
     flavor: 'The first thing written down was a debt. The second was a poem about how the debt made us feel.',
     effects: { researchRate: 0.1, educationRate: 0.04 },
-    unlocksBuildings: ['library', 'school'],
+    unlocksBuildings: ['library', 'papermill', 'school', 'temple', 'theatre', 'town_hall'],
   },
   {
     id: 'healing_arts',
@@ -673,7 +670,6 @@ export const TECHS: TechDef[] = [
     requires: ['herbalism'],
     desc: 'Wash the hands, set the bone, boil the thread, keep the sick warm and separate. Much of medicine is only stubbornness with a clean cloth.',
     effects: { healthRate: 0.08, deathRate: -0.04 },
-    unlocksBuildings: ['clinic'],
   },
   {
     id: 'mathematics',
@@ -705,7 +701,7 @@ export const TECHS: TechDef[] = [
     requires: ['mathematics'],
     desc: 'Mark the shadow at noon, the star at midnight, the same star next year. The sky keeps time better than any king.',
     effects: { insightFlat: 0.3, researchRate: 0.05, educationRate: 0.03 },
-    unlocksBuildings: ['observatory'],
+    unlocksBuildings: ['observatory', 'star_chart_tower'],
     unlocksMechanics: ['calendar'],
   },
   {
@@ -729,7 +725,7 @@ export const TECHS: TechDef[] = [
     desc: 'Set the type, ink the forme, pull the lever. One idea stops being one room and becomes a thousand rooms at once.',
     flavor: 'Before the press, a truth lived as long as the oldest person who knew it.',
     effects: { researchRate: 0.12, cultureRate: 0.08, educationRate: 0.05 },
-    unlocksBuildings: ['printing_house'],
+    unlocksBuildings: ['great_library', 'printing_house'],
     unlocksMechanics: ['press'],
   },
   {
@@ -742,6 +738,7 @@ export const TECHS: TechDef[] = [
     desc: 'Guess, measure, doubt, repeat. Record what happened, not what should have happened.',
     effects: { researchRate: 0.15, insightFlat: 0.3, educationRate: 0.05 },
     quote: 'An honest failure is worth more than a comfortable certainty.',
+    unlocksBuildings: ['fusion_plant'],
   },
   {
     id: 'computing',
@@ -752,7 +749,7 @@ export const TECHS: TechDef[] = [
     requires: ['scientific_method', 'printing'],
     desc: 'Turn the argument into a procedure small enough for a machine to repeat. Thought becomes a thing you can build.',
     effects: { researchRate: 0.1, educationRate: 0.1, inputEfficiency: 0.05 },
-    unlocksBuildings: ['computing_lab'],
+    unlocksBuildings: ['computing_lab', 'data_center'],
     unlocksMechanics: ['computation'],
   },
   {
@@ -787,6 +784,7 @@ export const TECHS: TechDef[] = [
     desc: 'The forest, the river and the field are one system with many mouths. Pull one thread and learn where it was tied.',
     effects: { soilRegen: 0.1, forestRegrow: 0.1, wildlifeRegen: 0.1, pollutionDecay: 0.08 },
     unlocksMechanics: ['ecology'],
+    unlocksBuildings: ['arcology'],
   },
   {
     id: 'systems_science',
@@ -807,6 +805,7 @@ export const TECHS: TechDef[] = [
     requires: ['ecology_science', 'systems_science'],
     desc: 'Restore a watershed the way you would heal a lung: slowly, by removing the things that were pressing on it.',
     effects: { forestRegrow: 0.15, wildlifeRegen: 0.15, pollutionDecay: 0.12, disasterResist: 0.08 },
+    unlocksBuildings: ['ocean_bloom', 'world_seed_vault'],
   },
   {
     id: 'minds_of_the_hearth',
@@ -844,7 +843,6 @@ export const TECHS: TechDef[] = [
     requires: ['council_fires'],
     desc: 'Salt, oath and a witness. A bargain kept across a winter is worth more than a bargain won.',
     effects: { tradeBuyPrice: -0.05, tradeSellPrice: 0.05, diplomacy: 0.03 },
-    unlocksBuildings: ['market'],
     unlocksPolicies: ['open_borders', 'trade_tariffs', 'free_ports'],
     unlocksMechanics: ['trade'],
   },
@@ -857,7 +855,6 @@ export const TECHS: TechDef[] = [
     requires: ['council_fires'],
     desc: 'A raised bank, a thorn hedge, a watch that keeps the fire low and the ears open. Defence begins as a habit.',
     effects: { combatStrength: 0.1, crimeRate: -0.03 },
-    unlocksBuildings: ['watchtower'],
     unlocksPolicies: ['militia_service'],
   },
   {
@@ -870,6 +867,7 @@ export const TECHS: TechDef[] = [
     desc: 'Mark the solstice, the first sheaf, the last frost. A year with feasts in it is a year people can carry.',
     effects: { cultureRate: 0.1, moraleRate: 0.05 },
     unlocksMechanics: ['festivals'],
+    unlocksBuildings: ['long_hearth'],
   },
   {
     id: 'customary_law',
@@ -905,7 +903,6 @@ export const TECHS: TechDef[] = [
     requires: ['festival_cycle'],
     desc: 'A house for the stories, a day for the dead, a person to keep the calendar. The invisible part of a town needs a roof too.',
     effects: { cultureRate: 0.1, moraleFlat: 2 },
-    unlocksBuildings: ['temple'],
   },
   {
     id: 'public_letters',
@@ -916,6 +913,7 @@ export const TECHS: TechDef[] = [
     requires: ['writing'],
     desc: 'Teach the marks to any child who will sit still. A town that can all read its own notices is harder to lie to.',
     effects: { educationRate: 0.1, researchRate: 0.04 },
+    unlocksBuildings: ['archive_of_days'],
   },
   {
     id: 'university',
@@ -926,7 +924,7 @@ export const TECHS: TechDef[] = [
     requires: ['public_letters'],
     desc: 'Gather the argumentative young, give them a library and a quarrel, and let them out into the world in seven years.',
     effects: { researchRate: 0.08, educationRate: 0.08, cultureRate: 0.04 },
-    unlocksBuildings: ['university'],
+    unlocksBuildings: ['great_library', 'university'],
   },
   {
     id: 'standing_guard',
@@ -937,7 +935,6 @@ export const TECHS: TechDef[] = [
     requires: ['warding', 'smelting'],
     desc: 'Pay people to do nothing but be ready. It is expensive, and cheaper than the morning you are not ready.',
     effects: { combatStrength: 0.15, crimeRate: -0.05 },
-    unlocksBuildings: ['barracks'],
   },
   {
     id: 'guilds',
@@ -951,6 +948,7 @@ export const TECHS: TechDef[] = [
     excludes: ['state_workshops'],
     unlocksPolicies: ['guild_charter', 'craft_apprenticeships'],
     unlocksMechanics: ['guilds'],
+    unlocksBuildings: ['manor', 'workshop'],
   },
   {
     id: 'state_workshops',
@@ -987,6 +985,7 @@ export const TECHS: TechDef[] = [
     effects: { healthRate: 0.12, deathRate: -0.08, pollutionDecay: 0.06 },
     unlocksPolicies: ['sanitation_act'],
     unlocksMechanics: ['sanitation'],
+    unlocksBuildings: ['bathhouse', 'park', 'sewer'],
   },
   {
     id: 'banking',
@@ -997,7 +996,7 @@ export const TECHS: TechDef[] = [
     requires: ['trade_rites', 'mathematics'],
     desc: 'A safe room, a ledger and a promise that the letter of credit will be honoured in a town you have never seen.',
     effects: { tradeBuyPrice: -0.06, taxEfficiency: 0.1, upkeepCost: -0.03 },
-    unlocksBuildings: ['bank'],
+    unlocksBuildings: ['bank', 'mint'],
     unlocksMechanics: ['credit'],
   },
   {
@@ -1023,6 +1022,7 @@ export const TECHS: TechDef[] = [
     effects: { diplomacy: 0.12, tradeSellPrice: 0.08, stability: 0.06, cultureRate: 0.06 },
     unlocksMechanics: ['federation'],
     quote: 'We do not agree on the gods. We agree on the harvest.',
+    unlocksBuildings: ['thousand_hearths'],
   },
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1049,7 +1049,6 @@ export const TECHS: TechDef[] = [
     requires: ['cordage'],
     desc: 'Lash the poles, pitch the seams, learn which part of the current will kill you. The far bank stops being a rumour.',
     effects: { fishYield: 0.08, expeditionSpeed: 0.08 },
-    unlocksBuildings: ['dock'],
   },
   {
     id: 'trade_routes',
@@ -1060,7 +1059,7 @@ export const TECHS: TechDef[] = [
     requires: ['trade_rites', 'animal_husbandry'],
     desc: 'A road walked often enough becomes a bargain. A caravan that returns is the best argument for the road.',
     effects: { transportCapacity: 0.1, tradeSellPrice: 0.05, diplomacy: 0.03 },
-    unlocksBuildings: ['trade_post'],
+    unlocksBuildings: ['caravan_post', 'dock', 'market', 'trade_post'],
     unlocksMechanics: ['caravans'],
   },
   {
@@ -1072,6 +1071,7 @@ export const TECHS: TechDef[] = [
     requires: ['river_crossing'],
     desc: 'Sound the depth, mark the shoals, name the coves. A river that is known can be fed from.',
     effects: { fishYield: 0.1, expeditionSpeed: 0.1 },
+    unlocksBuildings: ['tide_exchange'],
   },
   {
     id: 'wheel',
@@ -1083,6 +1083,7 @@ export const TECHS: TechDef[] = [
     desc: 'A round thing under a load. It is almost embarrassingly simple, and it reorganises every road and every trade.',
     effects: { expeditionSpeed: 0.15, transportCapacity: 0.06 },
     unlocksMechanics: ['wheeled_transport'],
+    unlocksBuildings: ['warehouse'],
   },
   {
     id: 'frontier_forts',
@@ -1116,6 +1117,7 @@ export const TECHS: TechDef[] = [
     effects: { transportCapacity: 0.12, tradeBuyPrice: -0.06, waterAvailability: 0.04 },
     excludes: ['railways'],
     unlocksMechanics: ['canals'],
+    unlocksBuildings: ['mp_grand_aqueduct'],
   },
   {
     id: 'expeditionary_science',
@@ -1147,6 +1149,7 @@ export const TECHS: TechDef[] = [
     desc: 'Fill a silk bag with warm air and rise until the fields become a pattern. The first nation to draw a border from above has to laugh at itself.',
     effects: { expeditionSpeed: 0.2, tradeSellPrice: 0.05, insightFlat: 0.1 },
     unlocksMechanics: ['flight'],
+    unlocksBuildings: ['skyport'],
   },
   {
     id: 'orbital_engineering',
@@ -1159,5 +1162,6 @@ export const TECHS: TechDef[] = [
     effects: { expeditionSpeed: 0.15, diplomacy: 0.1, researchRate: 0.06 },
     unlocksMechanics: ['orbital'],
     quote: 'From here, there are no borders — only roofs, and the people under them.',
+    unlocksBuildings: ['sky_loom'],
   },
 ];

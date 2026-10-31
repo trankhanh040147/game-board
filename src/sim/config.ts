@@ -16,15 +16,15 @@ export const RULES: GameRules = {
   waterPerCitizen: 0.9,
   insightPerScholar: 1.15,
   laborFraction: 0.62,
-  birthChance: 0.0024,
+  birthChance: 0.0115,
   startYear: 1,
   maxNotifications: 180,
   metricsMaxPoints: 420,
   startingResources: {
-    berries: 16,
-    wood: 24,
+    berries: 18,
+    wood: 30,
     stone: 10,
-    fiber: 5,
+    fiber: 10,
   },
 };
 
@@ -65,7 +65,7 @@ export const LIMITS = {
   maxTradeRoutes: 24,
   maxNeighbors: 5,
   roadAccessRadius: 3,
-  storageBaseCapacity: 40,
+  storageBaseCapacity: 180,
   storagePerHouse: 0,
   buildingDurabilityDecay: 0.00035,
   repairRate: 0.09,
@@ -93,7 +93,7 @@ export const LIMITS = {
 export const SPEEDS = [0, 0.66, 1.6, 4, 10];
 
 export const DEFAULT_SETTINGS = {
-  speed: 1,
+  speed: 2,
   autosave: true,
   autoAssign: true,
   showHints: true,
@@ -114,6 +114,7 @@ export const SEASON_AMBIENT: Record<string, { temp: number; rain: number; growth
 export const WORLDGEN = {
   width: 112,
   height: 112,
+  /** Fraction of the map that is ocean (quantile-based, stable across seeds). */
   seaLevel: 0.36,
   mountainLevel: 0.74,
   riverMinFlow: 22,

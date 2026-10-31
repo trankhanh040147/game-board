@@ -435,6 +435,8 @@ export function generateWorld(seed: string, opts: WorldGenOptions = {}): WorldSt
   let forageSum = 0;
   let wildlifeSum = 0;
   let landCount = 0;
+  let bioScore = 0;
+  let bioParts = 0;
 
   const tempAxis = (t: number): number =>
     tempIsNormalized ? clamp((t + 18) / 48, 0, 1) : t;
@@ -550,6 +552,13 @@ export function generateWorld(seed: string, opts: WorldGenOptions = {}): WorldSt
         forestSum += forest;
         forageSum += forage;
         wildlifeSum += wildlife;
+        // normalised biodiversity: how close each community is to its biome potential
+        let part = 0;
+        let n = 0;
+        if (b.forest > 0.02) { part += clamp(forest / b.forest, 0, 1); n++; }
+        if (b.forage > 0.02) { part += clamp(forage / b.forage, 0, 1); n++; }
+        if (b.wildlife > 0.02) { part += clamp(wildlife / b.wildlife, 0, 1); n++; }
+        if (n > 0) { bioScore += part / n; bioParts++; }
       }
 
       tiles[i] = {
@@ -574,7 +583,16 @@ export function generateWorld(seed: string, opts: WorldGenOptions = {}): WorldSt
   }
 
   // ---- 8. start site -----------------------------------------------------
-  const startIndex = chooseStartIndex(width, height, tiles, isLand, isRiver, slope, riverDef?.id);
+  const startIndex = chooseStartIndex(
+    width,
+    height,
+    tiles,
+    isLand,
+    isRiver,
+    isLake,
+    slope,
+    riverDef?.id,
+  );
   const startX = startIndex % width;
   const startY = (startIndex / width) | 0;
 
@@ -678,16 +696,7 @@ export function generateWorld(seed: string, opts: WorldGenOptions = {}): WorldSt
   };
   weather.forecast = forecastText(weather, 0.3, 1);
 
-  const biodiversity = landCount
-    ? clamp(
-        ((forestSum / landCount) * 0.5 +
-          (forageSum / landCount) * 0.3 +
-          (wildlifeSum / landCount) * 0.2) *
-          1.25,
-        0.15,
-        0.95,
-      )
-    : 0.4;
+  const biodiversity = bioParts > 0 ? clamp(bioScore / bioParts, 0.2, 0.98) : 0.5;
   const climate: ClimateState = {
     warming: 0,
     deforestation: 0,
@@ -795,12 +804,136 @@ function siteKindScore(
   }
 }
 
+/**
+ * Choose the founding site.
+ *
+ * Hard guarantees (checked within radius 6 of the candidate) so every seed is fair:
+ *   a) >= 6 tiles with forest >= 0.35      (early wood)
+ *   b) >= 1 tile with forage >= 0.30       (early berries)
+ *   c) freshwater: tile.water >= 0.35, or a river/lake within 4 tiles
+ *   d) >= 1 mineable deposit within 5      (stone/copper/iron/clay/sand/coal)
+ *   e) >= 70% of the radius-5 tiles are walkable land
+ *   f) not on a site tile (siteIndex >= 0)
+ *
+ * Candidates are scored for fertility/forest/freshwater/flatness/centrality. If no tile on a
+ * rough map satisfies the full set (small maps, hostile seeds) the requirements relax in tiers
+ * instead of failing, so generateWorld always returns a playable world.
+ */
+const START_MINEABLE: ReadonlySet<string> = new Set([
+  'stone',
+  'copper_ore',
+  'iron_ore',
+  'clay',
+  'sand',
+  'coal',
+]);
+
+interface StartGuarantees {
+  forest6: boolean;
+  forage: boolean;
+  freshwater: boolean;
+  deposit: boolean;
+  walkable: boolean;
+}
+
+function checkStartGuarantees(
+  width: number,
+  height: number,
+  tiles: Tile[],
+  isLand: Uint8Array,
+  isRiver: Uint8Array,
+  isLake: Uint8Array,
+  x: number,
+  y: number,
+  relax: number,
+): StartGuarantees {
+  const forestNeed = relax >= 2 ? 3 : 6;
+  const mineralRadius = relax >= 2 ? 8 : 5;
+  const walkNeed = relax >= 2 ? 0.55 : 0.7;
+  let forest6 = 0;
+  let forage = 0;
+  let freshwater = false;
+  for (let dy = -6; dy <= 6; dy++) {
+    for (let dx = -6; dx <= 6; dx++) {
+      if (dx * dx + dy * dy > 36) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const j = ny * width + nx;
+      if (!isLand[j]) continue;
+      const t = tiles[j];
+      if (t.forest >= 0.35) forest6++;
+      if (t.forage >= 0.3) forage++;
+      if (t.water >= 0.35) freshwater = true;
+    }
+  }
+  // river or lake within 4 tiles
+  if (!freshwater) {
+    const r = 4;
+    outer: for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const j = ny * width + nx;
+        if (isRiver[j] || isLake[j]) {
+          freshwater = true;
+          break outer;
+        }
+      }
+    }
+  }
+  // at least one mineable deposit within 5 tiles
+  let deposit = false;
+  let anyDeposit = false;
+  const mr = mineralRadius;
+  outer2: for (let dy = -mr; dy <= mr; dy++) {
+    for (let dx = -mr; dx <= mr; dx++) {
+      if (dx * dx + dy * dy > mr * mr) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const dep = tiles[ny * width + nx].deposit;
+      if (!dep) continue;
+      anyDeposit = true;
+      if (START_MINEABLE.has(dep.resource)) {
+        deposit = true;
+        break outer2;
+      }
+    }
+  }
+  // allow any surface deposit as a fallback (content-agnostic, e.g. custom mineral packs)
+  const hasDeposit = deposit || (relax >= 1 && anyDeposit);
+  // walkable land fraction in radius 5
+  let land = 0;
+  let total = 0;
+  for (let dy = -5; dy <= 5; dy++) {
+    for (let dx = -5; dx <= 5; dx++) {
+      if (dx * dx + dy * dy > 25) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      total++;
+      if (isLand[ny * width + nx]) land++;
+    }
+  }
+  return {
+    forest6: forest6 >= forestNeed,
+    forage: forage >= 1,
+    freshwater,
+    deposit: hasDeposit,
+    walkable: total > 0 && land / total >= walkNeed,
+  };
+}
+
 function chooseStartIndex(
   width: number,
   height: number,
   tiles: Tile[],
   isLand: Uint8Array,
   isRiver: Uint8Array,
+  isLake: Uint8Array,
   slope: Float32Array,
   riverBiomeId?: string,
 ): number {
@@ -808,8 +941,48 @@ function chooseStartIndex(
   const cx = width / 2;
   const cy = height / 2;
   const maxR = Math.hypot(cx, cy);
-  let best = -1;
-  let bestScore = -Infinity;
+
+  const scoreFor = (x: number, y: number, i: number): number => {
+    let fert = 0;
+    let forest = 0;
+    let count = 0;
+    let riverNear = 0;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const j = ny * width + nx;
+        if (!isLand[j]) continue;
+        fert += tiles[j].fertility;
+        forest += tiles[j].forest;
+        count++;
+        if (isRiver[j]) riverNear = 1;
+      }
+    }
+    if (count < 14) return -Infinity;
+    fert /= count;
+    forest /= count;
+    const tile = tiles[i];
+    const dCenter = Math.hypot(x - cx, y - cy) / maxR;
+    const centrality = 1 - dCenter * 0.55;
+    const flat = 1 - slope[i];
+    const climateBonus =
+      tile.temp >= 7 && tile.temp <= 24 ? 0.55 : tile.temp >= 2 && tile.temp <= 28 ? 0.1 : -1.2;
+    const biomeBonus = riverBiomeId && tile.biome === riverBiomeId ? 0.7 : 0;
+    return (
+      fert * 2.6 +
+      forest * 0.9 +
+      riverNear * 1.7 +
+      tile.water * 0.9 +
+      flat * 1.1 +
+      centrality * 1.0 +
+      climateBonus +
+      biomeBonus
+    );
+  };
+
+  const landCandidates: number[] = [];
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
       const i = y * width + x;
@@ -818,51 +991,40 @@ function chooseStartIndex(
       if (tile.siteIndex >= 0) continue;
       if (tile.water > 0.92) continue;
       if (x < 7 || y < 7 || x > width - 8 || y > height - 8) continue;
-      // local averages over radius 2
-      let fert = 0;
-      let forest = 0;
-      let count = 0;
-      let riverNear = 0;
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-          const j = ny * width + nx;
-          if (!isLand[j]) continue;
-          fert += tiles[j].fertility;
-          forest += tiles[j].forest;
-          count++;
-          if (isRiver[j]) riverNear = 1;
-        }
-      }
-      if (count < 14) continue;
-      fert /= count;
-      forest /= count;
-      const dCenter = Math.hypot(x - cx, y - cy) / maxR;
-      const centrality = 1 - dCenter * 0.55;
-      const flat = 1 - slope[i];
-      // A hearth wants a temperate, sheltered clearing — not a frozen bog or a desert.
-      const climateBonus =
-        tile.temp >= 7 && tile.temp <= 24 ? 0.55 : tile.temp >= 2 && tile.temp <= 28 ? 0.1 : -1.2;
-      const biomeBonus = riverBiomeId && tile.biome === riverBiomeId ? 0.7 : 0;
-      const score =
-        fert * 2.6 +
-        forest * 0.9 +
-        riverNear * 1.7 +
-        tile.water * 0.9 +
-        flat * 1.1 +
-        centrality * 1.0 +
-        climateBonus +
-        biomeBonus;
+      landCandidates.push(i);
+    }
+  }
+
+  // Tier 0: full guarantees. Tier 1: any deposit counts. Tier 2: relaxed numbers.
+  for (let relax = 0; relax <= 2; relax++) {
+    let best = -1;
+    let bestScore = -Infinity;
+    for (const i of landCandidates) {
+      const x = i % width;
+      const y = (i / width) | 0;
+      const g = checkStartGuarantees(width, height, tiles, isLand, isRiver, isLake, x, y, relax);
+      if (!g.forest6 || !g.forage || !g.freshwater || !g.deposit || !g.walkable) continue;
+      const score = scoreFor(x, y, i);
       if (score > bestScore) {
         bestScore = score;
         best = i;
       }
     }
+    if (best >= 0) return best;
   }
-  if (best >= 0) return best;
-  // fallback: any land tile
+  // Last resort: best score on any eligible land (never fail generateWorld).
+  let fallback = -1;
+  let fallbackScore = -Infinity;
+  for (const i of landCandidates) {
+    const x = i % width;
+    const y = (i / width) | 0;
+    const score = scoreFor(x, y, i);
+    if (score > fallbackScore) {
+      fallbackScore = score;
+      fallback = i;
+    }
+  }
+  if (fallback >= 0) return fallback;
   for (let i = 0; i < N; i++) if (isLand[i]) return i;
   return 0;
 }
