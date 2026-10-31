@@ -112,6 +112,7 @@ export class Engine {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.06;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.info.autoReset = false;
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : quality === 'medium' ? 1.5 : 1);
     this.renderer.setPixelRatio(this.basePixelRatio);
 
@@ -194,7 +195,8 @@ export class Engine {
     composer.addPass(this.gradePass);
 
     if (this.quality === 'high') {
-      this.smaaPass = new SMAAPass(w, h);
+      this.smaaPass = new SMAAPass();
+      this.smaaPass.setSize(w, h);
       composer.addPass(this.smaaPass);
     }
 
@@ -225,6 +227,7 @@ export class Engine {
   }
 
   render(): void {
+    this.renderer.info.reset();
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }

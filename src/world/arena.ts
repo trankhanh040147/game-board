@@ -1,130 +1,253 @@
 import * as THREE from 'three';
 import type { Arena, CircleObstacle, Quality } from '../core/types';
+import { clamp, damp } from '../core/utils';
+import { ARENA_LAYOUT, clampArenaPosition } from './layout';
+import { createArenaTextures, type ArenaTextureBank, type SurfaceTexture } from './textures';
+import { GeoBatch, disposeMaterial } from './geo';
+import { buildStructures, buildTimberFences } from './structures';
+import { createSky } from './sky';
+import { createCrowd } from './crowd';
+import { createBanners } from './banners';
+import { createProps } from './props';
+
+export { ARENA_LAYOUT, clampArenaPosition, isPositionClear, standRowPositions } from './layout';
 
 /**
- * TEMPORARY arena stub — arena-artist replaces this file (and the rest of src/world/).
- * Provides a flat sand yard, simple walls, lights and spawn points so the game loop is testable.
+ * THE OLD LISTS OF ALDERMERE — a Mount & Blade Warband-flavoured tournament
+ * ground. Everything is procedural: canvas textures, generated geometry,
+ * instanced crowd and cloth, animated shader dust and fabric.
+ *
+ * The arena owns the scene's sky, fog and lighting, plus:
+ *   - play bounds + circular obstacles for movement/camera
+ *   - spawn points near the gates and a 4x4 team spawn grid
+ *   - crowd excitement / cheer API
  */
-export function createArena(scene: THREE.Scene, _renderer: THREE.WebGLRenderer, quality: Quality): Arena {
+
+function surfaceMaterial(
+  tex: SurfaceTexture,
+  opts: {
+    roughness?: number;
+    metalness?: number;
+    normalScale?: number;
+    side?: THREE.Side;
+    color?: number;
+  } = {},
+): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    map: tex.map,
+    normalMap: tex.normalMap ?? null,
+    roughnessMap: tex.roughnessMap ?? null,
+    normalScale: new THREE.Vector2(opts.normalScale ?? 0.75, opts.normalScale ?? 0.75),
+    roughness: opts.roughness ?? 0.94,
+    metalness: opts.metalness ?? 0,
+    vertexColors: true,
+    color: opts.color ?? 0xffffff,
+    side: opts.side ?? THREE.FrontSide,
+  });
+}
+
+export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer, quality: Quality): Arena {
+  const seed = 20261031;
   const root = new THREE.Group();
   root.name = 'arena';
   scene.add(root);
 
-  const hemi = new THREE.HemisphereLight(0xdfe8f0, 0x6b5b45, 1.35);
-  scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xfff0d8, 2.4);
-  sun.position.set(-18, 26, 12);
+  const maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const textures: ArenaTextureBank = createArenaTextures({ quality, seed, anisotropy: maxAniso });
+
+  /* ---------------- Materials ---------------- */
+  const stoneMat = surfaceMaterial(textures.stone, { roughness: 0.94, normalScale: 0.55, color: 0xe9d9bd });
+  const woodMat = surfaceMaterial(textures.wood, { roughness: 0.89, normalScale: 0.65, color: 0xfff2dc });
+  const shingleMat = surfaceMaterial(textures.shingle, { roughness: 0.95, normalScale: 0.6, color: 0xf2e4cc });
+  const plasterMat = surfaceMaterial(textures.plaster, { roughness: 0.96, normalScale: 0.35 });
+  const metalMat = surfaceMaterial(textures.metal, { roughness: 0.55, metalness: 0.6, normalScale: 0.3 });
+  const hayMat = surfaceMaterial(textures.hay, { roughness: 1, normalScale: 0.6 });
+  const ownedMaterials = [stoneMat, woodMat, shingleMat, plasterMat, metalMat, hayMat];
+
+  /* ---------------- Sky + lighting ---------------- */
+  const sky = createSky(quality, seed);
+  root.add(sky.group);
+
+  scene.background = new THREE.Color(0xd8cfbb);
+  scene.fog = new THREE.Fog(0xd8cfbb, 120, 360);
+
+  const hemi = new THREE.HemisphereLight(0xb2cfe4, 0x9b8f7c, 0.98);
+  const ambient = new THREE.AmbientLight(0xbcc4c8, 0.8);
+  root.add(ambient);
+  root.add(hemi);
+
+  const sun = new THREE.DirectionalLight(0xffdfb2, 3.1);
+  sun.position.copy(sky.sunDirection).multiplyScalar(72);
+  sun.target.position.set(0, 0, -3);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(quality === 'low' ? 1024 : 2048, quality === 'low' ? 1024 : 2048);
-  sun.shadow.camera.left = -32;
-  sun.shadow.camera.right = 32;
-  sun.shadow.camera.top = 32;
-  sun.shadow.camera.bottom = -32;
-  sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 80;
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.03;
-  scene.add(sun);
-  scene.add(sun.target);
+  const shadowSize = quality === 'high' ? 2048 : quality === 'medium' ? 1536 : 1024;
+  sun.shadow.mapSize.set(shadowSize, shadowSize);
+  sun.shadow.camera.left = -42;
+  sun.shadow.camera.right = 42;
+  sun.shadow.camera.top = 42;
+  sun.shadow.camera.bottom = -42;
+  sun.shadow.camera.near = 8;
+  sun.shadow.camera.far = 170;
+  sun.shadow.bias = -0.00035;
+  sun.shadow.normalBias = 0.045;
+  sun.shadow.radius = quality === 'low' ? 1 : 1.6;
+  root.add(sun);
+  root.add(sun.target);
 
-  const sand = new THREE.Mesh(
-    new THREE.PlaneGeometry(64, 52),
-    new THREE.MeshStandardMaterial({ color: 0xc9b388, roughness: 0.96, metalness: 0 }),
-  );
-  sand.rotation.x = -Math.PI / 2;
-  sand.receiveShadow = true;
-  root.add(sand);
+  const fill = new THREE.DirectionalLight(0xa3bcd0, 0.44);
+  fill.position.set(sun.position.x * -0.4, 22, sun.position.z * -0.6);
+  root.add(fill);
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x9a937f, roughness: 0.9 });
-  const wallH = 4.2;
-  const walls: [number, number, number, number][] = [
-    [0, -24, 52, 1.6], [0, 24, 52, 1.6], [-25, 0, 1.6, 48], [25, 0, 1.6, 48],
+  /* ---------------- Ground ---------------- */
+  const groundGeo = new THREE.PlaneGeometry(72, 63, 1, 1);
+  const sandMat = new THREE.MeshStandardMaterial({
+    map: textures.sand.map,
+    normalMap: textures.sand.normalMap ?? null,
+    roughnessMap: textures.sand.roughnessMap ?? null,
+    normalScale: new THREE.Vector2(0.6, 0.6),
+    roughness: 0.96,
+    metalness: 0,
+    color: 0xffffff,
+  });
+  const ground = new THREE.Mesh(groundGeo, sandMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, 0, 0);
+  ground.receiveShadow = true;
+  ground.name = 'sand-floor';
+  root.add(ground);
+
+  const outerTex = textures.outer.map;
+  outerTex.repeat.set(9, 9);
+  const outerGeo = new THREE.PlaneGeometry(440, 440, 1, 1);
+  const outerMat = new THREE.MeshStandardMaterial({ map: outerTex, roughness: 1, metalness: 0, color: 0xdad2b6 });
+  const outer = new THREE.Mesh(outerGeo, outerMat);
+  outer.rotation.x = -Math.PI / 2;
+  outer.position.set(0, -0.06, 0);
+  outer.receiveShadow = true;
+  outer.name = 'outer-ground';
+  root.add(outer);
+
+  /* ---------------- Wall-base ambient occlusion ---------------- */
+  const aoMat = new THREE.MeshBasicMaterial({
+    map: textures.aoStrip,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const aoH = 1.05;
+  const aoPlanes: [number, number, number, number, number, number][] = [
+    // x, z, y, width, rotY, ?
+    [0, -ARENA_LAYOUT.wallInner.z + 0.04, aoH / 2, ARENA_LAYOUT.wallInner.x * 2, 0, 0],
+    [0, ARENA_LAYOUT.wallInner.z - 0.04, aoH / 2, ARENA_LAYOUT.wallInner.x * 2, Math.PI, 0],
+    [-ARENA_LAYOUT.wallInner.x + 0.04, 0, aoH / 2, ARENA_LAYOUT.wallInner.z * 2, Math.PI / 2, 0],
+    [ARENA_LAYOUT.wallInner.x - 0.04, 0, aoH / 2, ARENA_LAYOUT.wallInner.z * 2, -Math.PI / 2, 0],
   ];
-  for (const [x, z, w, d] of walls) {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wallMat);
-    wall.position.set(x, wallH / 2, z);
-    wall.castShadow = true;
-    wall.receiveShadow = true;
-    root.add(wall);
+  for (const [x, z, y, width, ry] of aoPlanes) {
+    const g = new THREE.PlaneGeometry(width, aoH);
+    const mesh = new THREE.Mesh(g, aoMat);
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = ry;
+    mesh.renderOrder = 1;
+    root.add(mesh);
   }
 
-  const rock = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(3.4, 1),
-    new THREE.MeshStandardMaterial({ color: 0x8a8172, roughness: 1 }),
-  );
-  rock.position.set(8, 1.6, 0);
-  rock.scale.set(1.3, 0.8, 1);
-  rock.castShadow = true;
-  rock.receiveShadow = true;
-  root.add(rock);
+  /* ---------------- Static geometry batches ---------------- */
+  const batch = new GeoBatch();
+  buildStructures(batch, ARENA_LAYOUT, seed);
+  buildTimberFences(batch, seed);
+  const props = createProps({
+    layout: ARENA_LAYOUT,
+    textures,
+    batch,
+    quality,
+    seed,
+  });
+  const banners = createBanners({
+    layout: ARENA_LAYOUT,
+    textures,
+    batch,
+    seed,
+  });
+  const batches = batch.build({
+    stone: { material: stoneMat, castShadow: true, receiveShadow: true },
+    wood: { material: woodMat, castShadow: true, receiveShadow: true },
+    shingle: { material: shingleMat, castShadow: true, receiveShadow: true },
+    plaster: { material: plasterMat, castShadow: true, receiveShadow: true },
+    metal: { material: metalMat, castShadow: true, receiveShadow: true },
+    hay: { material: hayMat, castShadow: true, receiveShadow: true },
+  });
+  root.add(batches);
+  root.add(banners.group);
+  root.add(props.group);
 
-  const obstacles: CircleObstacle[] = [{ x: 8, z: 0, r: 3.6 }];
-  const spawns: THREE.Vector3[] = [
-    new THREE.Vector3(-12, 0, -14), new THREE.Vector3(12, 0, -14),
-    new THREE.Vector3(-12, 0, 14), new THREE.Vector3(12, 0, 14),
-    new THREE.Vector3(0, 0, -16), new THREE.Vector3(0, 0, 16),
-  ];
-  const teamSpawns = [
-    [
-      { position: new THREE.Vector3(-16, 0, -14), yaw: Math.PI * 0.75 },
-      { position: new THREE.Vector3(-18, 0, -10), yaw: Math.PI * 0.75 },
-      { position: new THREE.Vector3(-14, 0, -8), yaw: Math.PI * 0.75 },
-      { position: new THREE.Vector3(-19, 0, -5), yaw: Math.PI * 0.75 },
-    ],
-    [
-      { position: new THREE.Vector3(16, 0, -14), yaw: -Math.PI * 0.75 },
-      { position: new THREE.Vector3(18, 0, -10), yaw: -Math.PI * 0.75 },
-      { position: new THREE.Vector3(14, 0, -8), yaw: -Math.PI * 0.75 },
-      { position: new THREE.Vector3(19, 0, -5), yaw: -Math.PI * 0.75 },
-    ],
-    [
-      { position: new THREE.Vector3(-16, 0, 14), yaw: Math.PI * 0.25 },
-      { position: new THREE.Vector3(-18, 0, 10), yaw: Math.PI * 0.25 },
-      { position: new THREE.Vector3(-14, 0, 8), yaw: Math.PI * 0.25 },
-      { position: new THREE.Vector3(-19, 0, 5), yaw: Math.PI * 0.25 },
-    ],
-    [
-      { position: new THREE.Vector3(16, 0, 14), yaw: -Math.PI * 0.25 },
-      { position: new THREE.Vector3(18, 0, 10), yaw: -Math.PI * 0.25 },
-      { position: new THREE.Vector3(14, 0, 8), yaw: -Math.PI * 0.25 },
-      { position: new THREE.Vector3(19, 0, 5), yaw: -Math.PI * 0.25 },
-    ],
-  ];
+  /* ---------------- Crowd ---------------- */
+  const crowd = createCrowd(scene, ARENA_LAYOUT, quality, seed);
+  root.add(crowd.group);
+
+  let targetExcitement = 0.3;
+  let excitement = 0.3;
+
+  // Return private copies so game code can shuffle/mutate spawns without
+  // touching the shared layout module (which is also unit-tested).
+  const obstacles: CircleObstacle[] = ARENA_LAYOUT.obstacles.map((o) => ({ ...o }));
+  const bounds = { ...ARENA_LAYOUT.bounds };
+  const spawns = ARENA_LAYOUT.spawns.map((v) => v.clone());
+  const teamSpawns = ARENA_LAYOUT.teamSpawns.map((group) =>
+    group.map((s) => ({ position: s.position.clone(), yaw: s.yaw })),
+  );
+  const playerSpawn = {
+    position: ARENA_LAYOUT.playerSpawn.position.clone(),
+    yaw: ARENA_LAYOUT.playerSpawn.yaw,
+  };
 
   return {
     root,
-    bounds: { minX: -23.5, maxX: 23.5, minZ: -22.5, maxZ: 22.5 },
+    bounds,
     obstacles,
     spawns,
     teamSpawns,
-    playerSpawn: { position: new THREE.Vector3(0, 0, 12), yaw: Math.PI },
-    update: () => undefined,
-    setExcitement: () => undefined,
-    cheer: () => undefined,
-    clampPosition: (pos, radius) => {
-      pos.x = THREE.MathUtils.clamp(pos.x, -23.5 + radius, 23.5 - radius);
-      pos.z = THREE.MathUtils.clamp(pos.z, -22.5 + radius, 22.5 - radius);
-      for (const o of obstacles) {
-        const dx = pos.x - o.x;
-        const dz = pos.z - o.z;
-        const min = o.r + radius;
-        const d = Math.hypot(dx, dz);
-        if (d < min && d > 1e-5) {
-          pos.x = o.x + (dx / d) * min;
-          pos.z = o.z + (dz / d) * min;
-        }
-      }
+    playerSpawn,
+    update: (dt: number, time: number) => {
+      const step = clamp(dt, 0, 0.1);
+      excitement = damp(excitement, targetExcitement, 2.4, Math.max(0.0001, step));
+      sky.update(time);
+      crowd.update(step, time);
+      banners.update(time, excitement);
+      props.update(step, time);
+    },
+    setExcitement: (level01: number) => {
+      targetExcitement = clamp(level01, 0, 1);
+      crowd.setExcitement(targetExcitement);
+    },
+    cheer: (strength01?: number) => {
+      crowd.cheer(strength01 ?? 1);
+      targetExcitement = Math.min(1, targetExcitement + 0.3);
+      crowd.setExcitement(targetExcitement);
+    },
+    clampPosition: (pos: THREE.Vector3, radius: number) => {
+      clampArenaPosition(pos, radius, bounds, obstacles);
     },
     dispose: () => {
       scene.remove(root);
-      root.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          const mat = obj.material;
-          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-          else mat.dispose();
-        }
+      root.traverse((node) => {
+        const mesh = node as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else if (mat) mat.dispose();
       });
+      for (const mat of ownedMaterials) disposeMaterial(mat);
+      scene.remove(sun);
+      scene.remove(sun.target);
+      sun.shadow.map?.dispose();
+      sky.dispose();
+      crowd.dispose();
+      banners.dispose();
+      props.dispose();
+      textures.dispose();
+      scene.fog = null;
+      scene.background = null;
     },
   };
 }

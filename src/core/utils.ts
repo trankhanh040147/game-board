@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { AttackDir, GuardDir } from './types';
 
 /** Deterministic 32-bit PRNG. */
 export function mulberry32(seed: number): () => number {

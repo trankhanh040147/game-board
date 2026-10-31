@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blade &amp; Mount — Character Lab</title>
+    <style>
+      :root {
+        --gold: #c9a24a;
+        --parch: #e7dcc2;
+        --panel: rgba(18, 15, 12, 0.82);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #131110; }
+      body {
+        font-family: 'Barlow Condensed', 'Helvetica Neue', Arial, sans-serif;
+        color: var(--parch);
+      }
+      #lab-root { position: fixed; inset: 0; }
+      canvas { display: block; }
+      #lab-hud {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        padding: 12px 16px 11px;
+        min-width: 250px;
+        background: var(--panel);
+        border: 1px solid rgba(201, 162, 74, 0.45);
+        border-radius: 3px;
+        box-shadow: 0 4px 22px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+        pointer-events: none;
+        font-size: 12px;
+        letter-spacing: 0.045em;
+        line-height: 1.45;
+      }
+      #lab-hud h1 {
+        margin: 0 0 7px;
+        font-family: 'Cinzel', 'Times New Roman', serif;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        color: var(--gold);
+      }
+      #lab-hud .sub {
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(231, 220, 194, 0.55);
+        margin-bottom: 9px;
+      }
+      #lab-hud .row { display: flex; justify-content: space-between; gap: 18px; }
+      #lab-hud .k { color: rgba(231, 220, 194, 0.6); }
+      #lab-hud .v { color: #f3e8cd; font-variant-numeric: tabular-nums; }
+      #lab-hud .anim { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(201, 162, 74, 0.22); }
+      #lab-hud .anim .v { color: var(--gold); }
+      #lab-tip {
+        position: fixed;
+        bottom: 14px;
+        left: 16px;
+        padding: 7px 12px;
+        background: var(--panel);
+        border-left: 2px solid var(--gold);
+        font-size: 11px;
+        letter-spacing: 0.05em;
+        color: rgba(231, 220, 194, 0.72);
+        pointer-events: none;
+      }
+      #lab-tip b { color: var(--gold); font-weight: 600; }
+      #lab-error {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        max-width: 46ch;
+        padding: 10px 14px;
+        background: rgba(80, 18, 14, 0.92);
+        border: 1px solid #c05044;
+        font-size: 12px;
+        white-space: pre-wrap;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="lab-root"></div>
+    <div id="lab-hud">
+      <h1>CHARACTER LAB</h1>
+      <div class="sub">Tournament of the Realm</div>
+      <div class="row"><span class="k">Fighters</span><span class="v" id="stat-fighters">8</span></div>
+      <div class="row"><span class="k">Draw calls</span><span class="v" id="stat-calls">—</span></div>
+      <div class="row"><span class="k">Per fighter</span><span class="v" id="stat-per">—</span></div>
+      <div class="row"><span class="k">Triangles</span><span class="v" id="stat-tris">—</span></div>
+      <div class="row"><span class="k">FPS</span><span class="v" id="stat-fps">—</span></div>
+      <div class="anim row"><span class="k">Animation</span><span class="v" id="stat-anim">auto cycle</span></div>
+    </div>
+    <div id="lab-tip">
+      <b>?</b>pose=attack-right&amp;t=0.3&amp;solo=2 · <b>?</b>view=front|wide|hero|side · <b>?</b>quality=high · <b>Space</b> pause
+    </div>
+    <div id="lab-error"></div>
+    <script type="module" src="/src/dev/character-lab.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blade &amp; Mount — Arena Lab</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #14100c;
+      }
+      #game-root {
+        position: fixed;
+        inset: 0;
+      }
+      .game-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .lab-hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 5;
+        color: #f0e6d2;
+        font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+      }
+      .lab-title {
+        position: absolute;
+        top: 18px;
+        left: 22px;
+        font-family: 'Cinzel', Georgia, serif;
+        font-size: 13px;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: rgba(240, 230, 210, 0.55);
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
+      }
+      .lab-title small {
+        display: block;
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        margin-top: 4px;
+        color: rgba(240, 230, 210, 0.32);
+      }
+      .lab-hints {
+        position: absolute;
+        left: 22px;
+        bottom: 16px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        color: rgba(240, 230, 210, 0.32);
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+      }
+      .lab-stats {
+        position: absolute;
+        right: 20px;
+        bottom: 16px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-align: right;
+        color: rgba(240, 230, 210, 0.38);
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+        font-variant-numeric: tabular-nums;
+      }
+      body.clean .lab-hud {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-root"></div>
+    <div class="lab-hud">
+      <div class="lab-title">
+        The Old Lists of Aldermere
+        <small>arena lab · procedural · 1280×720</small>
+      </div>
+      <div class="lab-hints">1 hero · 2 wide · 3 gate · 4 stands · 5 east · drag look · wheel zoom · C cheer</div>
+      <div class="lab-stats" id="lab-stats"></div>
+    </div>
+    <script type="module" src="/src/dev/arena-lab.ts"></script>
+  </body>
+</html>

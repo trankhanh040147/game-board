@@ -127,7 +127,7 @@ export const HELMETS: Record<string, HelmetDef> = {
 /* ------------------------------------------------------------------ */
 
 export const COMBAT = {
-  baseHp: 100,
+  baseHp: 120,
   maxLevelBonusHp: 30,
   stamina: 100,
   staminaRegen: 16,
@@ -147,7 +147,7 @@ export const COMBAT = {
   speedBonusMax: 0.35,
   speedBonusMove: 0.055,
   speedBonusSwing: 0.11,
-  zone: { head: 2.0, torso: 1.0, legs: 0.75 } as const,
+  zone: { head: 1.7, torso: 1.0, legs: 0.75 } as const,
   blockArc: (Math.PI * 130) / 180, // total arc considered frontal
   blockStaminaShield: 0.55,
   blockStaminaWeapon: 0.9,
@@ -170,9 +170,9 @@ export const COMBAT = {
     playerTurnRate: 18,
   },
   camera: {
-    distance: 3.15,
-    height: 1.64,
-    lookHeight: 1.42,
+    distance: 3.8,
+    height: 1.72,
+    lookHeight: 1.58,
     minDistance: 1.6,
     maxDistance: 5.2,
     fov: 62,
@@ -264,10 +264,10 @@ export function makeLoadout(opts: LoadoutOptions): Loadout {
 
   let weaponId = pick(TIER_WEAPONS[t]);
   let shieldId: string | null = pick(TIER_SHIELDS[t]);
-  if (opts.preferShield && !shieldId) {
-    shieldId = t >= 4 ? 'heater' : 'kite';
-    if (WEAPONS[weaponId].twoHanded || WEAPONS[weaponId].kind === 'spear') {
-      weaponId = t >= 3 ? 'arming_sword' : 'arming_sword';
+  if (opts.preferShield) {
+    if (!shieldId) shieldId = t >= 4 ? 'heater' : 'kite';
+    if (WEAPONS[weaponId].twoHanded) {
+      weaponId = 'arming_sword';
     }
   }
   if (WEAPONS[weaponId].twoHanded) shieldId = null;
@@ -280,17 +280,21 @@ export function makeLoadout(opts: LoadoutOptions): Loadout {
   return { weapon, shield, armor, helmet, color1, color2, title: opts.title };
 }
 
-/** Equipment awarded to the player at the start of a round. */
-export function playerLoadoutForRound(round: number, color1: number, color2: number, rng: () => number): Loadout {
-  const tier = Math.max(1, Math.min(4, round + 1));
-  return makeLoadout({
-    tier,
-    color1,
-    color2,
-    title: TOURNAMENT.rounds[Math.max(0, Math.min(3, round))].loadoutTitle,
-    preferShield: round < 3,
-    rng,
-  });
+/** Equipment awarded to the player at the start of a round (curated progression, always viable). */
+export function playerLoadoutForRound(round: number, color1: number, color2: number, _rng: () => number): Loadout {
+  const r = Math.max(0, Math.min(3, round));
+  const title = TOURNAMENT.rounds[r].loadoutTitle;
+  const shield = (id: keyof typeof SHIELDS): ShieldDef => ({ ...SHIELDS[id], color: color1, color2 });
+  if (r === 0) {
+    return { weapon: WEAPONS.arming_sword, shield: shield('kite'), armor: { ...ARMORS.jerkin }, helmet: { ...HELMETS.nasal }, color1, color2, title };
+  }
+  if (r === 1) {
+    return { weapon: WEAPONS.falchion, shield: shield('heater'), armor: { ...ARMORS.hauberk }, helmet: { ...HELMETS.spangen }, color1, color2, title };
+  }
+  if (r === 2) {
+    return { weapon: WEAPONS.arming_sword, shield: shield('kite'), armor: { ...ARMORS.scale }, helmet: { ...HELMETS.great }, color1, color2, title };
+  }
+  return { weapon: WEAPONS.arming_sword, shield: shield('heater'), armor: { ...ARMORS.plate }, helmet: { ...HELMETS.barbute }, color1, color2, title };
 }
 
 /* ------------------------------------------------------------------ */
@@ -325,7 +329,7 @@ export const AI_PROFILES: Record<string, AIProfile> = {
 };
 
 export const TOURNAMENT_AI_POOLS: string[][] = [
-  ['recruit', 'recruit', 'fighter', 'fighter', 'brute'],
+  ['recruit', 'recruit', 'recruit', 'fighter', 'fighter'],
   ['fighter', 'fighter', 'veteran', 'brute', 'veteran'],
   ['veteran', 'veteran', 'duelist', 'champion'],
   ['champion', 'duelist', 'veteran', 'champion'],

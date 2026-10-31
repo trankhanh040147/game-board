@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c0906" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230c0906'/%3E%3Cpath d='M8 2v12M4 5v6M12 5v6' stroke='%23b08d57' stroke-width='1.4'/%3E%3C/svg%3E" />
+    <title>Blade &amp; Mount — Audio Lab</title>
+    <style>
+      :root {
+        --bg: #0c0906;
+        --panel: #181209;
+        --panel-hi: #221a11;
+        --line: #4a3722;
+        --line-soft: rgba(176, 141, 87, 0.22);
+        --bronze: #b08d57;
+        --gold: #e0bd7c;
+        --ink: #efe4cf;
+        --muted: #a08e73;
+        --dim: #7c6c55;
+        --red: #b5432f;
+        --green: #8aa863;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+        color: var(--ink);
+        font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+        background:
+          radial-gradient(130% 100% at 50% -20%, #2e2416 0%, #17110a 52%, #080604 100%),
+          #0c0906;
+      }
+      body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(120% 80% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+        z-index: 5;
+      }
+      .lab {
+        position: relative;
+        z-index: 6;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        padding: 13px 18px 11px;
+      }
+
+      /* ------------------------------ header ------------------------------ */
+      header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 9px;
+      }
+      .brand h1 {
+        margin: 0;
+        font-family: 'Cinzel', Georgia, serif;
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: 0.3em;
+        color: #ead9b4;
+        text-shadow: 0 1px 0 #000, 0 0 22px rgba(224, 189, 124, 0.12);
+      }
+      .brand p {
+        margin: 4px 0 0;
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 10.5px;
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .status {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .chip {
+        min-width: 74px;
+        padding: 4px 9px 5px;
+        border: 1px solid var(--line-soft);
+        border-radius: 3px;
+        background: linear-gradient(180deg, #1d1610, #120d08);
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .chip span {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 8.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      .chip b {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 600;
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        color: #d9c6a2;
+      }
+      .chip b.on {
+        color: var(--green);
+      }
+      .chip b.off {
+        color: var(--red);
+      }
+      .chip b.gold {
+        color: var(--gold);
+      }
+
+      /* ------------------------------- meter ------------------------------ */
+      .meter-row {
+        display: flex;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .meter-frame {
+        flex: 1;
+        min-width: 0;
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: #0a0705;
+        box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.8);
+        overflow: hidden;
+      }
+      #meter {
+        display: block;
+        width: 100%;
+        height: 44px;
+      }
+      .meter-caption {
+        position: absolute;
+        right: 8px;
+        top: 4px;
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 8.5px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgba(224, 189, 124, 0.5);
+      }
+      .db-box {
+        width: 104px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: linear-gradient(180deg, #1c150e, #0e0a06);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .db-box b {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 21px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--gold);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+      .db-box span {
+        margin-top: 3px;
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 8px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+
+      /* -------------------------------- main ------------------------------ */
+      main {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1.12fr;
+        gap: 11px;
+      }
+      .panel {
+        position: relative;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: linear-gradient(180deg, #1b140d 0%, #13100a 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 230, 190, 0.06),
+          0 10px 22px rgba(0, 0, 0, 0.42);
+      }
+      .panel::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 4px;
+        pointer-events: none;
+        background: linear-gradient(180deg, rgba(255, 220, 160, 0.05), transparent 32%);
+      }
+      .panel h2 {
+        margin: 0;
+        padding: 9px 12px 7px;
+        border-bottom: 1px solid var(--line-soft);
+        font-family: 'Cinzel', Georgia, serif;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: var(--bronze);
+      }
+      .panel .caption {
+        padding: 6px 12px 0;
+        font-size: 10.5px;
+        font-style: italic;
+        line-height: 1.25;
+        color: #8d7c63;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-auto-rows: minmax(34px, 88px);
+        gap: 6px;
+        padding: 8px 10px 10px;
+        align-content: center;
+        overflow: auto;
+        min-height: 0;
+        flex: 1 1 auto;
+      }
+      .grid::-webkit-scrollbar,
+      .log::-webkit-scrollbar {
+        width: 6px;
+      }
+      .grid::-webkit-scrollbar-thumb,
+      .log::-webkit-scrollbar-thumb {
+        background: #3a2b1a;
+        border-radius: 3px;
+      }
+
+      button {
+        font: inherit;
+        color: #e6d8bf;
+        cursor: pointer;
+        border: 1px solid #4b3823;
+        border-radius: 3px;
+        background: linear-gradient(180deg, #2a2015, #1b140d);
+        padding: 9px 12px 10px;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 1px;
+        transition:
+          border-color 0.12s ease,
+          background 0.12s ease,
+          box-shadow 0.12s ease,
+          transform 0.06s ease;
+      }
+      button:hover {
+        border-color: var(--bronze);
+        background: linear-gradient(180deg, #3a2c1a, #241a10);
+        color: #fff1d6;
+      }
+      button:active,
+      button.flash {
+        transform: translateY(1px);
+        border-color: var(--gold);
+        background: linear-gradient(180deg, #6a4a22, #3b2a13);
+        box-shadow:
+          0 0 0 1px rgba(224, 189, 124, 0.45),
+          0 0 18px rgba(224, 189, 124, 0.25);
+      }
+      button .name {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 13.5px;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+      }
+      button .hint,
+      button .key {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 8.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #9b886c;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding: 6px 9px;
+        min-height: 0;
+        overflow: auto;
+      }
+      .row {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+      .row button {
+        flex: 1 1 auto;
+        align-items: center;
+        text-align: center;
+      }
+      .row.music button {
+        flex: 1 1 30%;
+        padding: 5px 7px 6px;
+      }
+      .row.probe button {
+        flex: 1 1 30%;
+        padding: 5px 6px 6px;
+        background: linear-gradient(180deg, #2b2115, #191209);
+        border-color: #59421f;
+      }
+      .row.probe button:hover {
+        background: linear-gradient(180deg, #3f2f1a, #241a0e);
+      }
+      .divider {
+        height: 1px;
+        margin: 2px 0 1px;
+        background: linear-gradient(90deg, transparent, var(--line-soft), transparent);
+      }
+      .ctrl {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .ctrl-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 9.5px;
+        letter-spacing: 0.17em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .ctrl-row b {
+        color: #d9c6a2;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+      }
+      input[type='range'] {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 4px;
+        border-radius: 2px;
+        outline: none;
+        background: linear-gradient(90deg, #b08d57 0%, #6d5330 55%, #2c2115 100%);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
+        margin: 2px 0 1px;
+      }
+      input[type='range']::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 11px;
+        height: 15px;
+        border-radius: 2px;
+        border: 1px solid #6a4d27;
+        background: linear-gradient(180deg, #efd6a0, #a98244);
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+      }
+      .compass-frame {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 3px 2px 0;
+      }
+      #compass {
+        width: 96px;
+        height: 66px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: #0a0705;
+        flex: 0 0 auto;
+      }
+      .compass-note {
+        font-size: 9.5px;
+        line-height: 1.35;
+        color: var(--dim);
+        font-family: 'Barlow Condensed', sans-serif;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .compass-note em {
+        display: block;
+        margin-top: 3px;
+        color: #9d8a6c;
+        font-style: normal;
+      }
+      .log {
+        flex: 1 1 auto;
+        min-height: 54px;
+        margin: 4px 2px 2px;
+        padding: 5px 7px;
+        border: 1px solid rgba(176, 141, 87, 0.16);
+        border-radius: 3px;
+        background: rgba(0, 0, 0, 0.28);
+        overflow: auto;
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 10px;
+        line-height: 1.45;
+        letter-spacing: 0.05em;
+        color: #9c8a6e;
+        white-space: pre-wrap;
+      }
+      .log b {
+        color: var(--gold);
+        font-weight: 600;
+      }
+      .log .err {
+        color: #d8705a;
+      }
+      .log .ok {
+        color: var(--green);
+      }
+
+      /* ------------------------------- footer ----------------------------- */
+      footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        border-top: 1px solid var(--line);
+        padding-top: 7px;
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 9px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      footer b {
+        color: #b9a47f;
+        font-weight: 600;
+      }
+
+      /* ------------------------------- veil ------------------------------- */
+      .veil {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: rgba(6, 4, 3, 0.82);
+        backdrop-filter: blur(3px);
+        transition: opacity 0.5s ease;
+      }
+      .veil.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .veil button {
+        align-items: center;
+        padding: 14px 34px;
+        border-color: var(--bronze);
+        background: linear-gradient(180deg, #4a3618, #241807);
+        box-shadow:
+          0 0 0 1px rgba(224, 189, 124, 0.3),
+          0 0 42px rgba(224, 189, 124, 0.18);
+      }
+      .veil button .name {
+        font-family: 'Cinzel', Georgia, serif;
+        font-size: 15px;
+        letter-spacing: 0.3em;
+        color: #f2e2bf;
+      }
+      .veil p {
+        margin: 0;
+        max-width: 420px;
+        text-align: center;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .veil small {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 9.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lab">
+      <header>
+        <div class="brand">
+          <h1>Blade &amp; Mount</h1>
+          <p>Procedural Audio Lab · WebAudio · zero samples</p>
+        </div>
+        <div class="status">
+          <div class="chip"><span>Context</span><b id="st-state" class="off">locked</b></div>
+          <div class="chip"><span>Music</span><b id="st-music">—</b></div>
+          <div class="chip"><span>Voices</span><b id="st-voices">0</b></div>
+          <div class="chip"><span>Crowd</span><b id="st-crowd">0.00</b></div>
+          <div class="chip"><span>Plays / Drops</span><b id="st-plays">0 / 0</b></div>
+        </div>
+      </header>
+
+      <div class="meter-row">
+        <div class="meter-frame">
+          <canvas id="meter"></canvas>
+          <div class="meter-caption">Master output · peak analyser</div>
+        </div>
+        <div class="db-box">
+          <b id="st-db">−∞</b>
+          <span>dBFS</span>
+        </div>
+      </div>
+
+      <main>
+        <section class="panel">
+          <h2>I · Steel &amp; Impact</h2>
+          <div class="caption">Air, flesh, mail, oak and blood.</div>
+          <div class="grid" id="panel-steel"></div>
+        </section>
+
+        <section class="panel">
+          <h2>II · Ceremony &amp; Crowd</h2>
+          <div class="caption">The lists, the mob, and the fallen.</div>
+          <div class="grid" id="panel-ceremony"></div>
+        </section>
+
+        <section class="panel">
+          <h2>III · Coin, Stings &amp; UI</h2>
+          <div class="caption">Purses, parchment and proclamations.</div>
+          <div class="grid" id="panel-coin"></div>
+        </section>
+
+        <section class="panel">
+          <h2>IV · Console</h2>
+          <div class="caption">Ambience, score and headless probes.</div>
+          <div class="stack">
+            <div class="ctrl">
+              <div class="ctrl-row"><span>Crowd setCrowd</span><b id="v-crowd">0.00</b></div>
+              <input id="s-crowd" type="range" min="0" max="1" step="0.01" value="0" />
+            </div>
+            <div class="row">
+              <button data-act="crowd-calm"><span class="name">Calm</span><span class="hint">0.15</span></button>
+              <button data-act="cheer-half"><span class="name">Cheer</span><span class="hint">0.5</span></button>
+              <button data-act="cheer-full"><span class="name">Roar</span><span class="hint">1.0</span></button>
+            </div>
+            <div class="divider"></div>
+            <div class="row music" id="music-buttons">
+              <button data-track="menu"><span class="name">Menu</span><span class="hint">D minor</span></button>
+              <button data-track="tournament"><span class="name">Lists</span><span class="hint">tension</span></button>
+              <button data-track="melee"><span class="name">Melee</span><span class="hint">drums</span></button>
+              <button data-track="victory"><span class="name">Victory</span><span class="hint">major</span></button>
+              <button data-track="defeat"><span class="name">Defeat</span><span class="hint">lament</span></button>
+              <button data-act="music-stop"><span class="name">Stop</span><span class="hint">fade</span></button>
+            </div>
+            <div class="ctrl">
+              <div class="ctrl-row"><span>Master</span><b id="v-master">0.85</b></div>
+              <input id="s-master" type="range" min="0" max="1" step="0.01" value="0.85" />
+              <div class="ctrl-row"><span>Music</span><b id="v-music">0.50</b></div>
+              <input id="s-music" type="range" min="0" max="1" step="0.01" value="0.5" />
+              <div class="ctrl-row"><span>Effects</span><b id="v-sfx">0.85</b></div>
+              <input id="s-sfx" type="range" min="0" max="1" step="0.01" value="0.85" />
+            </div>
+            <div class="divider"></div>
+            <div class="row probe">
+              <button data-act="verify-sfx"><span class="name">Verify 23 SFX</span><span class="hint">coverage · peak</span></button>
+              <button data-act="stress"><span class="name">Stress ×200</span><span class="hint">rapid fire</span></button>
+              <button data-act="verify-music"><span class="name">Verify Music</span><span class="hint">5 tracks</span></button>
+              <button data-act="verify-spatial"><span class="name">Spatial Check</span><span class="hint">L · R · far</span></button>
+              <button data-act="rebuild"><span class="name">Rebuild Engine</span><span class="hint">dispose · init</span></button>
+            </div>
+            <div class="compass-frame">
+              <canvas id="compass"></canvas>
+              <div class="compass-note">
+                Listener compass
+                <em>bronze = camera · gold = sound</em>
+                <em id="cmp-last">no spatial events yet</em>
+              </div>
+            </div>
+            <div class="log" id="log"></div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <span>Music bus <b>−20 dB</b> under effects · voices <b>≤ 24</b> · throttle <b>30 ms</b></span>
+        <span>Click any signal to audition · headless probes report in the log</span>
+      </footer>
+    </div>
+
+    <div class="veil" id="veil">
+      <button id="unlock"><span class="name">Enter the Lists</span></button>
+      <p>
+        Browsers require a user gesture before audio can start. Click once to unlock the
+        AudioContext — every blade, footfall and cheer thereafter is synthesised live.
+      </p>
+      <small>procedural · no audio files · no network</small>
+    </div>
+
+    <script type="module" src="/src/dev/audio-lab.ts"></script>
+  </body>
+</html>

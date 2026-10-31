@@ -1,7 +1,13 @@
 node_modules/
 dist/
 .npm-cache/
-shots/*.png
-!shots/.gitkeep
 .DS_Store
 *.log
+shots/*.png
+shots/**/*.png
+shots/*.json
+shots/**/*.json
+!shots/final-menu.png
+!shots/final-hud.png
+!shots/final-bracket.png
+!shots/final-champion.png

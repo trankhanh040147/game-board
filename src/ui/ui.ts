@@ -1,300 +1,572 @@
-import type {
-  GameUIAPI, GameMode, HudState, LogEntry, LogKind, MeleeResultView, Profile, RoundIntroView,
-  RoundResultView, Settings, TargetView, TournamentEndView, TournamentView, UIHandlers,
-} from '../core/types';
-import { TEAM_PALETTE } from '../core/config';
-
 /**
- * TEMPORARY UI stub — ui-audio replaces this file and src/ui/ui.css.
- * Enough markup to make the loop testable.
+ * BLADE & MOUNT interface.
+ *
+ * GameUI owns the DOM layer above the Three.js canvas: main menu, HUD, tournament
+ * board, intros, results, pause, settings and controls. All copy is driven by the
+ * data passed in from the game; the class only formats and presents it.
  */
-export class StubGameUI implements GameUIAPI {
+
+import '@fontsource/cinzel/500.css';
+import '@fontsource/cinzel/600.css';
+import '@fontsource/cinzel/700.css';
+import '@fontsource/eb-garamond/400.css';
+import '@fontsource/eb-garamond/500.css';
+import '@fontsource/eb-garamond/600.css';
+import '@fontsource/eb-garamond/400-italic.css';
+import '@fontsource/barlow-condensed/400.css';
+import '@fontsource/barlow-condensed/500.css';
+import '@fontsource/barlow-condensed/600.css';
+import '@fontsource/barlow-condensed/700.css';
+
+import './ui.css';
+
+import type {
+  GameMode, GameUIAPI, HudState, Loadout, LogEntry, LogKind, MeleeResultView, Profile,
+  RoundIntroView, RoundResultView, Settings, TargetView, TournamentEndView, TournamentView,
+  UIHandlers,
+} from '../core/types';
+import { audio } from '../audio/audio';
+import { HudView } from './hud';
+import type { UIEnv } from './shared';
+import { makeEnv } from './shared';
+import { renderMainMenu, renderCredits } from './screens/menu';
+import { renderBracket, renderRoundIntro } from './screens/board';
+import { renderMeleeResult, renderRoundResult, renderTournamentEnd } from './screens/results';
+import { renderControls, renderPause, renderSettings } from './screens/system';
+import type { PauseContext } from './screens/system';
+import { append, div, span } from './util';
+
+const FALLBACK_SETTINGS: Settings = {
+  quality: 'high',
+  sensitivity: 1,
+  invertY: false,
+  masterVolume: 0.85,
+  musicVolume: 0.5,
+  sfxVolume: 0.85,
+  cameraShake: 1,
+  showHints: true,
+  language: 'en',
+  fov: 62,
+};
+
+const FALLBACK_PROFILE: Profile = {
+  version: 1,
+  name: 'The Wanderer',
+  denars: 0,
+  xp: 0,
+  level: 1,
+  renown: 0,
+  tournamentsWon: 0,
+  tournamentsPlayed: 0,
+  meleeRuns: 0,
+  bestMelee: 0,
+  totalKills: 0,
+  createdAt: 0,
+  lastPlayed: 0,
+};
+
+type OverlayKey =
+  | 'bracket' | 'intro' | 'roundresult' | 'tournamentend' | 'meleeresult'
+  | 'pause' | 'settings' | 'controls' | 'credits';
+
+const OUTCOME_KEYS: OverlayKey[] = ['roundresult', 'tournamentend', 'meleeresult'];
+
+export class GameUI implements GameUIAPI {
   readonly root: HTMLElement;
+
   private handlers: UIHandlers;
-  private profile: Profile | null = null;
-  private logEl: HTMLElement;
-  private hudEl: HTMLElement;
-  private overlayEl: HTMLElement;
-  private fadeEl: HTMLElement;
-  private loadingEl: HTMLElement;
-  private logId = 0;
+  private profile: Profile;
+  private settings: Settings;
+  private env: UIEnv;
+
+  private hud: HudView;
+  private menuHost: HTMLDivElement;
+  private overlayHost: HTMLDivElement;
+  private fadeEl: HTMLDivElement;
+  private damageEl: HTMLDivElement;
+  private toastHost: HTMLDivElement;
+  private loadingEl: HTMLDivElement;
+  private loadingBar: HTMLDivElement;
+  private loadingValue: HTMLSpanElement;
+  private loadingLabel: HTMLSpanElement;
+
+  private slots = new Map<OverlayKey, HTMLElement>();
+  private menuOpen = false;
+
+  private views: {
+    bracket?: TournamentView;
+    intro?: RoundIntroView;
+    roundResult?: RoundResultView;
+    tournamentEnd?: TournamentEndView;
+    meleeResult?: MeleeResultView;
+    pause?: PauseContext | null;
+  } = {};
+
+  private lastHud: HudState | null = null;
+  private hudLoadout: Loadout | null = null;
+  private damage = 0;
+  private damageRaf = 0;
+  private damageLast = 0;
+  private loadVisible = false;
+  private timers = new Set<number>();
+  private disposed = false;
 
   constructor(handlers: UIHandlers) {
     this.handlers = handlers;
+    this.profile = { ...FALLBACK_PROFILE };
+    this.settings = { ...FALLBACK_SETTINGS };
+
+    document.querySelectorAll('#ui-root').forEach((node) => node.remove());
     this.root = document.createElement('div');
     this.root.id = 'ui-root';
+    this.root.dataset.lang = this.settings.language;
+
+    this.env = this.makeEnv();
+
+    this.hud = new HudView(this.env);
+    this.menuHost = div('bm-menu-host');
+    this.overlayHost = div('bm-overlay-host');
+    this.toastHost = div('bm-toasts');
+
+    this.fadeEl = div('bm-fade');
+    this.damageEl = div('bm-damage');
+
+    this.loadingEl = div('bm-loading');
+    this.loadingEl.innerHTML = LOADING_MARKUP;
+    this.loadingBar = this.loadingEl.querySelector('.bm-loading-bar') as HTMLDivElement;
+    this.loadingValue = this.loadingEl.querySelector('.bm-loading-value') as HTMLSpanElement;
+    this.loadingLabel = this.loadingEl.querySelector('.bm-loading-label') as HTMLSpanElement;
+
+    append(this.root, this.hud.root, this.menuHost, this.overlayHost, this.damageEl,
+      this.toastHost, this.fadeEl, this.loadingEl);
     document.body.appendChild(this.root);
-    const style = document.createElement('style');
-    style.textContent = `
-      #ui-root { position: fixed; inset: 0; pointer-events: none; font-family: Georgia, serif; color: #f0e6d2; z-index: 10; }
-      #ui-root .panel { background: rgba(20,16,12,.82); border: 1px solid #8a6a3c; padding: 16px; pointer-events: auto; }
-      #ui-root button { pointer-events: auto; background: #2a2118; color: #f0e6d2; border: 1px solid #8a6a3c; padding: 8px 14px; font: inherit; cursor: pointer; margin: 4px; }
-      #ui-root button:hover { background: #4a3826; }
-      #ui-root .menu { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: auto; }
-      #ui-root .hud { position: absolute; inset: 0; pointer-events: none; }
-      #ui-root .counters { position: absolute; top: 18px; left: 20px; text-shadow: 0 2px 4px #000; }
-      #ui-root .counters b { display: block; font-size: 15px; font-weight: normal; }
-      #ui-root .log { position: absolute; left: 20px; bottom: 24px; font-size: 13px; text-shadow: 0 1px 3px #000; max-width: 360px; }
-      #ui-root .log div { margin: 1px 0; }
-      #ui-root .health { position: absolute; right: 24px; bottom: 24px; width: 260px; }
-      #ui-root .bar { height: 12px; background: #1a1410; border: 1px solid #8a6a3c; margin: 3px 0; }
-      #ui-root .bar i { display: block; height: 100%; background: #a83232; }
-      #ui-root .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: rgba(8,6,4,.55); }
-      #ui-root .overlay .panel { min-width: 420px; max-width: 720px; text-align: center; }
-      #ui-root h1 { font-size: 54px; letter-spacing: 6px; margin: 0 0 4px; }
-      #ui-root h2 { font-weight: normal; letter-spacing: 3px; }
-      #ui-root .fade { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity .5s; pointer-events: none; }
-      #ui-root .loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #0c0906; color: #c9a24a; font-size: 22px; letter-spacing: 4px; z-index: 20; }
-      #ui-root .target { position: absolute; transform: translate(-50%,-100%); font-size: 12px; text-shadow: 0 1px 3px #000; text-align: center; }
-      #ui-root .target .hp { width: 90px; height: 5px; background: #1a1410; border: 1px solid #000; margin: 2px auto; }
-      #ui-root .target .hp i { display: block; height: 100%; background: #b8453f; }
-      #ui-root .hint { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); font-size: 13px; letter-spacing: 1px; text-shadow: 0 1px 4px #000; opacity: .8; }
-      #ui-root .note { font-size: 12px; opacity: .7; }
-      #ui-root .hidden { display: none !important; }
-    `;
-    document.head.appendChild(style);
-
-    this.hudEl = document.createElement('div');
-    this.hudEl.className = 'hud hidden';
-    this.root.appendChild(this.hudEl);
-
-    this.overlayEl = document.createElement('div');
-    this.overlayEl.className = 'overlay hidden';
-    this.root.appendChild(this.overlayEl);
-
-    this.fadeEl = document.createElement('div');
-    this.fadeEl.className = 'fade';
-    this.root.appendChild(this.fadeEl);
-
-    this.loadingEl = document.createElement('div');
-    this.loadingEl.className = 'loading';
-    this.loadingEl.textContent = 'FORGING THE LISTS…';
-    this.root.appendChild(this.loadingEl);
-
-    this.logEl = document.createElement('div');
-    this.logEl.className = 'log';
   }
 
-  init(profile: Profile, _settings: Settings): void { this.profile = profile; }
-  setProfile(profile: Profile): void { this.profile = profile; }
-  updateSettings(_settings: Settings): void { /* stub */ }
+  /* ------------------------------------------------------------------ */
+  /* Setup                                                               */
+  /* ------------------------------------------------------------------ */
+
+  private makeEnv(): UIEnv {
+    return makeEnv(
+      this.handlers,
+      this.profile,
+      this.settings,
+      () => {
+        audio.unlock();
+        audio.play('ui-click');
+      },
+      () => audio.play('ui-hover'),
+      (next) => this.applySettings(next),
+      () => this.showCredits(),
+    );
+  }
+
+  private refreshEnv(): void {
+    this.env = this.makeEnv();
+    this.root.dataset.lang = this.settings.language;
+    this.hud.setEnv(this.env);
+    this.hud.setProfile(this.profile.name, this.profile.level);
+  }
+
+  init(profile: Profile, settings: Settings): void {
+    this.profile = { ...profile };
+    this.settings = { ...settings };
+    this.refreshEnv();
+    this.setLoading(null);
+  }
+
+  setProfile(profile: Profile): void {
+    this.profile = { ...profile };
+    this.env.profile = this.profile;
+    this.hud.setProfile(this.profile.name, this.profile.level);
+    if (this.menuOpen) this.renderMenu();
+  }
+
+  updateSettings(settings: Settings): void {
+    const languageChanged = settings.language !== this.settings.language;
+    const hintsChanged = settings.showHints !== this.settings.showHints;
+    this.settings = { ...settings };
+    this.refreshEnv();
+    if (hintsChanged) this.hud.setHintsEnabled(settings.showHints);
+    if (languageChanged) this.rerenderOpen();
+    if (this.lastHud) this.hud.update(this.lastHud);
+  }
+
+  private applySettings(next: Settings): void {
+    this.updateSettings(next);
+    this.handlers.onSettingsChanged({ ...this.settings });
+  }
+
+  /** Re-render every visible layer (used for live language switches). */
+  private rerenderOpen(): void {
+    if (this.menuOpen) this.renderMenu();
+    if (this.slots.get('bracket')?.classList.contains('is-open') && this.views.bracket) {
+      this.buildOverlay('bracket', renderBracket(this.env, this.views.bracket));
+    }
+    if (this.slots.get('intro')?.classList.contains('is-open') && this.views.intro) {
+      this.buildOverlay('intro', renderRoundIntro(this.env, this.views.intro));
+    }
+    if (this.slots.get('roundresult')?.classList.contains('is-open') && this.views.roundResult) {
+      this.buildOverlay('roundresult', renderRoundResult(this.env, this.views.roundResult));
+    }
+    if (this.slots.get('tournamentend')?.classList.contains('is-open') && this.views.tournamentEnd) {
+      this.buildOverlay('tournamentend', renderTournamentEnd(this.env, this.views.tournamentEnd));
+    }
+    if (this.slots.get('meleeresult')?.classList.contains('is-open') && this.views.meleeResult) {
+      this.buildOverlay('meleeresult', renderMeleeResult(this.env, this.views.meleeResult));
+    }
+    if (this.slots.get('pause')?.classList.contains('is-open')) {
+      this.buildOverlay('pause', renderPause(this.env, this.views.pause ?? null));
+    }
+    if (this.slots.get('settings')?.classList.contains('is-open')) {
+      this.buildOverlay('settings', renderSettings(this.env));
+    }
+    if (this.slots.get('controls')?.classList.contains('is-open')) {
+      this.buildOverlay('controls', renderControls(this.env));
+    }
+    if (this.slots.get('credits')?.classList.contains('is-open')) {
+      this.buildOverlay('credits', renderCredits(this.env, () => this.hideOverlay('credits')));
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Main menu                                                           */
+  /* ------------------------------------------------------------------ */
+
+  private renderMenu(): void {
+    this.menuHost.replaceChildren(renderMainMenu(this.env));
+  }
 
   showMainMenu(profile: Profile): void {
-    this.profile = profile;
+    this.profile = { ...profile };
+    this.env.profile = this.profile;
+    this.hud.setProfile(this.profile.name, this.profile.level);
+    this.hud.hide();
+    this.closeAllOverlays();
     this.setLoading(null);
-    this.hideHUD();
-    this.overlayEl.classList.remove('hidden');
-    this.overlayEl.style.background = 'rgba(8,6,4,.25)';
-    this.overlayEl.innerHTML = `
-      <div class="menu">
-        <h1>BLADE &amp; MOUNT</h1>
-        <div class="note">TOURNAMENT OF THE REALM</div>
-        <p class="note">Denars ${profile.denars} · Renown ${profile.renown} · Level ${profile.level}</p>
-        <button data-act="tournament">Tournament</button>
-        <button data-act="melee">Arena Melee</button>
-        <button data-act="controls">Controls</button>
-        <button data-act="settings">Settings</button>
-      </div>`;
-    this.overlayEl.querySelectorAll('button').forEach((b) => {
-      b.addEventListener('click', () => {
-        const act = (b as HTMLElement).dataset.act;
-        if (act === 'tournament') this.handlers.onStartTournament();
-        if (act === 'melee') this.handlers.onStartMelee();
-        if (act === 'controls') this.showControls();
-        if (act === 'settings') this.showSettings();
-      });
-    });
+    this.renderMenu();
+    if (!this.menuOpen) {
+      this.menuHost.classList.add('is-open');
+      this.menuOpen = true;
+    }
+    this.sync();
   }
 
-  hideMainMenu(): void { /* overlay controlled by callers */ }
+  hideMainMenu(): void {
+    if (!this.menuOpen) return;
+    this.menuHost.classList.remove('is-open');
+    this.menuOpen = false;
+    this.hideOverlay('credits');
+    this.sync();
+  }
+
+  showCredits(): void {
+    this.buildOverlay('credits', renderCredits(this.env, () => this.hideOverlay('credits')));
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* HUD                                                                 */
+  /* ------------------------------------------------------------------ */
 
   showHUD(mode: GameMode): void {
-    this.hudEl.classList.remove('hidden');
-    this.hudEl.innerHTML = `
-      <div class="counters"></div>
-      <div class="hint"></div>
-      <div class="log"></div>
-      <div class="health">
-        <div class="bar"><i style="width:100%"></i></div>
-        <div class="bar"><i style="width:100%;background:#c9a24a"></i></div>
-      </div>
-      <div class="target hidden"></div>`;
-    this.logEl = this.hudEl.querySelector('.log') as HTMLElement;
-    this.logEl.innerHTML = '';
-    if (mode === 'melee') this.pushLog({ text: 'The gates open. Fight well, stranger.', kind: 'info' });
+    if (this.menuOpen) this.hideMainMenu();
+    this.closePhaseScreens();
+    this.hud.setLoadout(this.hudLoadout);
+    this.hud.show(mode);
+    this.sync();
   }
 
-  hideHUD(): void { this.hudEl.classList.add('hidden'); }
+  hideHUD(): void {
+    this.hud.hide();
+  }
 
   updateHud(hud: HudState): void {
-    const counters = this.hudEl.querySelector('.counters');
-    if (counters) {
-      counters.innerHTML = hud.mode === 'melee'
-        ? `<b>Opponents Beaten: ${hud.opponentsBeaten}</b><b>Opponents Remaining: ${hud.opponentsRemaining}</b>`
-        : `<b>${hud.roundLabel}</b><b>${hud.objective}</b>`;
-    }
-    const bars = this.hudEl.querySelectorAll('.bar i');
-    if (bars.length >= 2) {
-      (bars[0] as HTMLElement).style.width = `${(hud.health / hud.maxHealth) * 100}%`;
-      (bars[1] as HTMLElement).style.width = `${(hud.stamina / hud.maxStamina) * 100}%`;
-    }
-    const hint = this.hudEl.querySelector('.hint') as HTMLElement;
-    hint.textContent = hud.hint ?? '';
-    this.setTargetOverlay(hud.target);
+    this.lastHud = hud;
+    this.hud.update(hud);
+    this.sync();
   }
 
   pushLog(entry: Omit<LogEntry, 'id'>): void {
-    const div = document.createElement('div');
-    div.textContent = entry.text;
-    const colors: Record<LogKind, string> = {
-      damage: '#f3dcc0', block: '#9db4c8', kill: '#e5b85c', xp: '#9fc98f',
-      info: '#cbbfa6', warning: '#d88a6a', reward: '#e5c66c',
-    };
-    div.style.color = colors[entry.kind];
-    this.logEl.prepend(div);
-    const id = ++this.logId;
-    setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 1.2s'; }, 9000);
-    setTimeout(() => { if (div.parentElement) div.remove(); }, 10500);
-    while (this.logEl.childElementCount > 9) this.logEl.lastElementChild?.remove();
-    void id;
+    this.hud.pushLog(entry);
   }
 
-  clearLog(): void { this.logEl.innerHTML = ''; }
-
-  private showPanel(html: string, actions: Record<string, () => void> = {}): void {
-    this.overlayEl.classList.remove('hidden');
-    this.overlayEl.style.background = 'rgba(8,6,4,.55)';
-    this.overlayEl.innerHTML = `<div class="panel">${html}</div>`;
-    this.overlayEl.querySelectorAll('[data-act]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const act = (b as HTMLElement).dataset.act as string;
-        actions[act]?.();
-      });
-    });
+  clearLog(): void {
+    this.hud.clearLog();
   }
+
+  setTargetOverlay(target: TargetView | null): void {
+    this.hud.setTarget(target);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Tournament board / intros                                           */
+  /* ------------------------------------------------------------------ */
 
   showBracket(view: TournamentView): void {
-    const teams = view.teams.map((t) => `<div style="border-left:4px solid ${t.color};padding-left:8px;margin:8px 0;text-align:left">
-      <b>${t.name}</b> <span class="note">${t.alive}/${t.members.length} standing</span>
-      <div class="note">${t.members.map((m) => `${m.isPlayer ? '★ ' : ''}${m.name}`).join(' · ')}</div></div>`).join('');
-    this.showPanel(`
-      <h2>${view.roundName}</h2>
-      <div class="note">Round ${view.round} of ${view.totalRounds} — ${view.roundObjective}</div>
-      <p>Purse: <b>${view.purse}</b> denars · Your purse: <b>${view.denars}</b> · Bet: <b>${view.bet}</b></p>
-      ${teams}
-      <div>${[0, 25, 50, 100, 150].map((amt) => `<button data-bet="${amt}" ${amt > view.maxBet || !view.canBet ? 'disabled' : ''}>Bet ${amt}</button>`).join('')}</div>
-      <button data-act="enter">Enter the Lists</button>
-      <button data-act="quit">Withdraw</button>`, {
-      enter: () => this.handlers.onEnterRound(),
-      quit: () => this.handlers.onQuitToMenu(),
-    });
+    this.views.bracket = view;
+    this.hudLoadout = view.playerLoadout;
+    this.hud.setLoadout(view.playerLoadout);
+    this.closePhaseScreens('bracket');
+    this.buildOverlay('bracket', renderBracket(this.env, view));
   }
 
-  hideBracket(): void { this.overlayEl.classList.add('hidden'); }
+  hideBracket(): void {
+    this.hideOverlay('bracket');
+  }
 
   showRoundIntro(view: RoundIntroView): void {
-    this.showPanel(`<h1 style="font-size:38px">ROUND ${view.round}</h1><h2>${view.roundName}</h2><p>${view.objective}</p>
-      <div class="note">${view.teams.map((t) => `${t.name}: ${t.members.map((m) => m.name).join(', ')}`).join('<br>')}</div>`);
-    setTimeout(() => this.hideRoundIntro(), 3200);
+    this.views.intro = view;
+    this.hudLoadout = view.loadout;
+    this.hud.setLoadout(view.loadout);
+    this.closePhaseScreens('intro');
+    this.buildOverlay('intro', renderRoundIntro(this.env, view));
   }
 
-  hideRoundIntro(): void { this.overlayEl.classList.add('hidden'); }
+  hideRoundIntro(): void {
+    this.hideOverlay('intro');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Results                                                             */
+  /* ------------------------------------------------------------------ */
 
   showRoundResult(view: RoundResultView): void {
-    this.showPanel(`<h2>${view.champion ? 'CHAMPION OF THE REALM' : view.victory ? 'ROUND WON' : 'DEFEAT'}</h2>
-      <div class="note">${view.roundName} · Kills ${view.stats.kills} · Damage ${Math.round(view.stats.damageDealt)}</div>
-      <p>Reward: ${view.rewardDenars} denars · ${view.rewardXp} XP · ${view.rewardRenown} renown</p>
-      <button data-act="continue">${view.champion || view.eliminated ? 'Leave the Arena' : 'Onward'}</button>`, {
-      continue: () => this.handlers.onContinue(),
-    });
+    this.views.roundResult = view;
+    this.closePhaseScreens('roundresult');
+    this.buildOverlay('roundresult', renderRoundResult(this.env, view));
   }
 
   showTournamentEnd(view: TournamentEndView): void {
-    this.showPanel(`<h1 style="font-size:40px">${view.champion ? 'CHAMPION' : 'ELIMINATED'}</h1>
-      <p>${view.champion ? 'The crowd roars your name.' : `You fell in round ${view.round}.`}</p>
-      <p>${view.rewardDenars} denars · ${view.rewardXp} XP · ${view.rewardRenown} renown</p>
-      <button data-act="continue">Return to the Lists</button>`, {
-      continue: () => this.handlers.onContinue(),
-    });
+    this.views.tournamentEnd = view;
+    this.closePhaseScreens('tournamentend');
+    this.buildOverlay('tournamentend', renderTournamentEnd(this.env, view));
   }
 
   showMeleeResult(view: MeleeResultView): void {
-    this.showPanel(`<h1 style="font-size:40px">${view.victory ? 'ARENA CLEARED' : 'YOU FELL'}</h1>
-      <p>Opponents beaten: <b>${view.beaten} / ${view.total}</b>${view.best ? ' · New best!' : ''}</p>
-      <p>${view.rewardDenars} denars · ${view.rewardXp} XP · ${view.rewardRenown} renown</p>
-      <button data-act="continue">Return to the Lists</button>`, {
-      continue: () => this.handlers.onContinue(),
-    });
+    this.views.meleeResult = view;
+    this.closePhaseScreens('meleeresult');
+    this.buildOverlay('meleeresult', renderMeleeResult(this.env, view));
   }
+
+  /* ------------------------------------------------------------------ */
+  /* Pause / settings / controls                                        */
+  /* ------------------------------------------------------------------ */
 
   showPause(): void {
-    this.showPanel(`<h1 style="font-size:34px">PAUSED</h1>
-      <button data-act="resume">Resume</button>
-      <button data-act="controls">Controls</button>
-      <button data-act="settings">Settings</button>
-      <button data-act="quit">Abandon Match</button>`, {
-      resume: () => this.handlers.onResume(),
-      controls: () => this.showControls(),
-      settings: () => this.showSettings(),
-      quit: () => this.handlers.onQuitToMenu(),
-    });
+    this.hideOverlay('settings');
+    this.hideOverlay('controls');
+    this.hideOutcomes();
+    this.hideOverlay('bracket');
+    this.hideOverlay('intro');
+    const hud = this.lastHud;
+    this.views.pause = hud
+      ? {
+        roundLabel: hud.roundLabel,
+        objective: hud.objective,
+        mode: hud.mode,
+        denars: hud.denars,
+        bet: hud.bet,
+      }
+      : null;
+    this.buildOverlay('pause', renderPause(this.env, this.views.pause ?? null));
   }
 
-  hidePause(): void { this.overlayEl.classList.add('hidden'); }
+  hidePause(): void {
+    this.hideOverlay('pause');
+    this.hideOverlay('settings');
+    this.hideOverlay('controls');
+  }
 
   showSettings(): void {
-    this.showPanel(`<h2>SETTINGS</h2><p class="note">Settings panel is being forged.</p>
-      <button data-act="back">Back</button>`, { back: () => this.handlers.onCloseOverlay() });
+    this.buildOverlay('settings', renderSettings(this.env));
   }
 
-  hideSettings(): void { this.overlayEl.classList.add('hidden'); }
+  hideSettings(): void {
+    this.hideOverlay('settings');
+  }
 
   showControls(): void {
-    this.showPanel(`<h2>CONTROLS</h2><p class="note">WASD move · Mouse look · LMB attack · RMB block · Shift sprint · Space dodge · F kick · Esc pause</p>
-      <button data-act="back">Back</button>`, { back: () => this.handlers.onCloseOverlay() });
+    this.buildOverlay('controls', renderControls(this.env));
   }
 
-  hideControls(): void { this.overlayEl.classList.add('hidden'); }
-
-  toast(text: string, kind: LogKind = 'info'): void { this.pushLog({ text, kind }); }
-
-  setDamagePulse(_amount: number): void { /* stub */ }
-
-  setTargetOverlay(target: TargetView | null): void {
-    const el = this.hudEl.querySelector('.target') as HTMLElement | null;
-    if (!el) return;
-    if (!target || !target.visible) { el.classList.add('hidden'); return; }
-    el.classList.remove('hidden');
-    el.style.left = `${target.screenX}px`;
-    el.style.top = `${target.screenY}px`;
-    el.style.color = target.teamColor;
-    el.innerHTML = `${target.name}<div class="hp"><i style="width:${(target.hp / target.maxHp) * 100}%"></i></div>`;
+  hideControls(): void {
+    this.hideOverlay('controls');
   }
+
+  /* ------------------------------------------------------------------ */
+  /* Toasts / damage / fades / loading                                   */
+  /* ------------------------------------------------------------------ */
+
+  toast(text: string, kind: LogKind = 'info'): void {
+    const node = div(`bm-toast bm-toast--${kind}`);
+    node.appendChild(span('bm-toast-mark'));
+    node.appendChild(span('bm-toast-text', text));
+    this.toastHost.appendChild(node);
+    while (this.toastHost.childElementCount > 3) this.toastHost.firstElementChild?.remove();
+    requestAnimationFrame(() => node.classList.add('is-in'));
+    const timer = window.setTimeout(() => {
+      node.classList.remove('is-in');
+      const remove = window.setTimeout(() => node.remove(), 320);
+      this.timers.delete(timer);
+      this.timers.add(remove);
+    }, 3600);
+    this.timers.add(timer);
+  }
+
+  setDamagePulse(amount01: number): void {
+    const value = Math.max(0, Math.min(1, amount01));
+    if (value <= 0) return;
+    this.damage = Math.max(this.damage, value);
+    if (!this.damageRaf) {
+      this.damageLast = performance.now();
+      this.damageRaf = requestAnimationFrame(this.tickDamage);
+    }
+  }
+
+  private tickDamage = (now: number): void => {
+    if (this.disposed) return;
+    const dt = Math.min(0.05, (now - this.damageLast) / 1000);
+    this.damageLast = now;
+    this.damage = Math.max(0, this.damage - dt * 2.4);
+    this.damageEl.style.opacity = String(Math.min(0.9, this.damage * 0.85));
+    if (this.damage > 0.004) {
+      this.damageRaf = requestAnimationFrame(this.tickDamage);
+    } else {
+      this.damageRaf = 0;
+      this.damageEl.style.opacity = '0';
+    }
+  };
 
   fadeToBlack(ms = 500): Promise<void> {
+    this.fadeEl.style.transition = `opacity ${ms}ms ease`;
+    this.fadeEl.classList.add('is-black');
     return new Promise((resolve) => {
-      this.fadeEl.style.transition = `opacity ${ms}ms`;
-      this.fadeEl.style.opacity = '1';
-      setTimeout(resolve, ms);
+      const timer = window.setTimeout(() => {
+        this.timers.delete(timer);
+        resolve();
+      }, ms);
+      this.timers.add(timer);
     });
   }
 
   fadeFromBlack(ms = 500): Promise<void> {
+    this.fadeEl.style.transition = `opacity ${ms}ms ease`;
+    this.fadeEl.classList.remove('is-black');
     return new Promise((resolve) => {
-      this.fadeEl.style.transition = `opacity ${ms}ms`;
-      this.fadeEl.style.opacity = '0';
-      setTimeout(resolve, ms);
+      const timer = window.setTimeout(() => {
+        this.timers.delete(timer);
+        resolve();
+      }, ms);
+      this.timers.add(timer);
     });
   }
 
   setLoading(progress: number | null, label?: string): void {
-    if (progress === null) { this.loadingEl.classList.add('hidden'); return; }
-    this.loadingEl.classList.remove('hidden');
-    this.loadingEl.textContent = `${label ?? 'FORGING THE LISTS…'} ${Math.round(progress * 100)}%`;
+    if (progress === null) {
+      if (this.loadVisible) {
+        this.loadVisible = false;
+        this.loadingEl.classList.remove('is-open');
+      }
+      return;
+    }
+    const pct = progress <= 1 ? progress * 100 : progress;
+    this.loadVisible = true;
+    this.loadingEl.classList.add('is-open');
+    this.loadingBar.style.width = `${Math.max(2, Math.min(100, pct))}%`;
+    this.loadingValue.textContent = `${Math.round(Math.max(0, Math.min(100, pct)))}%`;
+    this.loadingLabel.textContent = label ?? this.env.tr('loadingForge');
   }
 
-  dispose(): void { this.root.remove(); }
+  /* ------------------------------------------------------------------ */
+  /* Overlay plumbing                                                    */
+  /* ------------------------------------------------------------------ */
+
+  private buildOverlay(key: OverlayKey, content: HTMLElement): void {
+    let slot = this.slots.get(key);
+    if (!slot) {
+      slot = div('bm-overlay-slot');
+      slot.dataset.overlay = key;
+      this.slots.set(key, slot);
+      this.overlayHost.appendChild(slot);
+    }
+    slot.replaceChildren(content);
+    // Hard exclusivity invariant: never more than one modal screen on screen.
+    for (const [otherKey, otherSlot] of this.slots) {
+      if (otherKey !== key) otherSlot.classList.remove('is-open');
+    }
+    slot.classList.add('is-open');
+    this.overlayHost.appendChild(slot);
+    this.sync();
+  }
+
+  private hideOverlay(key: OverlayKey): void {
+    const slot = this.slots.get(key);
+    if (!slot) return;
+    slot.classList.remove('is-open');
+    this.sync();
+  }
+
+  private hideOutcomes(except?: OverlayKey): void {
+    for (const key of OUTCOME_KEYS) {
+      if (key !== except) this.hideOverlay(key);
+    }
+  }
+
+  /** Close every screen that must never sit behind a new phase of the game. */
+  private closePhaseScreens(except?: OverlayKey): void {
+    if (except !== 'intro') this.hideOverlay('intro');
+    if (except !== 'bracket') this.hideOverlay('bracket');
+    this.hideOutcomes(except);
+    if (except !== 'pause') this.hideOverlay('pause');
+    if (except !== 'settings') this.hideOverlay('settings');
+    if (except !== 'controls') this.hideOverlay('controls');
+  }
+
+  private closeAllOverlays(): void {
+    for (const key of this.slots.keys()) this.hideOverlay(key);
+  }
+
+  private sync(): void {
+    let anyOpen = false;
+    for (const slot of this.slots.values()) {
+      if (slot.classList.contains('is-open')) {
+        anyOpen = true;
+        break;
+      }
+    }
+    const modal = this.menuOpen || anyOpen || this.loadVisible;
+    document.body.classList.toggle('ui-open', modal);
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const id of this.timers) window.clearTimeout(id);
+    this.timers.clear();
+    if (this.damageRaf) cancelAnimationFrame(this.damageRaf);
+    this.damageRaf = 0;
+    this.hud.dispose();
+    this.root.remove();
+    document.body.classList.remove('ui-open');
+  }
 }
 
-export { StubGameUI as GameUI };
-void TEAM_PALETTE;
+const LOADING_MARKUP = `
+  <div class="bm-loading-inner">
+    <div class="bm-loading-crest">
+      <svg viewBox="0 0 40 44" fill="none" aria-hidden="true">
+        <path d="M20 2 38 7v12c0 10-7 17-18 21C9 36 2 29 2 19V7L20 2Z" fill="rgba(176,141,87,.14)" stroke="#b08d57" stroke-width="1.1"/>
+        <path d="M20 10.5 24 16v8h-8v-8l4-5.5Z" fill="none" stroke="#c9a24a" stroke-width="1.2"/>
+        <path d="M14 19.5h12M20 20v7" stroke="#c9a24a" stroke-width="1.1"/>
+      </svg>
+    </div>
+    <div class="bm-loading-title">BLADE &amp; MOUNT</div>
+    <div class="bm-loading-sub">TOURNAMENT OF THE REALM</div>
+    <div class="bm-loading-track"><div class="bm-loading-bar"><i></i></div></div>
+    <div class="bm-loading-row">
+      <span class="bm-loading-label">Forging the lists…</span>
+      <span class="bm-loading-value">0%</span>
+    </div>
+    <div class="bm-loading-wait">The gates are opening.</div>
+  </div>
+`;

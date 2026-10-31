@@ -1,36 +1,109 @@
 import './style.css';
 import { Engine } from './core/engine';
-import { createArena } from './world/arena';
-import { loadSettings } from './game/profile';
-import * as THREE from 'three';
+import { Input } from './core/input';
+import type { UIHandlers } from './core/types';
+import { Game } from './game/game';
+import { loadProfile, loadSettings } from './game/profile';
+import { GameUI } from './ui/ui';
+import { audio } from './audio/audio';
 
-const gameRoot = document.getElementById('game-root') as HTMLElement;
+const gameRoot = document.getElementById('game-root');
+if (!gameRoot) throw new Error('Missing #game-root');
+
+const profile = loadProfile();
 const settings = loadSettings();
-const engine = new Engine(gameRoot, settings.quality);
-const arena = createArena(engine.scene, engine.renderer, settings.quality);
 
-const cam = engine.camera;
-let t = 0;
-const target = new THREE.Vector3(0, 1.6, 0);
+let engine: Engine;
+try {
+  engine = new Engine(gameRoot, settings.quality);
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  document.body.innerHTML = `<div class="fatal">WebGL could not be initialised.<br><small>${message}</small></div>`;
+  throw err;
+}
+const input = new Input(engine.canvas);
 
-function frame(dt: number): void {
-  t += dt;
-  arena.update(dt, t);
-  const r = 17;
-  cam.position.set(Math.sin(t * 0.12) * r, 5.5, Math.cos(t * 0.12) * r + 2);
-  cam.lookAt(target);
-  engine.update(dt);
-  engine.render();
+let game: Game;
+const handlers: UIHandlers = {
+  onStartTournament: () => game.startTournament(),
+  onStartMelee: () => game.startMelee(),
+  onResume: () => game.resume(),
+  onRestart: () => game.restart(),
+  onQuitToMenu: () => game.quitToMenu(),
+  onBet: (amount) => game.placeBet(amount),
+  onEnterRound: () => game.enterRound(),
+  onContinue: () => game.continueAfterResult(),
+  onSettingsChanged: (s) => game.applySettings(s),
+  onLanguageToggle: () => game.toggleLanguage(),
+  onOpenSettings: () => game.openSettings(),
+  onOpenControls: () => game.openControls(),
+  onCloseOverlay: () => game.closeOverlay(),
+};
+
+const ui = new GameUI(handlers);
+game = new Game(engine, input, ui, profile, settings);
+game.start();
+
+interface DebugApi {
+  game: Game;
+  getState: () => Record<string, unknown>;
+  startTournament: () => void;
+  startMelee: () => void;
+  enterRound: () => void;
+  continueResult: () => void;
+  killEnemies: () => void;
+  pause: () => void;
+  resume: () => void;
+  audioUnlock: () => void;
+  audioDiagnostics: () => unknown;
+  setQuality: (q: 'low' | 'medium' | 'high') => void;
 }
 
+const debug: DebugApi = {
+  game,
+  getState: () => game.getDebugState(),
+  startTournament: () => game.debugStartTournament(),
+  startMelee: () => game.debugStartMelee(),
+  enterRound: () => game.debugEnterRound(),
+  continueResult: () => game.debugContinue(),
+  killEnemies: () => game.debugKillEnemies(),
+  pause: () => game.debugPause(),
+  resume: () => game.debugResume(),
+  audioUnlock: () => audio.unlock(),
+  audioDiagnostics: () => {
+    const engine = audio as unknown as { getDiagnostics?: () => unknown };
+    return engine.getDiagnostics?.() ?? { available: false };
+  },
+  setQuality: (q) => game.applySettings({ ...game.settings, quality: q }),
+};
+
+declare global {
+  interface Window {
+    __game?: DebugApi;
+    __ready?: boolean;
+  }
+}
+window.__game = debug;
+
 let last = performance.now();
+let firstFrame = true;
 function loop(now: number): void {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const rawDt = (now - last) / 1000;
   last = now;
-  frame(dt);
+  const dt = Math.min(0.05, Math.max(0, rawDt));
+  try {
+    game.update(dt);
+    engine.update(dt);
+    engine.render();
+  } catch (err) {
+    console.error('Game loop error', err);
+  }
+  input.endFrame();
+  if (firstFrame) {
+    firstFrame = false;
+    window.__ready = true;
+    document.body.classList.add('game-ready');
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-
-(window as unknown as Record<string, unknown>).__ready = true;
-void arena;
