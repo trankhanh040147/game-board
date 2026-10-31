@@ -117,10 +117,10 @@ export class ExpeditionsPanel implements GamePanel {
       </div>
       ${panelSection(
         'How a journey unfolds',
-        `<div class="fh-steps">
-          <div class="fh-step"><span class="fh-step-num">I</span><span><b>Choose a target</b><small>Pick a kind of party, then click anywhere on the map. The further the journey, the longer the wait.</small></span></div>
-          <div class="fh-step"><span class="fh-step-num">II</span><span><b>The land is revealed</b><small>Your party uncovers tiles as it travels — terrain, sites, deposits and eventually other peoples.</small></span></div>
-          <div class="fh-step"><span class="fh-step-num">III</span><span><b>The horizon returns</b><small>Sites may be visited for boons; settlers found a new hearth with its own people and stores.</small></span></div>
+        `<div class="fh-journey-steps">
+          <div class="fh-journey-step"><span class="fh-step-num">I</span><span><b>Choose a target</b><small>Pick a kind of party, then click anywhere on the map. The further the journey, the longer the wait.</small></span></div>
+          <div class="fh-journey-step"><span class="fh-step-num">II</span><span><b>The land is revealed</b><small>Your party uncovers tiles as it travels — terrain, sites, deposits and eventually other peoples.</small></span></div>
+          <div class="fh-journey-step"><span class="fh-step-num">III</span><span><b>The horizon returns</b><small>Sites may be visited for boons; settlers found a new hearth with its own people and stores.</small></span></div>
         </div>`,
         `${s.exploration.expeditions.length} afield`,
       )}
