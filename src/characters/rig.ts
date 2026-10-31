@@ -14,8 +14,33 @@ import { makeLook } from './palette';
 import { buildCharacter } from './model';
 import { buildShield, buildWeapon } from './weapons';
 import { CharacterAnimator } from './animation';
+import {
+  BakedCharacterAnimator,
+  getBakedAnimationLibrary,
+  isBakedAnimationActive,
+  setAnimationMode,
+  type AnimationMode,
+} from './bakedAnimator';
 
 const TRAIL_SAMPLES = 10;
+
+/** Live rigs that can hot-swap their animator for in-game A/B QA. */
+interface LiveAnimatorRig {
+  swap: () => void;
+}
+
+const liveAnimatorRigs = new Set<LiveAnimatorRig>();
+
+/**
+ * Switch the animation mode for every live fighter (used by `?anim=` and
+ * `window.__game.setAnimationMode`). New rigs pick the mode up on creation.
+ * Returns the number of live rigs that swapped.
+ */
+export function setLiveAnimationMode(mode: AnimationMode): number {
+  setAnimationMode(mode);
+  for (const rig of liveAnimatorRigs) rig.swap();
+  return liveAnimatorRigs.size;
+}
 
 /** Extra dev-only readouts for the character lab (not used by the game). */
 export interface CharacterRigDebug extends CharacterRig {
@@ -120,7 +145,22 @@ export function createCharacterRig(opts: {
 
   const build = appearance.build;
 
-  const animator = new CharacterAnimator({ loadout, seed: appearance.seed + 0x9e37 });
+  let dead = false;
+  const animatorSeed = appearance.seed + 0x9e37;
+  const makeAnimator = (): CharacterAnimator | BakedCharacterAnimator => {
+    const lib = isBakedAnimationActive() ? getBakedAnimationLibrary() : null;
+    if (lib) return new BakedCharacterAnimator(lib, { loadout, seed: animatorSeed });
+    return new CharacterAnimator({ loadout, seed: animatorSeed });
+  };
+  let animator: CharacterAnimator | BakedCharacterAnimator = makeAnimator();
+
+  const liveHandle: LiveAnimatorRig = {
+    swap: (): void => {
+      animator = makeAnimator();
+      if (dead) animator.setDead(true);
+    },
+  };
+  liveAnimatorRigs.add(liveHandle);
 
   // ---- Weapon trail -------------------------------------------------
   const useTrail = detail.extra;
@@ -164,7 +204,6 @@ export function createCharacterRig(opts: {
   const tmpColor = new THREE.Color();
   const steelColor = new THREE.Color(weaponBuild.metalTip ? 0xfff0d2 : 0xd9c9a3);
 
-  let dead = false;
   let opacity = 1;
   let ownMaterials: Map<THREE.Material, THREE.Material> | null = null;
   const ownedMaterials: THREE.Material[] = [];
@@ -447,6 +486,7 @@ export function createCharacterRig(opts: {
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      liveAnimatorRigs.delete(liveHandle);
       root.removeFromParent();
       for (const mesh of meshes) {
         mesh.geometry.dispose();

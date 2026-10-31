@@ -59,6 +59,8 @@ export interface CombatEvent {
 export interface FighterWorld {
   scene: THREE.Scene;
   arena: Arena;
+  /** Live list of fighters (for target-aware attack lunges). */
+  getFighters: () => Fighter[];
   effects: Effects;
   audio: AudioAPI;
   rng: () => number;
@@ -118,6 +120,8 @@ export class Fighter {
   dodgeCooldown = 0;
   actionLock = 0;
   lungeTimer = 0;
+  lungeRemaining = 0;
+  lungeSpeed = 0;
   lungeDir = new THREE.Vector3();
   staminaDelay = 0;
   ai: AIController | null = null;
@@ -200,8 +204,10 @@ export class Fighter {
   isAttackInHitWindow(): boolean {
     if (this.state !== 'attack' || this.hitConsumed) return false;
     const t = this.attackTimer;
+    // Physical contact can occur as long as the blade is in motion; the tip
+    // test (not a fixed early window) decides whether it actually touches.
     const start = this.attackTiming.windup + this.attackTiming.active * COMBAT.attack.hitWindowStart;
-    const end = this.attackTiming.windup + this.attackTiming.active * COMBAT.attack.hitWindowEnd;
+    const end = this.attackTiming.windup + this.attackTiming.active + this.attackTiming.recover * 0.9;
     return t >= start && t <= end;
   }
 
@@ -404,10 +410,25 @@ export class Fighter {
       if (!this.swingPlayed && this.attackTimer >= this.attackTiming.windup) {
         this.swingPlayed = true;
         forwardFromYaw(this.yaw, _fwd);
-        this.velocity.x += _fwd.x * 0.45;
-        this.velocity.z += _fwd.z * 0.45;
         this.lungeDir.copy(_fwd);
         this.lungeTimer = COMBAT.attack.lungeTime;
+        this.lungeRemaining = 0.16;
+        this.velocity.x += _fwd.x * 0.35;
+        this.velocity.z += _fwd.z * 0.35;
+        // Target-aware closing step: a committed lunge that puts the blade on
+        // the opponent instead of swinging from a gap.
+        const target = this.findLungeTarget(world);
+        if (target) {
+          _toTarget.copy(target.position).sub(this.position).setY(0);
+          const dist = _toTarget.length();
+          const desired = clamp(this.loadout.weapon.reach * 0.58, 1.15, 1.9);
+          if (dist > 0.01) {
+            this.lungeDir.copy(_toTarget).divideScalar(dist);
+            this.lungeRemaining = clamp(dist - desired, 0, 1.0);
+            this.lungeSpeed = this.lungeRemaining / Math.max(0.05, COMBAT.attack.lungeTime);
+          }
+        }
+        world.effects.dustPuff(this.position, 2, 0.55);
         world.audio.play(this.loadout.weapon.weight > 1.8 ? 'swing-heavy' : 'swing', {
           pos: this.position, volume: 0.55,
         });
@@ -509,9 +530,11 @@ export class Fighter {
       this.position.addScaledVector(this.velocity, dt);
     }
 
-    if (this.state === 'attack' && this.lungeTimer > 0) {
+    if (this.state === 'attack' && this.lungeTimer > 0 && this.lungeRemaining > 0.001) {
       this.lungeTimer -= dt;
-      this.position.addScaledVector(this.lungeDir, COMBAT.attack.lungeSpeed * dt);
+      const step = Math.min(this.lungeRemaining, Math.max(0.02, this.lungeSpeed) * dt);
+      this.position.addScaledVector(this.lungeDir, step);
+      this.lungeRemaining -= step;
     }
     if (separationForce) {
       this.position.addScaledVector(separationForce, dt);
@@ -586,6 +609,26 @@ export class Fighter {
     info.kills = this.kills;
     info.targeted = this.targeted;
     return info;
+  }
+
+  /** Nearest hostile in a forward cone, used to step into the cut. */
+  private findLungeTarget(world: FighterWorld): Fighter | null {
+    let best: Fighter | null = null;
+    let bestDist = Infinity;
+    forwardFromYaw(this.yaw, _fwd);
+    const maxDist = this.loadout.weapon.reach + 0.85;
+    for (const f of world.getFighters()) {
+      if (f === this || !f.alive) continue;
+      if (this.team >= 0 && f.team === this.team) continue;
+      const dx = f.position.x - this.position.x;
+      const dz = f.position.z - this.position.z;
+      const d = Math.hypot(dx, dz);
+      if (d > maxDist || d < 0.35) continue;
+      const dot = (dx * _fwd.x + dz * _fwd.z) / d;
+      if (dot < 0.35) continue;
+      if (d < bestDist) { bestDist = d; best = f; }
+    }
+    return best;
   }
 
   getChestPosition(out: THREE.Vector3): THREE.Vector3 {

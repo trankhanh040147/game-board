@@ -6,6 +6,15 @@ import { Game } from './game/game';
 import { loadProfile, loadSettings } from './game/profile';
 import { GameUI } from './ui/ui';
 import { audio } from './audio/audio';
+import {
+  getAnimationMode,
+  loadBakedAnimatorLibrary,
+  setAnimationMode,
+  setBakedAnimationLibrary,
+  type AnimationMode,
+  type BakedClipLibrary,
+} from './characters/bakedAnimator';
+import { setLiveAnimationMode } from './characters/rig';
 
 const gameRoot = document.getElementById('game-root');
 if (!gameRoot) throw new Error('Missing #game-root');
@@ -22,6 +31,31 @@ try {
   throw err;
 }
 const input = new Input(engine.canvas);
+
+// ---- Baked animation library (KayKit Knight retarget, CC0) --------------
+// Loaded once before the game constructs any fighter. A failure or slow fetch
+// falls back to the procedural animator without crashing. `?anim=procedural`
+// forces the procedural path for QA/comparison.
+const ANIM_URL = `${import.meta.env.BASE_URL}assets/knight-anim.json`;
+const animParam = new URLSearchParams(location.search).get('anim');
+const forceProcedural = animParam === 'procedural';
+let bakedLibrary: BakedClipLibrary | null = null;
+if (!forceProcedural) {
+  try {
+    bakedLibrary = await Promise.race([
+      loadBakedAnimatorLibrary(ANIM_URL),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+    ]);
+    if (!bakedLibrary) console.warn('[animation] baked clips timed out; using procedural animation');
+  } catch (err) {
+    console.warn('[animation] baked clips unavailable; using procedural animation', err);
+  }
+}
+setBakedAnimationLibrary(bakedLibrary);
+setAnimationMode(forceProcedural || !bakedLibrary ? 'procedural' : 'baked');
+if (!forceProcedural && bakedLibrary) {
+  console.info(`[animation] baked clips loaded (${Object.keys(bakedLibrary.clips).length} clips)`);
+}
 
 let game: Game;
 const handlers: UIHandlers = {
@@ -57,6 +91,8 @@ interface DebugApi {
   audioUnlock: () => void;
   audioDiagnostics: () => unknown;
   setQuality: (q: 'low' | 'medium' | 'high') => void;
+  setAnimationMode: (mode: AnimationMode) => void;
+  animationMode: () => AnimationMode;
 }
 
 const debug: DebugApi = {
@@ -75,6 +111,11 @@ const debug: DebugApi = {
     return engine.getDiagnostics?.() ?? { available: false };
   },
   setQuality: (q) => game.applySettings({ ...game.settings, quality: q }),
+  setAnimationMode: (mode) => {
+    const count = setLiveAnimationMode(mode);
+    console.info(`[animation] mode -> ${mode} (${count} live rigs swapped)`);
+  },
+  animationMode: () => getAnimationMode(),
 };
 
 declare global {

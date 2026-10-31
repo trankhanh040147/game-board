@@ -145,7 +145,7 @@ export class CombatSystem {
     // Body-contact fallback: when the lunge has already carried the fighter into
     // blade range, a swing should connect even if the tip sweep skipped the body
     // axis for one frame. This is close-quarters only, not old long-range reach.
-    const bodyRange = attacker.loadout.weapon.reach * 0.92;
+    const bodyRange = attacker.loadout.weapon.reach * 0.45;
     const segX = tip.x - base.x;
     const segZ = tip.z - base.z;
     const segY = tip.y - base.y;

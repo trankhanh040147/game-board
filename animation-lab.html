@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Animation Lab — Baked Retarget</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #17130f; color: #e8dcc2; font-family: Georgia, 'Times New Roman', serif; }
+  #lab-root { position: fixed; inset: 0; }
+  #lab-root canvas { display: block; }
+  #lab-error { display: none; position: fixed; top: 8px; left: 50%; transform: translateX(-50%); background: #6e1d1d; color: #ffd9c9; padding: 8px 14px; border: 1px solid #b0574a; z-index: 30; font-size: 13px; max-width: 70vw; }
+  #panel {
+    position: fixed; top: 14px; left: 14px; z-index: 20; width: 288px; max-height: calc(100vh - 28px); overflow: auto;
+    background: rgba(18, 13, 8, 0.9); border: 1px solid #8a6a3c; border-radius: 3px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.55); padding: 11px 12px 12px; font-size: 12px;
+  }
+  #panel h1 { font-size: 14px; letter-spacing: 0.12em; margin: 0 0 2px; color: #d9bc7c; font-weight: normal; }
+  #status { font-size: 11px; color: #c9a24a; margin-bottom: 8px; display: block; }
+  .group { border-top: 1px solid #4a3826; padding-top: 7px; margin-top: 8px; }
+  .group > label.title { display: block; font-size: 10px; letter-spacing: 0.16em; color: #a98d5d; text-transform: uppercase; margin-bottom: 5px; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px; }
+  button {
+    font: inherit; font-size: 11.5px; background: #2a2118; color: #e8dcc2; border: 1px solid #6d5433;
+    padding: 3px 7px; border-radius: 2px; cursor: pointer; line-height: 1.25;
+  }
+  button:hover { background: #4a3826; border-color: #a9854d; }
+  button.active { background: #7c5a2d; border-color: #d9bc7c; color: #fff4da; }
+  select { font: inherit; font-size: 12px; background: #2a2118; color: #e8dcc2; border: 1px solid #6d5433; padding: 4px 6px; width: 100%; }
+  .slider { display: grid; grid-template-columns: 72px 1fr 38px; gap: 6px; align-items: center; margin: 4px 0; color: #cbb98f; }
+  .slider input[type=range] { accent-color: #c9a24a; width: 100%; }
+  .slider output { text-align: right; color: #e8dcc2; font-variant-numeric: tabular-nums; }
+  .checks { display: flex; gap: 12px; align-items: center; margin-top: 4px; color: #cbb98f; }
+  .checks label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+  #hud {
+    position: fixed; right: 14px; bottom: 14px; z-index: 20; background: rgba(18,13,8,0.86); border: 1px solid #6d5433;
+    border-radius: 3px; padding: 8px 11px; font-size: 12px; line-height: 1.5; color: #d8c9a3; min-width: 190px;
+    font-variant-numeric: tabular-nums;
+  }
+  #hud b { color: #d9bc7c; font-weight: normal; }
+  #hud .k { color: #a98d5d; }
+  #legend {
+    position: fixed; left: 14px; bottom: 14px; z-index: 20; background: rgba(18,13,8,0.82); border: 1px solid #4a3826;
+    border-radius: 3px; padding: 6px 10px; font-size: 11px; color: #bfae8a; line-height: 1.45;
+  }
+  .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 1px; margin-right: 5px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+  <div id="lab-root"></div>
+  <div id="lab-error"></div>
+  <div id="panel">
+    <h1>ANIMATION LAB</h1>
+    <span id="status">loading baked clips…</span>
+
+    <div class="group">
+      <label class="title" for="clip">Clip</label>
+      <select id="clip"></select>
+    </div>
+
+    <div class="group">
+      <label class="title">Locomotion</label>
+      <div class="row" data-buttons="loco"></div>
+    </div>
+
+    <div class="group">
+      <label class="title">Attacks</label>
+      <div class="row" data-buttons="attacks"></div>
+    </div>
+
+    <div class="group">
+      <label class="title">Actions</label>
+      <div class="row" data-buttons="actions"></div>
+    </div>
+
+    <div class="group">
+      <label class="title">Playback</label>
+      <div class="slider">
+        <span>phase</span><input id="phase" type="range" min="0" max="1000" value="350" /><output id="phaseOut">0.35</output>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="freeze" /> freeze</label>
+        <label><input type="checkbox" id="side" checked /> side-by-side</label>
+        <label><input type="checkbox" id="loop" checked /> loop live</label>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="title">Retarget profile</label>
+      <div class="slider"><span>hip bob Y</span><input id="hipY" type="range" min="0" max="300" value="130" /><output id="hipYOut">1.30</output></div>
+      <div class="slider"><span>hip shift XZ</span><input id="hipXZ" type="range" min="0" max="200" value="60" /><output id="hipXZOut">0.60</output></div>
+      <div class="slider"><span>death Y</span><input id="deathY" type="range" min="0" max="400" value="280" /><output id="deathYOut">2.80</output></div>
+      <div class="slider"><span>time scale</span><input id="speed" type="range" min="20" max="250" value="100" /><output id="speedOut">1.00</output></div>
+    </div>
+
+    <div class="group">
+      <label class="title">Camera</label>
+      <div class="row" data-buttons="camera"></div>
+    </div>
+  </div>
+  <div id="hud"></div>
+  <div id="legend">
+    <span class="swatch" style="background:#c9a24a"></span>baked KayKit retarget &nbsp;
+    <span class="swatch" style="background:#6f8fae"></span>current procedural
+  </div>
+  <script type="module" src="/src/dev/animation-lab.ts"></script>
+</body>
+</html>

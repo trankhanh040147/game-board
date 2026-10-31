@@ -675,6 +675,7 @@ const SHOULDER_CAP_RINGS: [number, number, number, number, number][] = [
   [0.045, 0.05, 0.054, 0, 0],
 ];
 const ARM_UPPER_RINGS: [number, number, number, number, number][] = [
+  [-0.335, 0.041, 0.044, 0, 0],
   [-0.285, 0.046, 0.049, 0, 0],
   [-0.23, 0.051, 0.054, 0, 0],
   [-0.15, 0.059, 0.062, 0, 0.002],
@@ -682,13 +683,16 @@ const ARM_UPPER_RINGS: [number, number, number, number, number][] = [
   [-0.005, 0.06, 0.064, 0, 0],
 ];
 const ARM_FORE_RINGS: [number, number, number, number, number][] = [
+  [-0.295, 0.032, 0.035, 0, 0],
   [-0.255, 0.035, 0.038, 0, 0],
   [-0.21, 0.039, 0.042, 0, 0],
   [-0.14, 0.047, 0.05, 0, 0],
   [-0.06, 0.054, 0.057, 0, 0],
   [0.0, 0.049, 0.052, 0, 0],
+  [0.055, 0.043, 0.046, 0, 0],
 ];
 const THIGH_RINGS: [number, number, number, number, number][] = [
+  [-0.505, 0.054, 0.058, 0, 0],
   [-0.44, 0.061, 0.065, 0, 0],
   [-0.33, 0.069, 0.073, 0, 0],
   [-0.2, 0.085, 0.09, 0, 0.002],
@@ -701,6 +705,7 @@ const SHIN_RINGS: [number, number, number, number, number][] = [
   [-0.16, 0.074, 0.078, 0, 0.002],
   [-0.07, 0.086, 0.091, 0, 0.005],
   [-0.005, 0.08, 0.084, 0, 0],
+  [0.065, 0.062, 0.066, 0, 0],
 ];
 
 function buildArm(
@@ -725,8 +730,10 @@ function buildArm(
         ? look.armor
         : look.cloth;
 
-  // Shoulder fill (hides the gap between torso and upper arm).
-  pc.sphere(J, sleeveMat, sleeveCol, 0.066, 8, 6, 0, 0.004, 0, 1.0, 0.95, 1.0);
+  // Shoulder bridge: two overlapping caps so the armpit/shoulder never opens
+  // up at extreme raise angles.
+  pc.sphere(J, sleeveMat, sleeveCol, 0.075, 8, 6, 0, 0.006, -0.004, 1.12, 0.9, 1.05);
+  pc.sphere(J, sleeveMat, shade(sleeveCol, 0.88), 0.06, 8, 6, 0, -0.045, -0.004, 1.15, 0.92, 1.05);
   // Upper arm: tapered muscle shape.
   pc.addRaw(J, sleeveMat, sleeveCol, loftCached('arm-upper-limb', ARM_UPPER_RINGS, seg, true, true));
 
@@ -745,8 +752,20 @@ function buildArm(
     }
   }
 
+  // Elbow bridge: the upper-arm sleeve runs past the elbow joint and the
+  // forearm collar reaches back above it, so a 120-degree bend stays sealed.
+  pc.addRaw(J, sleeveMat, shade(sleeveCol, 0.9), loftCached('elbow-upper-wrap', [
+    [-0.35, 0.042, 0.045, 0, 0],
+    [-0.3, 0.046, 0.049, 0, 0],
+    [-0.26, 0.05, 0.053, 0, 0],
+  ], seg, false, false));
+  pc.addRaw(E, sleeveMat, shade(sleeveCol, 0.86), loftCached('elbow-fore-collar', [
+    [0.065, 0.043, 0.046, 0, 0],
+    [0.03, 0.048, 0.051, 0, 0],
+    [0.0, 0.05, 0.053, 0, 0],
+  ], seg, false, false));
   // Elbow: fill the joint, then a plate cap on the outside.
-  pc.sphere(E, sleeveMat, shade(sleeveCol, 0.82), 0.05, 8, 6, 0, 0.004, 0);
+  pc.sphere(E, sleeveMat, shade(sleeveCol, 0.82), 0.053, 8, 6, 0, 0.004, 0);
   if (style === 'plate' || style === 'scale') {
     pc.sphere(E, 'metal', mixHex(look.armor, 0xb6bcc3, 0.5), 0.053, 8, 6, 0, 0.008, 0.012, 1.0, 0.78, 0.7);
   } else {
@@ -769,9 +788,11 @@ function buildArm(
     pc.cyl(E, 'leather', shade(look.leatherDark, 1.15), 0.047, 0.043, 0.014, seg, 0, -0.07, 0);
     pc.cyl(E, 'leather', shade(look.leatherDark, 1.15), 0.04, 0.037, 0.014, seg, 0, -0.225, 0);
   }
-  // Hand: compact fist with a knuckle plate.
+  // Hand: compact fist with a knuckle plate + wrist wrap bridging the forearm.
   const handMat: 'metal' | 'leather' = style === 'plate' ? 'metal' : 'leather';
   const handCol = style === 'plate' ? look.darkSteel : look.leatherDark;
+  pc.cyl(E, 'leather', shade(look.leatherDark, 1.05), 0.042, 0.04, 0.045, seg, 0, -0.262, 0.002);
+  pc.cyl(H, handMat, shade(handCol, 0.95), 0.045, 0.042, 0.05, seg, 0, 0.01, 0.002);
   pc.sphere(H, handMat, handCol, 0.043, 8, 6, 0, -0.028, 0.004, 1.0, 1.1, 1.15);
   pc.taper(H, handMat, handCol, 0.07, 0.082, 0.056, 0.066, 0.055, 0, -0.062, 0.008);
   pc.box(H, handMat, shade(handCol, 1.12), 0.056, 0.02, 0.044, 0, -0.05, 0.03);
@@ -815,8 +836,20 @@ function buildLeg(
       pc.addRaw(T, 'mail', shade(legCol, 0.92), loftCached('thigh-mail', scaleRings(THIGH_RINGS, 1.05), seg, true, true));
     }
   }
-  // Knee: fill the joint, then a poleyn plate on the front.
-  pc.sphere(K, legMat, shade(legCol, 0.82), 0.058, 8, 6, 0, 0.0, 0.0);
+  // Knee: thigh-side wrap runs below the pivot, shin-side collar reaches above
+  // it; both overlap the joint at any bend angle.
+  pc.addRaw(T, legMat, shade(legCol, 0.9), loftCached('knee-thigh-bridge', [
+    [-0.55, 0.05, 0.054, 0, 0],
+    [-0.5, 0.056, 0.06, 0, 0],
+    [-0.45, 0.064, 0.068, 0, 0],
+    [-0.4, 0.07, 0.074, 0, 0],
+  ], seg, false, false));
+  pc.addRaw(K, legMat, shade(legCol, 0.85), loftCached('knee-shin-collar', [
+    [0.09, 0.056, 0.06, 0, 0],
+    [0.045, 0.062, 0.066, 0, 0],
+    [0.0, 0.066, 0.07, 0, 0],
+  ], seg, false, false));
+  pc.sphere(K, legMat, shade(legCol, 0.82), 0.062, 8, 6, 0, 0.0, 0.0);
   const copMat: 'metal' | 'leather' = style === 'plate' || style === 'scale' || style === 'mail' ? 'metal' : 'leather';
   const copCol = copMat === 'metal' ? mixHex(look.armor, 0xb2b8bf, 0.45) : look.leatherDark;
   pc.taper(K, copMat, copCol, 0.1, 0.03, 0.085, 0.024, 0.1, 0, -0.03, 0.05, 0.05);
@@ -857,8 +890,15 @@ function buildLeg(
   // Foot: heel + instep + tapered toe + sole.
   const footMat: 'metal' | 'leather' = style === 'plate' ? 'metal' : 'leather';
   const footCol = style === 'plate' ? mixHex(look.armor, 0xaab1b8, 0.45) : look.boot;
+  // Ankle bridge: boot-shaft cuff (shin) + ankle cuff (foot) overlap the joint.
+  pc.cyl(K, 'leather', shade(look.boot, 0.9), 0.066, 0.06, 0.06, seg, 0, -0.4, 0.004, 0, 0, 0, 1, 1, 1.04);
+  pc.addRaw(F, footMat, footMat === 'metal' ? shade(footCol, 0.95) : look.boot, loftCached('ankle-cuff', [
+    [0.1, 0.05, 0.053, 0, 0],
+    [0.055, 0.058, 0.062, 0, 0.004],
+    [0.0, 0.06, 0.064, 0, 0.006],
+  ], seg, false, false));
   // Ankle fill so the boot never separates from the shin.
-  pc.sphere(F, footMat, shade(footCol, 0.9), 0.052, 8, 6, 0, 0.012, 0.0);
+  pc.sphere(F, footMat, shade(footCol, 0.9), 0.056, 8, 6, 0, 0.012, 0.0);
   // Ankle/heel block.
   pc.taper(F, footMat, footCol, 0.094, 0.115, 0.086, 0.125, 0.09, 0, -0.042, -0.005, 0, 0, 0, 0.015);
   // Instep sloping down to the toes.
@@ -876,6 +916,7 @@ function buildLeg(
 }
 
 const BOOT_SHAFT_RINGS: [number, number, number, number, number][] = [
+  [-0.49, 0.058, 0.062, 0, 0.004],
   [-0.44, 0.07, 0.074, 0, 0.004],
   [-0.36, 0.077, 0.082, 0, 0.003],
   [-0.26, 0.089, 0.095, 0, 0.004],

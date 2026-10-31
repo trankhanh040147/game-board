@@ -209,8 +209,9 @@ Release LMB to swing. This is the Warband "hold & drag" feel, with keyboard fall
 - If the player is knocked out but their team still advances, the player continues (Warband-like).
   If the player's team loses, tournament ends (consolation + rewards).
 - Knocked-out player spectates the rest of the round via a slow orbit camera.
-- Each round: system-granted loadout (tier rises by round), intro banner with team roster,
-  betting 0/25/50/100/150 on yourself (a win returns 2× the stake). Final purse + rewards + renown on victory.
+- Each round: before entering, the player picks one of four curated loadouts (sword & kite, war axe,
+  spear, greatsword) with armour tier rising by round; intro banner with team roster, betting
+  0/25/50/100/150 on yourself (a win returns 2× the stake). Final purse + rewards + renown on victory.
 - Round win: denars = `ROUND_PURSE[round]` (60/120/200/500) + kill rewards; XP per kill 8/12/18/30;
   winning the championship adds +6 renown (rounds award 1/2/3/6). Betting returns 2× the stake on a round win.
 - 6-round? No — 4 rounds, keep it tight and polished.
@@ -297,12 +298,15 @@ ambient occlusion via vertex-color darkening and contact blob shadows, atmospher
 
 ## 8. Engineering conventions
 
-- TypeScript strict. No `any` unless unavoidable. No external assets/network at runtime.
+- TypeScript strict. No `any` unless unavoidable. No network at runtime; the only shipped asset is
+  the retargeted CC0 animation clip data (`public/assets/knight-anim.json`).
 - Use seeded RNG (`mulberry32` from `core/utils.ts`) for reproducibility; no `Math.random()` in
   world/character generation (gameplay crits may use seeded game RNG).
 - Dispose geometries/materials/textures on teardown.
 - Reuse geometries/materials; avoid per-frame allocations in update loops (use temp vectors).
 - Everything must run at ≥ 50 fps on an M1 Pro at 1280×720 with 16 fighters + crowd + post FX.
+- Runtime ships one small local animation data file (`public/assets/knight-anim.json`, retargeted
+  CC0 KayKit clips). Everything else is generated at runtime; no network calls.
 - Dev-only debug: `window.__game` exposes `{ game, ui, debug }`. URL params:
   `?autostart=tournament|melee`, `?skipmenu=1`, `?bot=1` (AI controls player), `?quality=low`,
   `?seed=123`, `?time=...`. Keep these working; QA uses them.

@@ -60,6 +60,8 @@ import { GameCamera } from './camera';
 import { PlayerController } from './player';
 import { CombatOverlay } from './overlay';
 import { createAIController } from './ai';
+import { LoadoutPicker } from './loadout-picker';
+import { meleeLoadoutChoices, tournamentLoadoutChoices, type LoadoutChoice } from './loadouts';
 import { audio } from '../audio/audio';
 import {
   grantDenars,
@@ -78,6 +80,7 @@ type GameState =
   | 'boot'
   | 'menu'
   | 'bracket'
+  | 'loadout'
   | 'intro'
   | 'fighting'
   | 'round-result'
@@ -150,6 +153,8 @@ interface MeleeState {
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const IDLE_INTENT = { moveX: 0, moveZ: 0, sprint: false };
+
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 
@@ -158,6 +163,7 @@ export class Game {
   readonly input: Input;
   readonly ui: GameUIAPI;
   readonly overlay: CombatOverlay;
+  readonly loadoutPicker: LoadoutPicker;
   readonly arena: Arena;
   readonly effects: Effects;
   readonly cameraCtrl: GameCamera;
@@ -188,6 +194,7 @@ export class Game {
   private lowHealthCooldown = 0;
   private botMode = false;
   private seedParam = 0;
+  private autoPickIndex = 0;
   private excitement = 0.25;
   private playerDeathHandled = false;
   private killedIds = new Set<number>();
@@ -197,6 +204,8 @@ export class Game {
   private readonly disposeFns: (() => void)[] = [];
   private lastFrameStats = { fps: 60 };
   private playerAssists = 0;
+  private pendingLoadoutMode: GameMode | null = null;
+  private pendingLoadoutChoices: LoadoutChoice[] = [];
   private damagePulse = 0;
   private fadeMap = new Map<number, number>();
   private cameraBlockers: THREE.Vector3[] = [];
@@ -208,6 +217,7 @@ export class Game {
     this.profile = profile;
     this.settings = settings;
     this.overlay = new CombatOverlay();
+    this.loadoutPicker = new LoadoutPicker();
     this.effects = new Effects(engine.scene, settings.quality, hashString('effects'));
     this.arena = createArena(engine.scene, engine.renderer, settings.quality);
     this.cameraCtrl = new GameCamera(this.arena, settings);
@@ -216,6 +226,7 @@ export class Game {
     this.world = {
       scene: engine.scene,
       arena: this.arena,
+      getFighters: () => this.fighters,
       effects: this.effects,
       audio,
       rng: mulberry32(0xc0ffee),
@@ -247,6 +258,7 @@ export class Game {
     const params = new URLSearchParams(window.location.search);
     this.botMode = params.get('bot') === '1';
     this.seedParam = Number(params.get('seed') || 0);
+    this.autoPickIndex = Math.max(0, Math.min(3, Number(params.get('pick') || 0)));
     const quality = params.get('quality');
     if (quality === 'low' || quality === 'medium' || quality === 'high') {
       this.settings = { ...this.settings, quality };
@@ -321,6 +333,7 @@ export class Game {
     this.overlay.setVisible(false);
     this.overlay.setHint(null);
     this.overlay.setScoreboard(null);
+    this.loadoutPicker.hide();
     this.ui.hideHUD();
     this.ui.hideBracket();
     this.ui.hidePause();
@@ -447,7 +460,7 @@ export class Game {
     t.playerTeamId = playerTeam ? playerTeam.id : -1;
     t.roundStart = 0;
     t.playerLoadout = playerTeam
-      ? playerLoadoutForRound(roundIndex, playerTeam.color, TEAM_PALETTE[playerTeam.id].secondary, t.rng)
+      ? tournamentLoadoutChoices(roundIndex, playerTeam.color, TEAM_PALETTE[playerTeam.id].secondary)[0].loadout
       : null;
   }
 
@@ -501,10 +514,72 @@ export class Game {
       saveProfile(this.profile);
       this.ui.setProfile(this.profile);
     }
-    this.input.requestLock();
     this.ui.hideBracket();
-    this.spawnRound(t.roundIndex);
-    this.beginIntro('tournament');
+    this.input.exitLock();
+    const team = t.teams.find((x) => x.isPlayerTeam);
+    const color1 = team?.color ?? 0x8e2f2b;
+    const color2 = team ? TEAM_PALETTE[team.id].secondary : 0xd9c9a3;
+    const def = TOURNAMENT.rounds[t.roundIndex];
+    const choices = tournamentLoadoutChoices(t.roundIndex, color1, color2);
+    this.pendingLoadoutMode = 'tournament';
+    this.pendingLoadoutChoices = choices;
+    this.state = 'loadout';
+    this.overlay.setVisible(false);
+    this.loadoutPicker.show({
+      mode: 'tournament',
+      heading: `Round ${t.roundIndex + 1} of ${TOURNAMENT.rounds.length} — ${def.name}`,
+      subtitle: 'The armoury is open. Choose the arms you will carry into the lists.',
+    }, choices, (loadout) => this.confirmLoadout(loadout), () => this.cancelLoadout());
+    // Debug/autostart runs skip the interactive pick.
+    if (this.autoStarted || this.botMode) {
+      this.loadoutPicker.hide();
+      this.confirmLoadout(choices[this.autoPickIndex]?.loadout ?? choices[0].loadout);
+    }
+  }
+
+  private updateLoadout(dt: number): void {
+    this.arena.update(dt, this.realTime);
+    this.arena.setExcitement(0.28);
+    this.effects.update(dt);
+    this.cameraCtrl.setOrbit(new THREE.Vector3(0, 2.4, -2.5), this.realTime * 0.05);
+    this.cameraCtrl.update(dt, new THREE.Vector3(0, 2.4, -2.5));
+    this.cameraCtrl.applyTo(this.engine.camera);
+  }
+
+  private cancelLoadout(): void {
+    const t = this.tournament;
+    if (this.pendingLoadoutMode === 'tournament' && t) {
+      if (t.bet > 0) {
+        grantDenars(this.profile, t.bet);
+        t.bet = 0;
+        saveProfile(this.profile);
+        this.ui.setProfile(this.profile);
+      }
+      this.pendingLoadoutMode = null;
+      this.pendingLoadoutChoices = [];
+      this.state = 'bracket';
+      this.showBracket();
+      return;
+    }
+    this.pendingLoadoutMode = null;
+    this.pendingLoadoutChoices = [];
+    this.quitToMenu();
+  }
+
+  private confirmLoadout(loadout: Loadout): void {
+    if (this.state !== 'loadout') return;
+    const mode = this.pendingLoadoutMode;
+    this.pendingLoadoutMode = null;
+    this.pendingLoadoutChoices = [];
+    this.loadoutPicker.hide();
+    this.input.requestLock();
+    if (mode === 'tournament' && this.tournament) {
+      this.tournament.playerLoadout = loadout;
+      this.spawnRound(this.tournament.roundIndex);
+      this.beginIntro('tournament');
+    } else if (mode === 'melee') {
+      this.beginMelee(loadout);
+    }
   }
 
   private spawnRound(roundIndex: number): void {
@@ -602,8 +677,23 @@ export class Game {
     this.ui.hideControls();
     this.ui.hideSettings();
     this.cleanupFighters();
+    this.input.exitLock();
+    this.pendingLoadoutMode = 'melee';
+    this.pendingLoadoutChoices = meleeLoadoutChoices();
+    this.state = 'loadout';
+    this.loadoutPicker.show({
+      mode: 'melee',
+      heading: 'Arena Melee — thirty-five foes, one sand',
+      subtitle: 'Survive the yard. Choose what you carry into the crowd.',
+    }, this.pendingLoadoutChoices, (loadout) => this.confirmLoadout(loadout), () => this.cancelLoadout());
+    if (this.autoStarted || this.botMode) {
+      this.loadoutPicker.hide();
+      this.confirmLoadout(this.pendingLoadoutChoices[this.autoPickIndex]?.loadout ?? this.pendingLoadoutChoices[0].loadout);
+    }
+  }
+
+  private beginMelee(loadout: Loadout): void {
     this.state = 'intro';
-    this.input.requestLock();
     const seed = this.seedParam || (Date.now() & 0x7fffffff);
     const rng = mulberry32(seed);
     this.melee = {
@@ -628,15 +718,6 @@ export class Game {
     this.slowMoTimer = 0;
     this.lockTargetId = null;
     this.excitement = 0.3;
-    const loadout: Loadout = {
-      weapon: WEAPONS.arming_sword,
-      shield: { ...SHIELDS.kite, color: 0x7c2f2c, color2: 0xd9c9a3 },
-      armor: ARMORS.hauberk,
-      helmet: HELMETS.nasal,
-      color1: 0x7c2f2c,
-      color2: 0xd9c9a3,
-      title: 'Arena Arms',
-    };
     const spawn = this.arena.playerSpawn;
     this.player = new Fighter({
       id: 0,
@@ -862,6 +943,8 @@ export class Game {
       this.updateMenu(realDt);
     } else if (this.state === 'bracket') {
       this.updateBracket(realDt);
+    } else if (this.state === 'loadout') {
+      this.updateLoadout(realDt);
     } else if (this.state === 'intro') {
       this.updateIntro(realDt);
     } else if (this.state === 'fighting') {
@@ -976,6 +1059,10 @@ export class Game {
         if (target) intent.faceYaw = yawTo(f.position, target.position);
       }
       f.update(simDt, intent, this.world);
+    }
+    // Dead fighters still need to advance their collapse animation / corpse timer.
+    for (const f of this.fighters) {
+      if (!f.alive) f.update(simDt, IDLE_INTENT, this.world);
     }
 
     this.combat.update(simDt, this.fighters);
@@ -1640,6 +1727,7 @@ export class Game {
     this.tournament = null;
     this.melee = null;
     this.cleanupFighters();
+    this.loadoutPicker.hide();
     this.ui.hideBracket();
     this.ui.hideControls();
     this.ui.hideSettings();
@@ -1836,6 +1924,7 @@ export class Game {
     this.effects.dispose();
     this.arena.dispose();
     this.overlay.dispose();
+    this.loadoutPicker.dispose();
     for (const fn of this.disposeFns) fn();
     this.input.dispose();
   }
@@ -1864,6 +1953,11 @@ export class Game {
   debugStartTournament = (): void => { this.startTournament(); };
   debugStartMelee = (): void => { this.startMelee(); };
   debugEnterRound = (): void => { this.enterRound(); };
+  debugSelectLoadout = (index = 0): void => {
+    if (this.state !== 'loadout') return;
+    const choice = this.pendingLoadoutChoices[index] ?? this.pendingLoadoutChoices[0];
+    if (choice) this.confirmLoadout(choice.loadout);
+  };
   debugContinue = (): void => { this.continueAfterResult(); };
   debugPause = (): void => { this.pause(); };
   debugResume = (): void => { this.resume(); };

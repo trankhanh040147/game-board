@@ -162,8 +162,8 @@ export const COMBAT = {
     /** Max distance from weapon tip to the defender's body axis. */
     tipContactRadius: 0.66,
     /** Forward lunge applied when the swing starts, so contact matches the animation. */
-    lungeSpeed: 1.45,
-    lungeTime: 0.12,
+    lungeSpeed: 3.1,
+    lungeTime: 0.2,
     maxHits: 1,
   },
   movement: {

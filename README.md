@@ -1,13 +1,15 @@
 # BLADE & MOUNT — Tournament of the Realm
 
 A fully playable 3D medieval melee game in the browser, built as a loving homage to
-**Mount & Blade: Warband**'s arena and tournament modes. No art or audio assets are shipped:
-every fighter, stone, banner, crowd member, sound and note is generated procedurally at runtime.
+**Mount & Blade: Warband**'s arena and tournament modes. Fighters, armour, the arena, crowd,
+props, sound effects and music are generated at runtime. Locomotion, combat and death animation
+clips are retargeted onto the game's fighter rig from the CC0 **KayKit Adventurers** pack.
 
 ![Main menu](shots/final-menu.png)
 ![The lists](shots/final-hud.png)
 
 ![Tournament board](shots/final-bracket.png)
+![Choose your arms](shots/final-loadout.png)
 ![Arena Melee](shots/final-melee.png)
 ![Champion](shots/final-champion.png)
 
@@ -39,8 +41,7 @@ Sixteen fighters, four rounds, teams redrawn each round, and the whole yard watc
 4. **The Championship** — the last two fighters face each other in a duel on the sand.
 
 Knocked out early? If your house still wins, you live to fight the next round (as in Warband).
-Bet 0–150 denars on yourself before each round at 2:1. Rounds award a purse, kill money, XP,
-renown, and rising-quality tournament arms are granted each round.
+Bet 0–150 denars on yourself before each round at 2:1. Before every bout the armoury opens: choose one of four loadouts — sword & kite, war axe, spear or greatsword — with rising-quality armour each round. Rounds award a purse, kill money, XP and renown.
 
 ### Arena Melee
 A free-for-all against 35 opponents in waves, faithful to the reference HUD:
@@ -60,6 +61,7 @@ Clear the yard for the champion's purse.
 | **F** | Kick — staggers and breaks an opponent's guard |
 | **Q / middle mouse** | Lock onto the enemy nearest the crosshair |
 | **Mouse wheel** | Camera distance |
+| **1–4 / click** | Choose your loadout in the pre-bout armoury |
 | **Esc** | Pause |
 | **Tab** | Hold for the scoreboard hint |
 
@@ -91,13 +93,26 @@ Settings (quality, FOV, sensitivity, volumes, language, camera shake, hints) are
 - **Three.js** rendering with ACES tone mapping, soft shadows, bloom, SMAA, custom colour grade,
   vignette, film grain and damage pulse.
 - Procedural characters: layered armour, 6 helmet types, 8 weapons, heraldic shields and tabards,
-  rigid-part skeletal animation with crossfades, weapon trails and a full combat animation set.
+  rigid-part skeletal rigs, weapon trails and baked/retargeted combat animation with crossfades.
 - Procedural arena: stone lists, timber stands, animated instanced crowd, gatehouse, waving banners,
   props, dust, sky, distant hills and warm afternoon light.
 - Tactical AI: target selection, team awareness, spacing, guard reading, dodges, kicks, feints,
   archetypes from hesitant recruits to champion duellists.
 - Procedural WebAudio: designed impacts, swings, crowd ambience, score and adaptive music.
-- TypeScript, Vite, Vitest. No external runtime assets or network calls.
+- TypeScript, Vite, Vitest. No network calls at runtime; the only shipped asset is the retargeted
+  animation clip data (`public/assets/knight-anim.json`).
+
+## Controls in the armoury
+
+Before every bout (and before each Arena Melee run) the game opens a pre-bout **Choose Your Arms**
+panel. Click a card or press **1–4**, then **Enter / Take the Field**. Your pick updates your fighter,
+HUD badge and intro loadout.
+
+## Credits
+
+Animation clips based on **KayKit Adventurers** by Kay Lousberg (CC0 1.0), retargeted to this
+game's skeleton. See [docs/animation-research.md](docs/animation-research.md) and
+[public/assets/Knight-LICENSE.txt](public/assets/Knight-LICENSE.txt).
 
 ## Project layout
 
@@ -113,6 +128,13 @@ tests         logic + AI tests
 tools         headless screenshot / playtest helpers
 tests/qa      independent release QA report + runnable suites
 ```
+
+## Animation
+
+Locomotion, guards, attacks, dodges and death are driven by baked clips retargeted from the CC0
+KayKit Adventurers animation set onto the game's own skeleton, blended with procedural look-at,
+cape, shield and foot-pinning. Add `?anim=procedural` to the URL to compare with the older
+procedurally generated animation, or use `window.__game.setAnimationMode('baked'|'procedural')` live.
 
 ## Development
 
