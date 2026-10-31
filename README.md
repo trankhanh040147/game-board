@@ -17,6 +17,18 @@ Canvas 2D isometric world and a dense, readable interface on top.
 
 More screenshots: [hero 1920](shots/first-hearth-hero-1920.png) · [the Codex](shots/first-hearth-codex-1920.png) · [1280×800 layout](shots/first-hearth-1280.png)
 
+## Status
+
+First Hearth is feature-complete for a v1 release and verified end-to-end:
+
+- **Simulation:** deterministic daily tick pipeline (16 systems), seeded worldgen (112×112), 54 resources, 93 buildings, 81 recipes, 95 discoveries, 45 events, 18 policies, 13 doctrines, 20 milestones, 20 achievements, 6 megaprojects, 14 sites, 3–5 AI neighbours, ecology/climate/disaster simulation.
+- **Tests:** `npm test` → **78/78 passing** across content integrity, determinism, save/load equivalence, economy invariants, early game, bootstrap regression, 400-day long runs.
+- **Browser QA:** **43/43 checks passing**, zero console/page errors, all panels and overlays verified at 1600×900 and 1280×800, save→load and export→import round-trips exact, **60 fps at 4× speed with 140+ population**, ~2.0 ms per simulated day.
+- **Balance (automated play, 5 seeds × 400 days):** no extinctions, era 1 by day 70–79, era 2 reachable, famine/water pressure remains a meaningful mid/late-game challenge.
+- **Open known issues:** age-2 progression variance, late-game water infrastructure demands, minor UI truncation at narrow widths. See [QA report](docs/QA-REPORT.md).
+
+Screenshots: [hero 1600](shots/first-hearth-hero-1600.png) · [hero 1920](shots/first-hearth-hero-1920.png) · [Codex](shots/first-hearth-codex-1920.png) · [1280×800](shots/first-hearth-1280.png) · [UI panel gallery](shots/ui-final-codex-1600.png)
+
 ## Play
 
 ```bash
