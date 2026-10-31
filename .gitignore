@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.npm-cache/
+shots/*.png
+!shots/.gitkeep
+.DS_Store
+*.log
