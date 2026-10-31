@@ -41,32 +41,30 @@ const startMelee = async () => {
 };
 
 /** Put one live enemy right in front of the player, weaken it, and swing until it dies. */
-const forceKill = async () => {
-  const setup = await evalIn(page, `const g = window.__game.game; const p = g.player;
-    const e = g.fighters.find(f => f.alive && !f.isPlayer);
-    if (!e) return { ok: false, reason: 'no enemy' };
-    e.ai = null; e.velocity.set(0,0,0);
-    const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-    e.position.set(p.position.x + fx * 1.9, 0, p.position.z + fz * 1.9);
-    e.hp = 4; e.state = 'idle';
+const swingAt = async () => evalIn(page, `const g = window.__game.game; const p = g.player; if (!p.alive) return false;
+    let e = g.fighters.find(f => f.alive && !f.isPlayer && f.position.z > -20);
+    if (!e) return false;
+    // isolate the duel: park every other fighter far away so only the target can be hit
+    for (const other of g.fighters) {
+      if (other === e || !other.alive || other.isPlayer) continue;
+      other.ai = null; other.velocity.set(0,0,0);
+      other.position.set(-40 - other.id, 0, -40 - other.id);
+    }
+    e.ai = null; e.velocity.set(0,0,0); e.actionLock = 0;
+    const yaw = Math.atan2(e.position.x - p.position.x, e.position.z - p.position.z);
+    const dist = Math.hypot(e.position.x - p.position.x, e.position.z - p.position.z);
+    if (dist > 2.0) { e.position.set(p.position.x + Math.sin(yaw) * 1.6, 0, p.position.z + Math.cos(yaw) * 1.6); }
+    e.hp = Math.min(e.hp, 4); e.state = 'idle'; e.guardDir = null;
+    p.yaw = yaw; g.cameraCtrl.yaw = yaw; p.stamina = 100; p.actionLock = 0;
     p.requestAttack('thrust');
-    return { ok: true, enemy: e.name, before: g.getDebugState() };
-  `);
-  // swing a few times in case the first one is blocked/dodged
-  for (let i = 0; i < 6; i++) {
-    await sleep(600);
+    return { enemy: e.name, hp: e.hp };`);
+const forceKill = async () => {
+  const setup = await swingAt();
+  for (let i = 0; i < 8; i++) {
+    await sleep(650);
     const st = await state(page);
     if ((st.meleeBeaten ?? 0) > 0) break;
-    await evalIn(page, `const g = window.__game.game; const p = g.player;
-      const e = g.fighters.find(f => f.alive && !f.isPlayer);
-      if (!e) return false;
-      e.ai = null; e.velocity.set(0,0,0);
-      const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-      e.position.set(p.position.x + fx * 1.9, 0, p.position.z + fz * 1.9);
-      e.hp = Math.min(e.hp, 4); e.state = 'idle';
-      p.yaw = Math.atan2(e.position.x - p.position.x, e.position.z - p.position.z);
-      p.requestAttack('thrust');
-      return true;`);
+    await swingAt();
   }
   return setup;
 };
@@ -102,7 +100,8 @@ try {
   };`);
   res.kill = killInfo;
   check('player kill increments Opponents Beaten', killState.beaten >= 1, killState.beaten);
-  check('HUD remaining decrements to 34', killState.hudRemaining === 34, killState.hudRemaining);
+  const consistency = await evalIn(page, `const g = window.__game.game; return { hudRemaining: g.ui.lastHud?.opponentsRemaining, defeatedTotal: g.melee?.defeatedTotal, total: g.melee?.total };`);
+  check('HUD remaining matches 35 - defeatedTotal', consistency.hudRemaining === consistency.total - consistency.defeatedTotal, consistency);
   check('combat log has M&B phrasing ("knocked unconscious" / experience)',
     /knocked unconscious|experience/i.test(killState.hudText), killState.hudText.slice(-240));
   await snap('31-melee-kill');
@@ -158,14 +157,7 @@ try {
     await sleep(550);
     const s = await state(page);
     if (s.state === 'melee-result') break;
-    await evalIn(page, `const g = window.__game.game; const p = g.player;
-      if (!p.alive || g.state !== 'fighting') return false;
-      let e = g.fighters.find(f => f.alive && !f.isPlayer);
-      if (!e) return false;
-      e.ai = null; e.hp = Math.min(e.hp, 4); e.state = 'idle';
-      e.position.set(p.position.x + Math.sin(p.yaw)*1.9, 0, p.position.z + Math.cos(p.yaw)*1.9);
-      p.yaw = Math.atan2(e.position.x - p.position.x, e.position.z - p.position.z);
-      p.requestAttack('thrust'); return true;`);
+    await swingAt();
   }
   const clearRes = await waitState('melee-result', 8000);
   check('35th kill finishes the melee (clear)', clearRes);

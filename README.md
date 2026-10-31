@@ -8,6 +8,7 @@ every fighter, stone, banner, crowd member, sound and note is generated procedur
 ![The lists](shots/final-hud.png)
 
 ![Tournament board](shots/final-bracket.png)
+![Arena Melee](shots/final-melee.png)
 ![Champion](shots/final-champion.png)
 
 ## Play
@@ -110,6 +111,7 @@ src/ui        HUD, menus, tournament board, results, settings
 src/audio     procedural sound design and music
 tests         logic + AI tests
 tools         headless screenshot / playtest helpers
+tests/qa      independent release QA report + runnable suites
 ```
 
 ## Development
@@ -119,7 +121,10 @@ npm test                    # vitest logic/AI tests
 npm run build               # typecheck + production build
 npm run shot -- --url ...   # headless screenshot helper
 node tools/playtest.mjs     # headless menu → bracket → fight → pause flow
+node tools/qa/flow-tournament.mjs  # QA flow suite (see tests/qa/REPORT.md)
 ```
+
+Independent release QA (0 P0, 0 P1) is documented in [tests/qa/REPORT.md](tests/qa/REPORT.md).
 
 Debug hooks are exposed on `window.__game` (`getState`, `startTournament`, `startMelee`,
 `enterRound`, `killEnemies`, `pause`, `resume`). URL parameters: `?autostart=tournament|melee`,

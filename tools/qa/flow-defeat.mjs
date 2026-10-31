@@ -127,14 +127,17 @@ try {
   await enterRound();
   await evalIn(page, `const g = window.__game.game; g.player.knockOut(g.world); return true;`);
   await sleep(2500);
-  const spectate = await evalIn(page, `const g = window.__game.game; return {
+  const spectate = await evalIn(page, `const g = window.__game.game; const el = document.querySelector('.bm-spectate');
+    return {
     state: g.state, playerAlive: g.player?.alive, playerState: g.player?.state,
-    hudText: (document.getElementById('ui-root')?.innerText ?? '').replace(/\\s+/g,' ').slice(0, 260),
+    hudText: (document.getElementById('ui-root')?.innerText ?? '').replace(/\\s+/g,' ').slice(0, 2000),
+    spectateEl: el ? { text: (el.textContent || '').replace(/\\s+/g,' ').trim(), vis: getComputedStyle(el).visibility, op: getComputedStyle(el).opacity } : null,
     camDead: g.cameraCtrl?.mode,
   };`);
   res.spectate = spectate;
   check('player death keeps fight running (spectate)', spectate.state === 'fighting' && spectate.playerAlive === false, { state: spectate.state, playerAlive: spectate.playerAlive });
-  check('spectator HUD shows "YOU HAVE FALLEN"', /YOU HAVE FALLEN|fallen/i.test(spectate.hudText), spectate.hudText.slice(0, 200));
+  const spectateWord = `${spectate.spectateEl?.text ?? ''} ${spectate.hudText}`;
+  check('spectator HUD shows "YOU HAVE FALLEN"', /YOU HAVE FALLEN/i.test(spectateWord) && (spectate.spectateEl ? spectate.spectateEl.vis !== 'hidden' : true), { spectateEl: spectate.spectateEl, hudHasBanner: /YOU HAVE FALLEN/i.test(spectate.hudText) });
   await snap('22-spectating');
 
   // Kill only the rival houses; the player's (dead) house should still advance.

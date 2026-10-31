@@ -133,6 +133,7 @@ export class Fighter {
   deadTime = 0;
   targeted = false;
   inCombat = false;
+  private recentAttackers = new Map<number, number>();
   /** True while the fighter is inside a valid camera frame / active match. */
   active = true;
   private appearanceSeed: number;
@@ -590,6 +591,11 @@ export class Fighter {
     if (!this.alive) return;
     this.rig.playAction('victory');
     void world;
+  }
+
+  wasDamagedRecentlyBy(id: number, within: number, now: number): boolean {
+    const t = this.recentAttackers.get(id);
+    return t !== undefined && now - t <= within;
   }
 
   setOpacity(v: number): void {

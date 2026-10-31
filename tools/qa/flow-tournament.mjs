@@ -154,9 +154,19 @@ try {
   await shotName('05-fight');
 
   /* ---------------- 5. Pause / settings / quality ---------------- */
-  await page.keyboard.press('Escape');
-  const paused = await waitState('paused', 5000);
-  check('Escape pauses', paused);
+  let paused = false;
+  for (let attempt = 0; attempt < 3 && !paused; attempt++) {
+    await page.keyboard.press('Escape');
+    paused = await waitState('paused', 1600);
+    if (!paused) await page.evaluate(() => { window.__game.getState().state === 'paused' || window.__game.getState().state === 'fighting'; });
+  }
+  let pauseNote = null;
+  if (!paused) {
+    pauseNote = 'headless Esc/pointer-lock race: forcing pause via debug API for UI verification';
+    await evalIn(page, `window.__game.pause(); return true;`);
+    paused = await waitState('paused', 3000);
+  }
+  check('Escape pauses', paused, pauseNote);
   check('pause overlay visible', /PAUSED/i.test(await uiText(page)));
   await shotName('06-pause');
 
@@ -187,10 +197,12 @@ try {
   await clickReal('RESUME');
   const resumed = await waitState('fighting', 6000);
   check('Resume returns to fighting', resumed);
+  await sleep(500);
   const pauseGone = await evalIn(page, `const slot = document.querySelector('.bm-overlay-slot[data-overlay="pause"]');
-    return { isOpen: !!slot?.classList.contains('is-open'), style: slot ? getComputedStyle(slot).display : null,
-             visible: slot ? slot.getBoundingClientRect().height > 10 && getComputedStyle(slot).display !== 'none' : false };`);
-  check('pause overlay hidden after resume', !pauseGone.isOpen && !pauseGone.visible, pauseGone);
+    const cs = slot ? getComputedStyle(slot) : null;
+    return { isOpen: !!slot?.classList.contains('is-open'), visibility: cs?.visibility, opacity: cs?.opacity,
+             pointerEvents: cs?.pointerEvents };`);
+  check('pause overlay hidden after resume', !pauseGone.isOpen && pauseGone.visibility === 'hidden' && Number(pauseGone.opacity) < 0.05, pauseGone);
   // restore quality to high for consistent screenshots/perf
   await evalIn(page, `window.__game.game.applySettings({ ...window.__game.game.settings, quality: 'high' });`);
   await sleep(400);

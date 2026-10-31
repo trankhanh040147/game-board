@@ -185,10 +185,10 @@ Mouse delta (or A/D/W/S) selects `left/right/overhead/thrust`; default `right`.
 Release LMB to swing. This is the Warband "hold & drag" feel, with keyboard fallback.
 
 ### 6.2 Combat numbers (core/config.ts — balance centrally)
-- HP 100 (player scales +2/level to max 130). Stamina 100, regen 16/s.
+- HP 120 (player scales +2/level, capped at +30 → 150). Stamina 100, regen 16/s.
 - Weapon damage 20–42, speed multiplier 0.72–1.15, reach 2.2–3.3 m, armor penetration 0.1–0.45.
 - Attack timing: windup = 0.26/speed, active = 0.10, recover = 0.30/speed (+/- small weapon factor).
-- Zone multiplier: head 2.0, torso 1.0, legs 0.75. Overhead tends to hit head, thrust torso.
+- Zone multiplier: head 1.7, torso 1.0, legs 0.75. Overhead tends to hit head, thrust torso.
 - Armour: damage × (1 − armor*0.009) (armor 0–85), min 2.
 - Speed bonus: up to +35% from approach + weapon swing momentum. Log shows `Speed bonus: +14%`.
 - Block: correct direction + facing attacker. Shield absorbs 100% for stamina = damage*0.55;
@@ -203,16 +203,16 @@ Release LMB to swing. This is the Warband "hold & drag" feel, with keyboard fall
 ### 6.3 Tournament structure
 16 contestants, 4 rounds, teams redrawn each round (player always included):
 1. **Grand Melee** — 4 teams × 4; top 2 teams advance (8 survivors).
-2. **The Squires' Pass** — 2 teams × 4; winning team advances (4).
+2. **The Knights' Pass** — 2 teams × 4; winning team advances (4).
 3. **The Duellists' Round** — survivors redrawn into 2 teams × 2; winning team (2) advances.
 4. **The Championship** — final duel, 1v1.
 - If the player is knocked out but their team still advances, the player continues (Warband-like).
   If the player's team loses, tournament ends (consolation + rewards).
 - Knocked-out player spectates the rest of the round via a slow orbit camera.
 - Each round: system-granted loadout (tier rises by round), intro banner with team roster,
-  betting 0/25/50/100 on yourself at 2:1. Final purse + rewards + renown on victory.
-- Round win: denars = `ROUND_PURSE[round]` (40/80/140/250) + kill rewards; XP per kill 8/12/18/30;
-  champion +250 denars / +200 XP / +5 renown. Betting doubles stake on round win.
+  betting 0/25/50/100/150 on yourself (a win returns 2× the stake). Final purse + rewards + renown on victory.
+- Round win: denars = `ROUND_PURSE[round]` (60/120/200/500) + kill rewards; XP per kill 8/12/18/30;
+  winning the championship adds +6 renown (rounds award 1/2/3/6). Betting returns 2× the stake on a round win.
 - 6-round? No — 4 rounds, keep it tight and polished.
 
 ### 6.4 Arena Melee mode
@@ -232,7 +232,7 @@ Release LMB to swing. This is the Warband "hold & drag" feel, with keyboard fall
 ```ts
 { denars, xp, level, renown, tournamentsWon, tournamentsPlayed, bestMelee, totalKills, name }
 ```
-Level: thresholds `100 * level^1.35`; +2 max HP/level (cap +30). Rank names by level for UI.
+Level: thresholds `110 * level^1.35`; +2 max HP/level (cap +30, from 120 base). Rank names by level for UI.
 Settings stored separately (`blade-and-mount.settings.v1`).
 
 ---

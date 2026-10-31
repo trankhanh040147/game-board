@@ -196,6 +196,7 @@ export class Game {
   private disposed = false;
   private readonly disposeFns: (() => void)[] = [];
   private lastFrameStats = { fps: 60 };
+  private playerAssists = 0;
   private damagePulse = 0;
   private fadeMap = new Map<number, number>();
   private cameraBlockers: THREE.Vector3[] = [];
@@ -513,6 +514,7 @@ export class Game {
     t.pendingEnd = null;
     t.matchOver = false;
     this.playerDeathHandled = false;
+    this.playerAssists = 0;
     this.killedIds.clear();
     this.freeze = 0;
     this.slowMoTimer = 0;
@@ -620,6 +622,7 @@ export class Game {
       matchOver: false,
     };
     this.playerDeathHandled = false;
+    this.playerAssists = 0;
     this.killedIds.clear();
     this.freeze = 0;
     this.slowMoTimer = 0;
@@ -649,12 +652,21 @@ export class Game {
     this.playerCtrl.reset();
     if (this.botMode) this.player.attachAI(createAIController(AI_PROFILES.champion, hashString('melee:bot')));
     this.fighters.push(this.player);
-    for (let i = 0; i < 3; i++) this.spawnMeleeEnemy(true);
+    const initial = [
+      new THREE.Vector3(-10, 0, 2),
+      new THREE.Vector3(10, 0, 2),
+      new THREE.Vector3(-4, 0, 6),
+      new THREE.Vector3(4, 0, 6),
+    ];
+    for (const pos of initial) {
+      this.arena.clampPosition(pos, 0.6);
+      this.spawnMeleeEnemy(true, pos);
+    }
     this.beginIntro('melee');
     audio.startMusic('melee');
   }
 
-  private spawnMeleeEnemy(silentSpawn = false): void {
+  private spawnMeleeEnemy(silentSpawn = false, at?: THREE.Vector3): void {
     const m = this.melee;
     if (!m || m.spawned >= m.total) return;
     const progress = m.defeatedTotal / m.total;
@@ -671,7 +683,7 @@ export class Game {
     if (progress > 0.75) profileId = m.rng() > 0.45 ? 'champion' : 'duelist';
     else if (progress > 0.45) profileId = m.rng() > 0.5 ? 'veteran' : 'brute';
     const profile = AI_PROFILES[profileId] ?? AI_PROFILES.fighter;
-    const spawnPoint = this.pickMeleeSpawn();
+    const spawnPoint = at ? { position: at.clone(), yaw: this.player ? yawTo(at, this.player.position) : 0 } : this.pickMeleeSpawn();
     const color1 = MELEE_TUNIC_COLORS[Math.floor(m.rng() * MELEE_TUNIC_COLORS.length)];
     const color2 = 0xd9c9a3;
     const loadout = makeLoadout({
@@ -1227,6 +1239,9 @@ export class Game {
       case 'kill': {
         const dead = ev.defender;
         if (!dead) break;
+        if ((this.mode === 'melee' || this.mode === 'tournament') && !dead.isPlayer && ev.attacker && !ev.attacker.isPlayer && this.player && this.player.alive) {
+          if (dead.wasDamagedRecentlyBy(this.player.id, 8, this.time) && dead.team !== this.player.team) this.playerAssists++;
+        }
         if (this.mode === 'melee' && this.melee && !dead.isPlayer) {
           this.melee.defeatedTotal++;
           if (this.melee.defeatedTotal >= this.melee.total) this.scheduleMeleeEnd(true);
@@ -1478,7 +1493,7 @@ export class Game {
   }
 
   private countAssists(): number {
-    return 0;
+    return this.playerAssists;
   }
 
   private scheduleMeleeEnd(victory: boolean): void {

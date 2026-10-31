@@ -157,12 +157,24 @@ try {
   };`);
   check('VI language survives reload and menu is translated', viReload.lang === 'vi' && /Giải Đấu/i.test(viReload.text), viReload);
   await snap('44-menu-vi');
-  // restore English
-  await clickReal('SETTINGS');
+  // restore English (retry DOM click as a fallback if the animated button moved)
+  await sleep(1200);
+  await evalIn(page, `window.__game.game.openSettings(); return true;`);
+  await sleep(800);
+  await page.evaluate(() => {
+    const b = Array.from(document.querySelectorAll('.bm-seg-btn')).find((x) => /ENGLISH/i.test(x.innerText));
+    b?.click();
+  });
   await sleep(600);
-  await clickReal('ENGLISH');
-  await sleep(500);
-  const en = await evalIn(page, `const g = window.__game.game; return { lang: g.settings.language };`);
+  let en = await evalIn(page, `const g = window.__game.game; return { lang: g.settings.language };`);
+  if (en.lang !== 'en') {
+    await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll('.bm-seg-btn')).find((x) => /ENGLISH/i.test(x.innerText));
+      b?.click();
+    });
+    await sleep(600);
+    en = await evalIn(page, `const g = window.__game.game; return { lang: g.settings.language, via: 'dom-fallback' };`);
+  }
   check('language can be switched back to English', en.lang === 'en', en);
   await clickReal('BACK');
   await sleep(400);

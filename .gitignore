@@ -11,3 +11,7 @@ shots/**/*.json
 !shots/final-hud.png
 !shots/final-bracket.png
 !shots/final-champion.png
+!shots/final-melee.png
+
+shots/**/*.txt
+shots/**/*.log
