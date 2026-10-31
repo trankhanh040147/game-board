@@ -286,10 +286,31 @@ export class CharacterAnimator {
         const rk = clamp((t - T.windup - T.active) / Math.max(0.0001, T.recover), 0, 1);
         lerpPose(this.overlay, def.strike, this.ready, easeOutCubic(rk));
       }
-      // Attack footwork: coil then push.
-      const push = t < T.windup ? -0.03 * smoothstep(t / T.windup) : 0.06 * Math.sin(clamp((t - T.windup) / (T.active + T.recover), 0, 1) * Math.PI);
-      this.overlay.hipsOffset.z += push;
-      this.overlay.hipsOffset.y -= 0.02 * overlayW;
+      // Attack footwork: coil backwards, then explode into a forward lunge that
+      // carries the whole body (and the weapon) into the target.
+      const dirScale = this.attackDir === 'thrust' ? 0.8 : this.attackDir === 'overhead' ? 0.9 : 1;
+      const LUNGE = 0.23 * dirScale;
+      let lunge = 0;
+      if (t < T.windup) {
+        lunge = -0.06 * smoothstep(clamp(t / T.windup, 0, 1));
+      } else if (t < T.windup + T.active) {
+        lunge = LUNGE * easeOutCubic(clamp((t - T.windup) / T.active, 0, 1));
+      } else {
+        const rk = clamp((t - T.windup - T.active) / Math.max(0.0001, T.recover), 0, 1);
+        lunge = LUNGE * (1 - easeInOutCubic(clamp(rk * 1.25, 0, 1)));
+      }
+      const lw = clamp(lunge / LUNGE, 0, 1);
+      this.overlay.bodyPos.z += lunge;
+      this.overlay.hipsOffset.z += lunge * 0.25;
+      this.overlay.hipsOffset.y -= 0.015 * overlayW;
+      // Step the feet with the lunge so it reads as a committed step.
+      this.overlay.thighL.x -= 0.3 * lw;
+      this.overlay.kneeL.x += 0.16 * lw;
+      this.overlay.footL.x += 0.14 * lw;
+      this.overlay.thighR.x += 0.22 * lw;
+      this.overlay.kneeR.x += 0.12 * lw;
+      this.overlay.footR.x -= 0.34 * lw;
+      if (this.overlay.spine.x < 0.1) this.overlay.spine.x += 0.05 * lw;
       if (t >= T.total) {
         this.attackDir = null;
       }
@@ -401,60 +422,81 @@ export class CharacterAnimator {
       return;
     }
     const phase = this.walkPhase;
-    const amp = 0.3 * speed01 + 0.24 * run01;
-    const kneeAmp = 0.42 * speed01 + 0.42 * run01;
     const s = Math.sin(phase);
     const c = Math.cos(phase);
     const back = clamp(-this.motion.forward / 3.5, -1, 1);
+    const strafe01 = clamp(this.smoothStrafe / 3.2, -1, 1);
+    const strafeMix = Math.abs(strafe01);
 
-    // Hips: bob, sway, twist.
-    p.hipsOffset.y += (-Math.abs(Math.cos(phase)) * (0.028 * speed01 + 0.03 * run01)) + (0.014 * speed01);
-    p.hipsOffset.x += s * (0.017 * speed01 + 0.006 * run01);
-    p.hipsOffset.z += -0.01 * run01;
-    p.spine.y += -s * (0.075 * speed01 + 0.05 * run01);
-    p.chest.y += s * (0.09 * speed01 + 0.07 * run01);
+    // Stride amplitude sized so the planted foot travels backwards at the
+    // character's actual ground speed (no skating).
+    const amp = (0.5 * speed01 + 0.14 * run01) * (1 - 0.28 * strafeMix) * (back > 0.1 ? 0.82 : 1);
+
+    // Positive hip lift only — never push the body down into the sand.
+    p.hipsOffset.y += 0.004 + Math.abs(s) * (0.012 * speed01 + 0.014 * run01);
+    p.hipsOffset.x += s * (0.014 * speed01 + 0.005 * run01) + strafe01 * 0.02;
+    p.spine.y += -s * (0.06 * speed01 + 0.04 * run01);
+    p.chest.y += s * (0.08 * speed01 + 0.06 * run01);
     p.neck.y += -s * 0.03 * speed01;
 
-    // Lean forward with speed; lean back when walking backwards.
-    const lean = (0.07 * speed01 + 0.13 * run01) * (back > 0 ? -0.55 : 1);
+    // Lean forward with speed; backpedal leans back.
+    const lean = (0.075 * speed01 + 0.12 * run01) * (back > 0.1 ? -0.55 : 1);
     p.spine.x += lean;
-    p.chest.x += lean * 0.35;
+    p.chest.x += lean * 0.32;
     p.neck.x += -lean * 0.5;
 
-    // Legs: alternating swing with knee bend and foot roll.
+    // Legs: alternating thigh swing. +x = leg back.
     p.thighR.x += s * amp;
     p.thighL.x += -s * amp;
-    // Knee bends most while the leg is travelling forward (unloading).
-    p.kneeR.x += Math.max(0, -s - 0.15) * kneeAmp + 0.04 * speed01;
-    p.kneeL.x += Math.max(0, s - 0.15) * kneeAmp + 0.04 * speed01;
-    // A forward knee drive for the run.
-    p.kneeR.x += Math.max(0, s) * 0.22 * run01;
-    p.kneeL.x += Math.max(0, -s) * 0.22 * run01;
-    // Feet stay flat-ish on plant.
-    p.footR.x += -(p.thighR.x + p.kneeR.x) * 0.85 + Math.max(0, c) * 0.12 * speed01;
-    p.footL.x += -(p.thighL.x + p.kneeL.x) * 0.85 + Math.max(0, -c) * 0.12 * speed01;
-    p.thighR.z += 0.012 * speed01;
-    p.thighL.z += -0.012 * speed01;
+
+    // Swing phase = leg travelling forward: knee lifts hard so the foot clears
+    // the sand (8-12 cm at mid-swing), plus knee drive on the run.
+    const swingR = Math.max(0, -c);
+    const swingL = Math.max(0, c);
+    // Faster lift right after toe-off (swing^0.7) so the foot clearly clears.
+    const kneeLift = (0.45 * speed01 + 0.08 * run01) * (back > 0.05 ? 1.15 : 1) * (1 + 0.12 * strafeMix);
+    const liftR = Math.pow(swingR, 0.7);
+    const liftL = Math.pow(swingL, 0.7);
+    p.kneeR.x += liftR * kneeLift + 0.05 * speed01;
+    p.kneeL.x += liftL * kneeLift + 0.05 * speed01;
+    p.kneeR.x += Math.max(0, s) * 0.16 * run01;
+    p.kneeL.x += Math.max(0, -s) * 0.16 * run01;
+
+    // Heel-to-toe roll: toes drop for toe-off at the end of stance, toes lift
+    // during the swing for clearance. Then keep the sole roughly level.
+    const toeOffR = Math.max(0, c) * Math.max(0, -s) * (0.32 * speed01 + 0.2 * run01);
+    const toeOffL = Math.max(0, c) * Math.max(0, -s) * (0.32 * speed01 + 0.2 * run01);
+    const heelLiftR = liftR * 0.3;
+    const heelLiftL = liftL * 0.3;
+    p.footR.x += -(p.thighR.x + p.kneeR.x) * 0.9 + toeOffR - heelLiftR;
+    p.footL.x += -(p.thighL.x + p.kneeL.x) * 0.9 + toeOffL - heelLiftL;
+
+    // Side-step for strafing: alternating lateral swing with knee lift, so the
+    // leading foot visibly lifts and plants instead of skating.
+    const sideR = railSide(phase, strafe01);
+    const sideL = railSide(phase + Math.PI, strafe01);
+    p.thighR.z += 0.02 * speed01 + sideR * 0.22 + strafe01 * 0.06;
+    p.thighL.z += -0.02 * speed01 + sideL * 0.22 + strafe01 * 0.06;
+    p.kneeR.x += Math.max(0, sideR) * 0.3 * strafeMix;
+    p.kneeL.x += Math.max(0, sideL) * 0.3 * strafeMix;
+    p.footR.x -= Math.max(0, sideR) * 0.2 * strafeMix;
+    p.footL.x -= Math.max(0, sideL) * 0.2 * strafeMix;
+    p.hipsOffset.x += (sideR + sideL) * 0.012 * strafeMix;
+    p.spine.z += -strafe01 * 0.1;
+    p.chest.z += -strafe01 * 0.05;
+    p.head.z += strafe01 * 0.045;
 
     // Arm swing (left arm swings freely, weapon arm stays controlled).
-    p.shoulderL.x += -s * (0.5 * speed01 + 0.35 * run01);
-    p.elbowL.x += -Math.max(0, s) * 0.35 * speed01;
-    p.shoulderR.x += s * (0.1 * speed01 + 0.12 * run01);
-    p.elbowR.x += -0.06 * speed01 + Math.max(0, s) * 0.05 * run01;
+    p.shoulderL.x += -s * (0.46 * speed01 + 0.32 * run01);
+    p.elbowL.x += -Math.max(0, s) * 0.3 * speed01;
+    p.shoulderR.x += s * (0.09 * speed01 + 0.1 * run01);
+    p.elbowR.x += -0.05 * speed01 + Math.max(0, s) * 0.05 * run01;
 
-    // Strafe lean + side-step.
-    const strafe01 = clamp(this.smoothStrafe / 3.2, -1, 1);
-    p.spine.z += -strafe01 * 0.1;
-    p.chest.z += -strafe01 * 0.06;
-    p.hipsOffset.x += strafe01 * 0.02;
-    p.thighR.z += strafe01 * 0.07;
-    p.thighL.z += strafe01 * 0.07;
-    p.head.z += strafe01 * 0.05;
-    // Backpedal: slightly crouched, wider stance.
+    // Backpedal: shorter strides, deeper knees.
     if (back > 0.05) {
-      p.spine.x += 0.06 * back;
-      p.kneeR.x += 0.08 * back;
-      p.kneeL.x += 0.08 * back;
+      p.spine.x += 0.07 * back;
+      p.kneeR.x += 0.1 * back;
+      p.kneeL.x += 0.1 * back;
     }
   }
 
@@ -819,19 +861,19 @@ const ONE_HAND_ARMS: ArmSet = {
   readyL: [0.02, 0.0, -0.04, -0.32, 0.0, 0.12, 0.08, 0.08],
   rWindR: [-0.47, 0.44, 0.4, -1.89, 0.69, 0.47, -0.07, 0.61],
   rWindL: [-0.6, 0.1, -0.5, -1.3, 0, 0.15, 0.1, 0.2],
-  rStrikeR: [-0.89, 0.6, 0.5, -1.82, -0.88, 0.33, -1.34, -1.39],
+  rStrikeR: [-1.4, -0.25, 0.65, 0.09, -0.29, 1.0, 0.13, 0.5],
   rStrikeL: [-0.45, 0.1, -0.5, -1.0, 0, 0.15, 0.1, 0.2],
   lWindR: [0.0, -0.37, 1.31, -1.73, -0.32, 0.69, 0.89, -1.6],
   lWindL: [-0.55, -0.1, 0.25, -0.9, 0, 0.1, 0.1, 0.1],
-  lStrikeR: [0.13, 0.41, -1.52, -0.57, 0.37, 0.71, -0.23, -0.15],
+  lStrikeR: [-1.56, 0.13, -0.32, 0.0, -0.34, 1.29, 0.09, -0.36],
   lStrikeL: [-0.75, -0.1, 0.25, -1.0, 0, 0.1, 0.1, 0.1],
   oWindR: [-2.12, -0.15, 1.15, -2.39, -0.83, 0.52, -1.33, -0.98],
   oWindL: [-1.9, 0.0, -0.5, -1.3, 0, 0.1, 0, 0],
-  oStrikeR: [-1.08, 0.68, -1.17, -0.92, 0.6, 0.77, 0.95, 0.38],
+  oStrikeR: [-1.7, 1.02, -0.44, -0.43, 0.29, 1.89, 0.22, -0.23],
   oStrikeL: [-0.6, 0.0, -0.4, -0.6, 0, 0.2, 0, 0],
   tWindR: [0.57, 0.43, 0.01, -1.78, -1.01, 0.32, -0.03, 0.01],
   tWindL: [-0.8, 0.0, -0.3, -1.2, 0, 0.1, 0, 0],
-  tStrikeR: [-0.96, 0.16, 0.3, -0.17, 0.83, 0.75, -0.51, -1.15],
+  tStrikeR: [-1.6, 0.42, 0.32, -0.46, 0.18, 1.6, -0.08, -0.24],
   tStrikeL: [-0.4, 0.0, -0.4, -0.6, 0, 0.1, 0, 0],
 };
 
@@ -853,7 +895,7 @@ const POLE_ARMS: ArmSet = {
   oStrikeL: [-0.6, 0.0, -0.4, -0.6, 0, 0.2, 0, 0],
   tWindR: [0.18, 0.53, 0.31, -1.22, -0.98, -0.97, -1.46, 0.57],
   tWindL: [-0.8, 0.0, -0.3, -1.2, 0, 0.1, 0, 0],
-  tStrikeR: [-0.74, 0.44, -0.16, -1.69, -0.44, 0.7, 0.85, -0.2],
+  tStrikeR: [-1.87, 0.33, 0.39, -0.08, -0.2, -0.21, -1.6, -0.2],
   tStrikeL: [-0.4, 0.0, -0.4, -0.6, 0, 0.1, 0, 0],
 };
 
@@ -990,11 +1032,11 @@ function buildLeftWindup(base: RigPose, arms: ArmSet): RigPose {
 
 function buildLeftStrike(base: RigPose, arms: ArmSet): RigPose {
   const p = baseAttackPose(base, arms, 'lStrikeR');
-  p.spine.y = 0.3;
-  p.spine.x = 0.2;
-  p.chest.y = 0.4;
-  p.neck.y = -0.4;
-  p.head.y = -0.26;
+  p.spine.y = 0.12;
+  p.spine.x = 0.22;
+  p.chest.y = 0.15;
+  p.neck.y = -0.1;
+  p.head.y = -0.1;
   p.head.x = 0.06;
   p.rot.thighR.x += 0.16;
   p.rot.kneeR.x += 0.1;
@@ -1083,7 +1125,7 @@ function buildThrustStrike(base: RigPose, arms: ArmSet): RigPose {
   p.rot.kneeR.x += 0.2;
   p.rot.thighL.x += 0.22;
   p.rot.kneeL.x += 0.16;
-  p.hipsOffset.z += 0.16;
+  p.hipsOffset.z += 0.06;
   p.hipsOffset.y += -0.05;
   p.shieldPos.x += -0.2;
   p.shieldPos.z += -0.03;
@@ -1234,4 +1276,11 @@ function actionDuration(action: RigAction): number {
     case 'die': return 1.0;
     default: return 0.6;
   }
+}
+
+/** Lateral leg swing for strafing (positive = leg lifts outward) . */
+function railSide(phase: number, strafe01: number): number {
+  const dir = Math.sign(strafe01) || 1;
+  const sinp = Math.sin(phase);
+  return (dir > 0 ? sinp : -sinp) > 0 ? Math.max(0, (dir > 0 ? sinp : -sinp)) : 0;
 }

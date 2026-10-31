@@ -4,7 +4,6 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import type { Quality } from './types';
 import { clamp } from './utils';
 
@@ -85,12 +84,15 @@ export class Engine {
   private renderPass: RenderPass | null = null;
   private bloomPass: UnrealBloomPass | null = null;
   private gradePass: ShaderPass | null = null;
-  private smaaPass: SMAAPass | null = null;
   private outputPass: OutputPass | null = null;
   private basePixelRatio = 1;
   private usePost = true;
   private resizeObserver: ResizeObserver | null = null;
   private damage = 0;
+  private renderScale = 1;
+  private perfAccum = 0;
+  private perfFrames = 0;
+  private adaptTimer = 0;
   onResize: ((w: number, h: number) => void) | null = null;
 
   constructor(container: HTMLElement, quality: Quality = 'high') {
@@ -155,7 +157,6 @@ export class Engine {
     }
     this.bloomPass = null;
     this.gradePass = null;
-    this.smaaPass = null;
     this.outputPass = null;
     this.renderPass = null;
   }
@@ -164,7 +165,7 @@ export class Engine {
     this.clearComposer();
     this.usePost = this.quality !== 'low';
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, this.quality === 'high' ? 2 : this.quality === 'medium' ? 1.5 : 1);
-    this.renderer.setPixelRatio(this.usePost ? Math.min(this.basePixelRatio, 1.5) : this.basePixelRatio);
+    this.renderer.setPixelRatio(this.usePost ? Math.min(this.basePixelRatio, 1.35) : this.basePixelRatio);
     this.renderer.shadowMap.enabled = true;
     if (!this.usePost) {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -194,12 +195,6 @@ export class Engine {
     this.gradePass.uniforms.uGrain.value = this.quality === 'high' ? 0.03 : 0.015;
     composer.addPass(this.gradePass);
 
-    if (this.quality === 'high') {
-      this.smaaPass = new SMAAPass();
-      this.smaaPass.setSize(w, h);
-      composer.addPass(this.smaaPass);
-    }
-
     this.outputPass = new OutputPass();
     composer.addPass(this.outputPass);
     this.composer = composer;
@@ -209,6 +204,7 @@ export class Engine {
   setQuality(quality: Quality): void {
     if (this.quality === quality) return;
     this.quality = quality;
+    this.renderScale = 1;
     this.rebuildComposer();
   }
 
@@ -224,6 +220,34 @@ export class Engine {
       this.gradePass.uniforms.uTime.value = this.time;
       this.gradePass.uniforms.uDamage.value = this.damage;
     }
+    // Adaptive resolution: keep combat smooth on high-DPI / weaker GPUs.
+    this.perfAccum += Math.max(0.001, dt);
+    this.perfFrames++;
+    this.adaptTimer -= dt;
+    if (this.perfAccum >= 1.8 && this.adaptTimer <= 0) {
+      const fps = this.perfFrames / this.perfAccum;
+      let next = this.renderScale;
+      if (fps < 48 && this.renderScale > 0.66) next = Math.max(0.66, this.renderScale - 0.14);
+      else if (fps > 57 && this.renderScale < 1) next = Math.min(1, this.renderScale + 0.06);
+      if (Math.abs(next - this.renderScale) > 0.001) {
+        this.renderScale = next;
+        this.applyRenderScale();
+        this.adaptTimer = 2.4;
+      }
+      this.perfAccum = 0;
+      this.perfFrames = 0;
+    }
+  }
+
+  private applyRenderScale(): void {
+    const ratio = Math.min(2, Math.max(0.6, this.basePixelRatio * this.renderScale));
+    this.renderer.setPixelRatio(ratio);
+    if (this.composer) {
+      this.composer.setPixelRatio(ratio);
+      const size = this.renderer.getSize(new THREE.Vector2());
+      this.composer.setSize(size.x, size.y);
+    }
+    this.resize();
   }
 
   render(): void {

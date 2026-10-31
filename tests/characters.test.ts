@@ -239,3 +239,56 @@ describe('createCharacterRig — animation', () => {
     rig.dispose();
   });
 });
+
+describe('locomotion + attack contact (P1 follow-up)', () => {
+  it('lifts each foot clearly without ground penetration (walk/run/strafe/back)', () => {
+    for (const [speed, strafe, forward, minLift] of [
+      [3.9, 0, 3.9, 0.1],
+      [6.15, 0, 6.15, 0.14],
+      [2.8, -2.8, 0, 0.08],
+      [2.6, 0, -2.6, 0.07],
+    ] as [number, number, number, number][]) {
+      const rig = makeRig({ weapon: 'arming_sword', armor: 'hauberk' });
+      rig.setMotion(speed, strafe, forward);
+      let maxL = 0;
+      let maxR = 0;
+      let minSole = 1;
+      const feet = { left: 0, right: 0 };
+      for (let i = 0; i < 480; i++) {
+        rig.update(1 / 120);
+        rig.debugFeet(feet);
+        maxL = Math.max(maxL, feet.left);
+        maxR = Math.max(maxR, feet.right);
+        minSole = Math.min(minSole, feet.left, feet.right);
+      }
+      expect(minSole).toBeGreaterThan(-0.01);
+      expect(maxL).toBeGreaterThan(minLift);
+      expect(maxR).toBeGreaterThan(minLift);
+      rig.dispose();
+    }
+  });
+
+  it('attack tips reach the 2.1 m target plane for all four directions', () => {
+    for (const dir of CORE_ATTACK_DIRS as AttackDir[]) {
+      const rig = makeRig({ weapon: 'arming_sword', armor: 'hauberk' });
+      step(rig, 0.2);
+      rig.playAttack(dir, 1);
+      const timing = attackTiming(WEAPONS.arming_sword, 1);
+      const contact = timing.windup + timing.active * 0.65;
+      const dt = 1 / 240;
+      const tip = new THREE.Vector3();
+      let best = Infinity;
+      let bestTip = new THREE.Vector3();
+      for (let t = 0; t < contact; t += dt) {
+        rig.update(dt);
+        rig.debugTip(tip);
+        const d = Math.hypot(tip.x, tip.z - 2.1);
+        if (d < best) { best = d; bestTip = tip.clone(); }
+      }
+      expect(Number.isFinite(best)).toBe(true);
+      expect(best).toBeLessThan(0.66);
+      expect(bestTip.z).toBeGreaterThan(1.5);
+      rig.dispose();
+    }
+  });
+});

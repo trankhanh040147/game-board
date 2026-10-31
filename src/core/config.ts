@@ -34,39 +34,39 @@ export const MELEE_TUNIC_COLORS = [
 
 export const WEAPONS: Record<string, WeaponDef> = {
   arming_sword: {
-    id: 'arming_sword', name: 'Arming Sword', kind: 'sword', damage: 24, speed: 1.0, reach: 2.55,
+    id: 'arming_sword', name: 'Arming Sword', kind: 'sword', damage: 24, speed: 1.0, reach: 2.15,
     weight: 1.1, armorPen: 0.15, twoHanded: false, length: 0.95, bladeColor: 0xd8dde2, hiltColor: 0x6b4a2b, headBias: 0.15,
   },
   short_sword: {
-    id: 'short_sword', name: 'Short Sword', kind: 'sword', damage: 20, speed: 1.16, reach: 2.25,
+    id: 'short_sword', name: 'Short Sword', kind: 'sword', damage: 20, speed: 1.16, reach: 1.95,
     weight: 0.85, armorPen: 0.1, twoHanded: false, length: 0.75, bladeColor: 0xd2d7dd, hiltColor: 0x5b3c23, headBias: 0.1,
   },
   falchion: {
-    id: 'falchion', name: 'Falchion', kind: 'saber', damage: 27, speed: 0.96, reach: 2.4,
+    id: 'falchion', name: 'Falchion', kind: 'saber', damage: 27, speed: 0.96, reach: 2.05,
     weight: 1.0, armorPen: 0.12, twoHanded: false, length: 0.88, bladeColor: 0xc9ccd2, hiltColor: 0x7a4a2a, headBias: 0.2,
   },
   war_axe: {
-    id: 'war_axe', name: 'War Axe', kind: 'axe', damage: 32, speed: 0.84, reach: 2.45,
+    id: 'war_axe', name: 'War Axe', kind: 'axe', damage: 32, speed: 0.84, reach: 2.0,
     weight: 1.7, armorPen: 0.32, twoHanded: false, length: 0.8, bladeColor: 0xb9bec4, hiltColor: 0x5a3d26, headBias: 0.3,
   },
   mace: {
-    id: 'mace', name: 'Flanged Mace', kind: 'mace', damage: 30, speed: 0.88, reach: 2.4,
+    id: 'mace', name: 'Flanged Mace', kind: 'mace', damage: 30, speed: 0.88, reach: 2.0,
     weight: 1.9, armorPen: 0.45, twoHanded: false, length: 0.78, bladeColor: 0x9aa0a6, hiltColor: 0x4e3522, headBias: 0.35,
   },
   greatsword: {
-    id: 'greatsword', name: 'Greatsword', kind: 'greatsword', damage: 42, speed: 0.72, reach: 3.15,
+    id: 'greatsword', name: 'Greatsword', kind: 'greatsword', damage: 42, speed: 0.72, reach: 2.75,
     weight: 2.5, armorPen: 0.25, twoHanded: true, length: 1.45, bladeColor: 0xdde2e8, hiltColor: 0x5c4028, headBias: 0.2,
   },
   spear: {
-    id: 'spear', name: 'War Spear', kind: 'spear', damage: 29, speed: 1.02, reach: 3.3,
+    id: 'spear', name: 'War Spear', kind: 'spear', damage: 29, speed: 1.02, reach: 3.15,
     weight: 1.3, armorPen: 0.35, twoHanded: false, length: 2.3, bladeColor: 0xc9ced4, hiltColor: 0x6b4c2c, headBias: 0.0,
   },
   boar_spear: {
-    id: 'boar_spear', name: 'Boar Spear', kind: 'spear', damage: 35, speed: 0.9, reach: 3.1,
+    id: 'boar_spear', name: 'Boar Spear', kind: 'spear', damage: 35, speed: 0.9, reach: 3.0,
     weight: 1.8, armorPen: 0.4, twoHanded: true, length: 2.1, bladeColor: 0xc2c7cd, hiltColor: 0x543a24, headBias: 0.0,
   },
   quarterstaff: {
-    id: 'quarterstaff', name: 'Quarterstaff', kind: 'staff', damage: 21, speed: 1.1, reach: 2.85,
+    id: 'quarterstaff', name: 'Quarterstaff', kind: 'staff', damage: 21, speed: 1.1, reach: 2.6,
     weight: 1.2, armorPen: 0.2, twoHanded: true, length: 1.9, bladeColor: 0x7a5b38, hiltColor: 0x4a3520, headBias: 0.25,
   },
 };
@@ -155,8 +155,15 @@ export const COMBAT = {
   kick: { range: 2.7, arc: (Math.PI * 55) / 180, stamina: 18, cooldown: 4.0, stagger: 0.75 },
   dodge: { distance: 2.5, duration: 0.26, iframes: 0.3, stamina: 20, cooldown: 1.05 },
   attack: {
-    active: 0.105,
-    hitWindowScale: 1.0,
+    active: 0.125,
+    /** Fraction of the active phase before damage can land (blade is extended). */
+    hitWindowStart: 0.35,
+    hitWindowEnd: 1.0,
+    /** Max distance from weapon tip to the defender's body axis. */
+    tipContactRadius: 0.66,
+    /** Forward lunge applied when the swing starts, so contact matches the animation. */
+    lungeSpeed: 1.45,
+    lungeTime: 0.12,
     maxHits: 1,
   },
   movement: {

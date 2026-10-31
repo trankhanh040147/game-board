@@ -11,12 +11,13 @@
  *   Space              pause/resume the auto cycle
  */
 import * as THREE from 'three';
-import { createCharacterRig } from '../characters/rig';
+import { createCharacterRig, type CharacterRigDebug } from '../characters/rig';
 import { createAppearance } from '../characters/appearance';
 import {
   ARMORS, HELMETS, SHIELDS, TEAM_PALETTE, WEAPONS,
 } from '../core/config';
-import type { Loadout, Quality, ShieldDef } from '../core/types';
+import type { AttackDir, Loadout, Quality, ShieldDef } from '../core/types';
+import { attackTiming } from '../core/config';
 
 /* ------------------------------------------------------------------ */
 /* URL params                                                          */
@@ -47,6 +48,8 @@ const statCalls = document.getElementById('stat-calls') as HTMLElement;
 const statPer = document.getElementById('stat-per') as HTMLElement;
 const statTris = document.getElementById('stat-tris') as HTMLElement;
 const statFps = document.getElementById('stat-fps') as HTMLElement;
+const statFoot = document.getElementById('stat-foot') as HTMLElement;
+const statTip = document.getElementById('stat-tip') as HTMLElement;
 const statAnim = document.getElementById('stat-anim') as HTMLElement;
 
 function showError(msg: string): void {
@@ -214,7 +217,8 @@ function buildLoadout(entry: RosterEntry): Loadout {
 }
 
 interface LabFighter {
-  rig: ReturnType<typeof createCharacterRig>;
+  rig: CharacterRigDebug;
+  loadout: Loadout;
   index: number;
   baseX: number;
   offset: number;
@@ -257,7 +261,8 @@ function spawnFighters(): void {
     rig.root.name = `lab-fighter-${i}`;
     sceneFighters.add(rig.root);
     fighters.push({
-      rig,
+      rig: rig as CharacterRigDebug,
+      loadout,
       index: i,
       baseX: rig.root.position.x,
       offset: i * 1.37,
@@ -463,8 +468,18 @@ function render(): void {
   renderer.render(scene, camera);
 }
 
+const feetTmp = { left: 0, right: 0 };
+const tipTmp = new THREE.Vector3();
+
 function updateStats(): void {
   const info = renderer.info.render;
+  const f0 = fighters.find((f) => f.rig.root.visible);
+  if (f0) {
+    f0.rig.debugFeet(feetTmp);
+    f0.rig.debugTip(tipTmp);
+    statFoot.textContent = `${(feetTmp.left * 100).toFixed(1)} / ${(feetTmp.right * 100).toFixed(1)} cm`;
+    statTip.textContent = `${tipTmp.z.toFixed(2)} m (y ${tipTmp.y.toFixed(2)})`;
+  }
   const calls = info.calls;
   const n = Math.max(1, fighters.filter((f) => f.rig.root.visible).length);
   statCalls.textContent = String(calls);
@@ -544,6 +559,17 @@ interface LabAPI {
   stats(): { calls: number; triangles: number; fighters: number; perFighter: number };
   meshes(index?: number): string[];
   hide(prefix: string, visible?: boolean): number;
+  telemetry(): { feet: { left: number; right: number }; tip: { x: number; y: number; z: number } };
+  footCycle(speed: number, strafe?: number, forward?: number): {
+    minL: number; maxL: number; minR: number; maxR: number; below: number;
+    tL: number; tR: number; minSole: number;
+  };
+  attackReach(dir: AttackDir): { x: number; y: number; z: number };
+  attackArc(dir: AttackDir, enemyZ?: number, index?: number): {
+    minDist: number;
+    tip: { x: number; y: number; z: number };
+    samples: { t: number; x: number; y: number; z: number; d: number }[];
+  };
 }
 
 (window as unknown as { __lab: LabAPI }).__lab = {
@@ -567,6 +593,84 @@ interface LabAPI {
     }
     renderer.render(scene, camera);
     return n;
+  },
+  telemetry: () => {
+    const f = fighters.find((x) => x.rig.root.visible) ?? fighters[0];
+    if (!f) return { feet: { left: 0, right: 0 }, tip: { x: 0, y: 0, z: 0 } };
+    f.rig.debugFeet(feetTmp);
+    f.rig.debugTip(tipTmp);
+    return { feet: { ...feetTmp }, tip: tipTmp.toArray().reduce((acc, v, i) => ({ ...acc, [['x', 'y', 'z'][i]]: v }), {}) as { x: number; y: number; z: number } };
+  },
+  footCycle: (speed, strafe = 0, forward = speed) => {
+    const f = fighters[0];
+    if (!f) return { minL: 0, maxL: 0, minR: 0, maxR: 0, below: 0, tL: 0, tR: 0, minSole: 0 };
+    paused = true;
+    frozen = true;
+    f.rig.setDead(false);
+    f.rig.setGuard(null);
+    f.rig.setMotion(speed, strafe, forward);
+    const stats = { minL: 1, maxL: 0, minR: 1, maxR: 0, below: 0, tL: 0, tR: 0, minSole: 1 };
+    for (let i = 0; i < 480; i++) {
+      f.rig.update(1 / 120);
+      f.rig.debugFeet(feetTmp);
+      const t = i / 120;
+      if (feetTmp.left < stats.minL) stats.minL = feetTmp.left;
+      if (feetTmp.left > stats.maxL) { stats.maxL = feetTmp.left; stats.tL = t; }
+      if (feetTmp.right < stats.minR) stats.minR = feetTmp.right;
+      if (feetTmp.right > stats.maxR) { stats.maxR = feetTmp.right; stats.tR = t; }
+      stats.minSole = Math.min(stats.minSole, feetTmp.left, feetTmp.right);
+      if (feetTmp.left < -0.01 || feetTmp.right < -0.01) stats.below++;
+    }
+    f.rig.setMotion(0, 0, 0);
+    render();
+    return stats;
+  },
+  attackReach: (dir) => {
+    const f = fighters[0];
+    if (!f) return { x: 0, y: 0, z: 0 };
+    paused = true;
+    frozen = true;
+    f.rig.setDead(false);
+    f.rig.setGuard(null);
+    f.rig.setMotion(0, 0, 0);
+    for (let i = 0; i < 30; i++) f.rig.update(1 / 120);
+    f.rig.playAttack(dir, 1);
+    const timing = attackTiming(f.loadout.weapon, 1);
+    const contact = timing.windup + timing.active * 0.65;
+    for (let t = 0; t < contact; t += 1 / 240) f.rig.update(1 / 240);
+    f.rig.debugTip(tipTmp);
+    render();
+    return { x: tipTmp.x, y: tipTmp.y, z: tipTmp.z };
+  },
+  attackArc: (dir, enemyZ = 2.1, index = 2) => {
+    const f = fighters[index] ?? fighters[0];
+    if (!f) return { minDist: 0, tip: { x: 0, y: 0, z: 0 }, samples: [] };
+    paused = true;
+    frozen = true;
+    f.rig.setDead(false);
+    f.rig.setGuard(null);
+    f.rig.setMotion(0, 0, 0);
+    for (let i = 0; i < 30; i++) f.rig.update(1 / 120);
+    f.rig.playAttack(dir, 1);
+    const timing = attackTiming(f.loadout.weapon, 1);
+    const dt = 1 / 240;
+    const samples: { t: number; x: number; y: number; z: number; d: number }[] = [];
+    let minDist = Infinity;
+    let best = { x: 0, y: 0, z: 0 };
+    for (let t = 0; t < timing.windup + timing.active; t += dt) {
+      f.rig.update(dt);
+      f.rig.debugTip(tipTmp);
+      const d = Math.hypot(tipTmp.x, tipTmp.z - enemyZ);
+      if (t >= timing.windup) {
+        samples.push({ t: +t.toFixed(3), x: +tipTmp.x.toFixed(3), y: +tipTmp.y.toFixed(3), z: +tipTmp.z.toFixed(3), d: +d.toFixed(3) });
+        if (d < minDist) {
+          minDist = d;
+          best = { x: +tipTmp.x.toFixed(3), y: +tipTmp.y.toFixed(3), z: +tipTmp.z.toFixed(3) };
+        }
+      }
+    }
+    render();
+    return { minDist: +minDist.toFixed(3), tip: best, samples };
   },
   meshes: (index = 0) => {
     const f = fighters[index];

@@ -31,6 +31,7 @@ export class GameCamera {
   private fixedPos = new THREE.Vector3();
   private fixedLook = new THREE.Vector3();
   private sprintBlend = 0;
+  private collisionDistance = 3.8;
 
   constructor(arena: Arena, settings: Settings) {
     this.arena = arena;
@@ -168,6 +169,10 @@ export class GameCamera {
       let dist = this.collide(this.distance, _pivot, _dir, _right);
       let overhead = dist < 0;
       if (dist < 0) dist = 1.15;
+      // Asymmetric smoothing avoids camera pops near walls while still pulling in quickly.
+      const smoothK = dist < this.collisionDistance ? 30 : 8;
+      this.collisionDistance = damp(this.collisionDistance, dist, smoothK, dt);
+      dist = this.collisionDistance;
       _camPos.copy(_pivot).addScaledVector(_dir, -dist).addScaledVector(_right, 0.62);
       _camPos.y = Math.max(0.4, _camPos.y + 0.2);
       _look.copy(_pivot).addScaledVector(_dir, 5.2).addScaledVector(_right, 0.18);

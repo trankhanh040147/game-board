@@ -117,6 +117,8 @@ export class Fighter {
   kickCooldown = 0;
   dodgeCooldown = 0;
   actionLock = 0;
+  lungeTimer = 0;
+  lungeDir = new THREE.Vector3();
   staminaDelay = 0;
   ai: AIController | null = null;
   aiProfile: AIProfile | null = null;
@@ -198,7 +200,9 @@ export class Fighter {
   isAttackInHitWindow(): boolean {
     if (this.state !== 'attack' || this.hitConsumed) return false;
     const t = this.attackTimer;
-    return t >= this.attackTiming.windup && t <= this.attackTiming.windup + this.attackTiming.active;
+    const start = this.attackTiming.windup + this.attackTiming.active * COMBAT.attack.hitWindowStart;
+    const end = this.attackTiming.windup + this.attackTiming.active * COMBAT.attack.hitWindowEnd;
+    return t >= start && t <= end;
   }
 
   markHitConsumed(): void {
@@ -399,6 +403,11 @@ export class Fighter {
       this.attackTimer += dt;
       if (!this.swingPlayed && this.attackTimer >= this.attackTiming.windup) {
         this.swingPlayed = true;
+        forwardFromYaw(this.yaw, _fwd);
+        this.velocity.x += _fwd.x * 0.45;
+        this.velocity.z += _fwd.z * 0.45;
+        this.lungeDir.copy(_fwd);
+        this.lungeTimer = COMBAT.attack.lungeTime;
         world.audio.play(this.loadout.weapon.weight > 1.8 ? 'swing-heavy' : 'swing', {
           pos: this.position, volume: 0.55,
         });
@@ -500,6 +509,10 @@ export class Fighter {
       this.position.addScaledVector(this.velocity, dt);
     }
 
+    if (this.state === 'attack' && this.lungeTimer > 0) {
+      this.lungeTimer -= dt;
+      this.position.addScaledVector(this.lungeDir, COMBAT.attack.lungeSpeed * dt);
+    }
     if (separationForce) {
       this.position.addScaledVector(separationForce, dt);
     }
@@ -609,7 +622,7 @@ export class Fighter {
   }
 
   /** Test a target against this fighter's attack cone/reach. */
-  canReach(targetPos: THREE.Vector3, extraReach = 0.38): boolean {
+  canReach(targetPos: THREE.Vector3, extraReach = 0.12): boolean {
     const dx = targetPos.x - this.position.x;
     const dz = targetPos.z - this.position.z;
     const dist = Math.hypot(dx, dz);

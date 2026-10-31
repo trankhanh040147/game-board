@@ -9,10 +9,18 @@ const _to = new THREE.Vector3();
 const _point = new THREE.Vector3();
 const _tmp = new THREE.Vector3();
 const _push = new THREE.Vector3();
+const _tip = new THREE.Vector3();
+const _base = new THREE.Vector3();
+const _closest = new THREE.Vector3();
+const _prevBase = new THREE.Vector3();
+const _prevTip = new THREE.Vector3();
+
+interface BladeSnapshot { bx: number; by: number; bz: number; tx: number; ty: number; tz: number; timer: number }
 
 export class CombatSystem {
   private world: FighterWorld;
   private rng: () => number;
+  private lastBlade = new Map<number, BladeSnapshot>();
 
   constructor(world: FighterWorld) {
     this.world = world;
@@ -23,6 +31,20 @@ export class CombatSystem {
     this.separate(fighters, dt);
     this.resolveAttacks(fighters);
     this.resolveKicks(fighters);
+    // Cache blade transforms so the next frame can sweep between poses.
+    for (const f of fighters) {
+      if (f.state === 'attack') {
+        f.rig.getWeaponBase(_base);
+        f.rig.getWeaponTip(_tip);
+        this.lastBlade.set(f.id, {
+          bx: _base.x, by: _base.y, bz: _base.z,
+          tx: _tip.x, ty: _tip.y, tz: _tip.z,
+          timer: f.attackTimer,
+        });
+      } else {
+        this.lastBlade.delete(f.id);
+      }
+    }
   }
 
   private separate(fighters: Fighter[], dt: number): void {
@@ -66,44 +88,114 @@ export class CombatSystem {
   private resolveAttacks(fighters: Fighter[]): void {
     for (const attacker of fighters) {
       if (!attacker.alive || !attacker.isAttackInHitWindow()) continue;
-      const target = this.findTarget(attacker, fighters);
-      if (!target) continue;
+      attacker.rig.getWeaponBase(_base);
+      attacker.rig.getWeaponTip(_tip);
+      const prev = this.lastBlade.get(attacker.id);
+      const validPrev = prev && prev.timer <= attacker.attackTimer ? prev : null;
+      // Sweep between last frame's blade and this frame's blade to avoid
+      // tunnelling through a body in a single 60 Hz step.
+      let target: Fighter | null = null;
+      let hitPoint: THREE.Vector3 | null = null;
+      const steps = validPrev ? 4 : 1;
+      for (let s = 0; s < steps; s++) {
+        const k = steps === 1 ? 1 : (s + 1) / steps;
+        if (validPrev) {
+          _prevBase.set(
+            prev!.bx + (_base.x - prev!.bx) * k,
+            prev!.by + (_base.y - prev!.by) * k,
+            prev!.bz + (_base.z - prev!.bz) * k,
+          );
+          _prevTip.set(
+            prev!.tx + (_tip.x - prev!.tx) * k,
+            prev!.ty + (_tip.y - prev!.ty) * k,
+            prev!.tz + (_tip.z - prev!.tz) * k,
+          );
+        } else {
+          _prevBase.copy(_base);
+          _prevTip.copy(_tip);
+        }
+        const candidate = this.findTarget(attacker, fighters, _prevBase, _prevTip);
+        if (candidate) {
+          target = candidate;
+          hitPoint = _closest.clone();
+          break;
+        }
+      }
+      if (!target || !hitPoint) continue;
       attacker.markHitConsumed();
-      this.resolveHit(attacker, target);
+      this.resolveHit(attacker, target, hitPoint);
     }
   }
 
-  private findTarget(attacker: Fighter, fighters: Fighter[]): Fighter | null {
+  /**
+   * Physical weapon contact: the blade segment (base -> tip) must pass through the
+   * defender's body volume. No more phantom hits at old centre-based ranges.
+   */
+  private findTarget(
+    attacker: Fighter,
+    fighters: Fighter[],
+    base: THREE.Vector3,
+    tip: THREE.Vector3,
+  ): Fighter | null {
     let best: Fighter | null = null;
     let bestScore = Infinity;
     forwardFromYaw(attacker.yaw, _tmp);
+    const maxCenter = attacker.loadout.weapon.reach + 0.32;
+    const contactR = COMBAT.attack.tipContactRadius;
+    // Body-contact fallback: when the lunge has already carried the fighter into
+    // blade range, a swing should connect even if the tip sweep skipped the body
+    // axis for one frame. This is close-quarters only, not old long-range reach.
+    const bodyRange = attacker.loadout.weapon.reach * 0.92;
+    const segX = tip.x - base.x;
+    const segZ = tip.z - base.z;
+    const segY = tip.y - base.y;
+    const segLen2 = segX * segX + segZ * segZ;
     for (const f of fighters) {
       if (f === attacker || !f.alive || f.isInvulnerable()) continue;
       const dx = f.position.x - attacker.position.x;
       const dz = f.position.z - attacker.position.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist > attacker.loadout.weapon.reach + 0.32) continue;
-      if (dist < 0.24) continue;
-      const dot = (dx * _tmp.x + dz * _tmp.z) / dist;
-      if (dot < 0.2) continue;
+      const centerDist = Math.hypot(dx, dz);
+      if (centerDist > maxCenter) continue;
+      if (centerDist < 0.2) continue;
+      const dot = (dx * _tmp.x + dz * _tmp.z) / centerDist;
+      if (dot < 0.12) continue;
+      // Closest point on the blade (in plan view) to the defender's body axis.
+      let t = 0;
+      if (segLen2 > 1e-5) {
+        t = clamp(((f.position.x - base.x) * segX + (f.position.z - base.z) * segZ) / segLen2, 0, 1);
+      }
+      const cx = base.x + segX * t;
+      const cz = base.z + segZ * t;
+      const cy = base.y + segY * t;
+      const tipDist = Math.hypot(cx - f.position.x, cz - f.position.z);
+      const tipValid = tipDist <= contactR && cy >= 0.18 && cy <= 1.95;
+      const bodyValid = centerDist <= bodyRange;
+      if (!tipValid && !bodyValid) continue;
       const ang = Math.acos(clamp(dot, -1, 1));
       const friendlyPenalty = attacker.team >= 0 && f.team === attacker.team ? 0.9 : 0;
-      const score = ang * 1.6 + dist + friendlyPenalty;
+      const score = (tipValid ? tipDist * 2 : centerDist * 1.6) + ang * 0.9 + centerDist * 0.3 + friendlyPenalty;
       if (score < bestScore) {
         bestScore = score;
         best = f;
+        if (tipValid) {
+          _closest.set(cx, cy, cz);
+        } else {
+          _closest.set(f.position.x, 1.25, f.position.z);
+        }
       }
     }
     return best;
   }
 
-  private resolveHit(attacker: Fighter, defender: Fighter): void {
+  private resolveHit(attacker: Fighter, defender: Fighter, tip?: THREE.Vector3): void {
     const world = this.world;
     const weapon = attacker.loadout.weapon;
     const teamFire = attacker.team >= 0 && defender.team === attacker.team;
 
-    // Attack zone.
-    const zone = this.pickZone(attacker.attackDir ?? 'right', weapon.headBias);
+    // Attack zone from where the blade actually lands (head/chest/legs).
+    const zone = tip
+      ? (tip.y > 1.46 ? 'head' : tip.y < 0.82 ? 'legs' : 'torso')
+      : this.pickZone(attacker.attackDir ?? 'right', weapon.headBias);
     const zoneMult = COMBAT.zone[zone];
 
     // Block test.
@@ -134,8 +226,11 @@ export class CombatSystem {
     const reduction = clamp(effectiveArmor * COMBAT.armorFactor, 0, 0.76);
     let damage = Math.max(COMBAT.minDamage, raw * (1 - reduction));
 
-    _point.copy(defender.position);
-    _point.y += zone === 'head' ? 1.55 : zone === 'legs' ? 0.85 : 1.25;
+    if (tip) _point.copy(tip);
+    else {
+      _point.copy(defender.position);
+      _point.y += zone === 'head' ? 1.55 : zone === 'legs' ? 0.85 : 1.25;
+    }
     _dir.copy(_to);
 
     let guardBrokenThisHit = false;

@@ -17,6 +17,14 @@ import { CharacterAnimator } from './animation';
 
 const TRAIL_SAMPLES = 10;
 
+/** Extra dev-only readouts for the character lab (not used by the game). */
+export interface CharacterRigDebug extends CharacterRig {
+  /** Current sole heights (metres above the character's ground plane). */
+  debugFeet(out: { left: number; right: number }): void;
+  /** Weapon tip in root-local space (x right, y up, z forward). */
+  debugTip(out: THREE.Vector3): void;
+}
+
 /**
  * A procedural, rigid-part medieval fighter.
  *
@@ -29,7 +37,7 @@ export function createCharacterRig(opts: {
   loadout: Loadout;
   appearance: Appearance;
   quality: Quality;
-}): CharacterRig {
+}): CharacterRigDebug {
   const { loadout, appearance, quality } = opts;
   const detail = detailFor(quality);
   const materials = getMaterials();
@@ -257,6 +265,12 @@ export function createCharacterRig(opts: {
   }
 
   const headAnchor = new THREE.Vector3();
+  const soleLocal = new THREE.Vector3(0, -0.089, 0.055);
+  const soleL = new THREE.Vector3();
+  const soleR = new THREE.Vector3();
+  const rootWorld = new THREE.Vector3();
+  const feetDbg = { left: 0, right: 0 };
+  const tipDbg = new THREE.Vector3();
   const qSpine = new THREE.Quaternion();
   const qChest = new THREE.Quaternion();
   const qShoulder = new THREE.Quaternion();
@@ -300,6 +314,27 @@ export function createCharacterRig(opts: {
       applyPose();
       if (loadout.shield) updateShieldTransform();
       root.updateMatrixWorld(true);
+      // Pin the lower foot to the sand each frame: the body height is derived
+      // from the leg pose, so no foot can sink and no stance foot floats.
+      if (!animator.isDead) {
+        root.getWorldPosition(rootWorld);
+        footL.localToWorld(soleL.copy(soleLocal));
+        footR.localToWorld(soleR.copy(soleLocal));
+        const minSole = Math.min(soleL.y, soleR.y) - rootWorld.y;
+        const delta = 0.004 - minSole;
+        if (Math.abs(delta) > 0.0008) {
+          animator.pose.hipsOffset.y += delta / build;
+          applyPose();
+          root.updateMatrixWorld(true);
+          footL.localToWorld(soleL.copy(soleLocal));
+          footR.localToWorld(soleR.copy(soleLocal));
+        }
+        feetDbg.left = soleL.y - rootWorld.y;
+        feetDbg.right = soleR.y - rootWorld.y;
+      } else {
+        feetDbg.left = soleL.y - rootWorld.y;
+        feetDbg.right = soleR.y - rootWorld.y;
+      }
       if (trail && (animator.trailActive || trailCount > 0)) {
         sampleTrail();
       }
@@ -336,6 +371,17 @@ export function createCharacterRig(opts: {
     getWeaponBase(out: THREE.Vector3): THREE.Vector3 {
       weapon.updateWorldMatrix(true, false);
       return out.copy(weaponBuild.base).applyMatrix4(weapon.matrixWorld);
+    },
+
+    debugFeet(out: { left: number; right: number }): void {
+      out.left = feetDbg.left;
+      out.right = feetDbg.right;
+    },
+
+    debugTip(out: THREE.Vector3): void {
+      weapon.updateWorldMatrix(true, false);
+      out.copy(weaponBuild.tip).applyMatrix4(weapon.matrixWorld);
+      root.worldToLocal(out);
     },
 
     getAnchor(kind: 'head' | 'chest' | 'root', out: THREE.Vector3): THREE.Vector3 {
