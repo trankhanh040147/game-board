@@ -50,7 +50,7 @@ export function drawLineChart(canvas: HTMLCanvasElement, values: number[], opts:
   ctx.clearRect(0, 0, w, h);
 
   const tone = TONES[opts.tone ?? 'ember'];
-  const padL = 34;
+  const padL = 40;
   const padR = 8;
   const padT = 10;
   const padB = 14;
@@ -76,9 +76,10 @@ export function drawLineChart(canvas: HTMLCanvasElement, values: number[], opts:
     lo = Math.max(0, lo - 0.5);
   }
   const padVal = (hi - lo) * 0.12;
+  const allNonNegative = Math.min(...clean) >= 0;
   lo -= padVal;
   hi += padVal;
-  if (lo > 0 && Math.min(...clean) >= 0) lo = Math.max(0, lo);
+  if (allNonNegative) lo = Math.max(0, lo);
 
   const xOf = (i: number): number => padL + (i / (clean.length - 1)) * plotW;
   const yOf = (v: number): number => padT + plotH - ((v - lo) / (hi - lo)) * plotH;

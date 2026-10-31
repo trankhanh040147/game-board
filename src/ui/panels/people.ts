@@ -209,6 +209,8 @@ export class PeoplePanel implements GamePanel {
     if (act === 'select-citizen') {
       const id = Number(el.dataset.citizen);
       if (Number.isFinite(id)) {
+        this.svc.app.view.selectedBuildingId = -1;
+        this.svc.app.view.selectedTile = -1;
         this.svc.app.selectCitizen(id);
         host.close();
       }

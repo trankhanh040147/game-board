@@ -19,6 +19,7 @@ import {
   hexColor,
   hslColor,
   lerp,
+  lightenColor,
   mixColor,
   saturateColor,
   shadeColor,
@@ -187,9 +188,9 @@ export class Palette {
   /** Update the seasonal / weather-driven colour resolve. Returns true if anything changed. */
   setConditions(season: SeasonId, snow: number, temperature: number, rainfall: number, storm: number): boolean {
     const nextSnow = Math.round(clamp01(snow) * 20) / 20;
-    const nextTemp = Math.round(temperature);
-    const nextRain = Math.round(clamp01(rainfall) * 10) / 10;
-    const nextStorm = Math.round(clamp01(storm) * 10) / 10;
+    const nextTemp = Math.round(temperature / 3) * 3;
+    const nextRain = Math.round(clamp01(rainfall) * 4) / 4;
+    const nextStorm = Math.round(clamp01(storm) * 4) / 4;
     if (season === this.season && nextSnow === this.snow && nextTemp === this.temperature && nextRain === this.rainfall && nextStorm === this.storm) {
       return false;
     }
@@ -292,10 +293,33 @@ export class Palette {
   /** Map-space elevation height in pixels. Water sits on a flat plane. */
   heightPx(t: Tile): number {
     if (this.isWaterSurface(t)) {
-      // ocean is a single plane; lakes follow their basin but damped
-      return t.elev <= SEA_LEVEL + 0.02 ? 2 : clamp((t.elev - SEA_LEVEL) * ELEV_PX * 0.82, 2, ELEV_PX);
+      // ocean is a single plane; lakes/rivers sit just below their banks
+      if (t.elev <= SEA_LEVEL + 0.02) return 2;
+      return clamp((t.elev - SEA_LEVEL) * ELEV_PX * 0.82 - 3, 2, ELEV_PX);
     }
+    if (this.isRiver(t)) return clamp((t.elev - SEA_LEVEL) * ELEV_PX * 1.06 - 4, 0, ELEV_PX);
     return clamp((t.elev - SEA_LEVEL) * ELEV_PX * 1.06, 0, ELEV_PX * 1.1);
+  }
+
+  /** Smoother water level (average of nearby water tiles) to avoid stepped rivers. */
+  smoothHeightPx(w: WorldState, x: number, y: number): number {
+    const t = w.tiles[y * w.width + x];
+    if (!t) return 0;
+    if (!this.hasWater(t)) return this.heightPx(t);
+    let sum = 0;
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx;
+        const yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= w.width || yy >= w.height) continue;
+        const nb = w.tiles[yy * w.width + xx];
+        if (!nb || !this.hasWater(nb)) continue;
+        sum += this.isWaterSurface(nb) ? (nb.elev <= SEA_LEVEL + 0.02 ? 2 : clamp((nb.elev - SEA_LEVEL) * ELEV_PX * 0.82 - 3, 2, ELEV_PX)) : clamp((nb.elev - SEA_LEVEL) * ELEV_PX * 1.06 - 4, 0, ELEV_PX);
+        n++;
+      }
+    }
+    return n ? sum / n : this.heightPx(t);
   }
 
   // -- lighting -------------------------------------------------------------
@@ -377,8 +401,10 @@ export class Palette {
     const clump = fbm2(x * 0.052 + 31, y * 0.052 + 17, 61);
     const clump2 = fbm2(x * 0.11 + 5, y * 0.11 + 9, 83);
     let c = mixColor(st.ground, st.groundAlt, clamp01(n2 * 0.55 + clump * 0.45));
-    // painterly lift: the world should read bright in daylight
-    c = lightenColor(c, 0.05 + clump * 0.05);
+    // painterly lift + depth: mid greens stay readable but not washed out
+    c = lightenColor(c, 0.035 + clump * 0.035);
+    c = saturateColor(c, 1.12);
+    c = mixColor(c, 0x2c4422, 0.1);
     // moisture: wetter soil is deeper & greener
     const wet = clamp01((t.moisture ?? 0.4) * 0.62 + (t.water ?? 0) * 0.5);
     c = mixColor(c, st.groundWet, wet * 0.22);
@@ -387,7 +413,7 @@ export class Palette {
     c = mixColor(c, 0xc9c3b2, high * 0.18);
     if (t.elev > 0.9) c = mixColor(c, 0xb9bcc0, 0.22);
     // sunlit meadow wash
-    c = mixColor(c, 0xe8d9a0, clamp01(clump2 - 0.55) * 0.1);
+    c = mixColor(c, 0xe8d9a0, clamp01(clump2 - 0.58) * 0.08);
     // fertility warms worked/fertile soil
     if ((t.fertility ?? 0) > 0.6) c = mixColor(c, 0x93a84e, 0.09);
     // per-tile grain
@@ -397,8 +423,6 @@ export class Palette {
     if (snow > 0.01) {
       c = mixColor(c, mixColor(0xe7eef4, 0xd0dde8, n3), clamp01(snow));
     }
-    // rain darkens ground subtly
-    if (this.rainfall > 0.42) c = mixColor(c, 0x4a5040, (this.rainfall - 0.42) * 0.14);
     return c;
   }
 

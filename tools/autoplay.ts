@@ -75,14 +75,20 @@ interface OpeningStep {
 const countOf = (counts: Record<string, number>, ids: string[]): number => ids.reduce((a, id) => a + (counts[id] ?? 0), 0);
 
 const OPENING: OpeningStep[] = [
-  { label: 'wood income', defs: ['woodcutter_camp'], satisfied: (_s, _c, n) => countOf(n, ['woodcutter_camp']) >= 1 },
+  { label: 'first beds', defs: ['lean_to', 'hut'], satisfied: (_s, _c, n) => countOf(n, ['lean_to', 'hut']) >= 1 },
   { label: 'food income', defs: ['foragers_camp', 'hunting_blind', 'fishing_dock'], satisfied: (_s, _c, n) => countOf(n, ['foragers_camp', 'hunting_blind', 'fishing_dock']) >= 1 },
-  { label: 'stone income', defs: ['stone_pit'], satisfied: (_s, _c, n) => countOf(n, ['stone_pit']) >= 1 },
-  { label: 'first beds', defs: ['lean_to', 'hut'], satisfied: (_s, c) => c.housing.capacity > c.housing.occupied },
+  { label: 'wood income', defs: ['woodcutter_camp'], satisfied: (_s, _c, n) => countOf(n, ['woodcutter_camp']) >= 1 },
   { label: 'water supply', defs: ['well'], satisfied: (_s, c, n) => countOf(n, ['well']) >= 1 || c.waterDays > 0 },
-  { label: 'growth beds', defs: ['lean_to', 'hut'], satisfied: (_s, c) => c.housing.capacity - c.housing.occupied >= 3 },
+  { label: 'stone income', defs: ['stone_pit'], satisfied: (_s, _c, n) => countOf(n, ['stone_pit']) >= 1 },
   { label: 'granary', defs: ['granary'], satisfied: (_s, _c, n) => countOf(n, ['granary']) >= 1 },
+  {
+    label: 'first farm',
+    defs: ['farm'],
+    satisfied: (s, _c, n) => countOf(n, ['farm']) >= 1 || !s.research.completed['cultivation'],
+  },
+  { label: 'growth beds', defs: ['hut', 'lean_to'], satisfied: (_s, c) => c.housing.capacity - c.housing.occupied >= 3 },
   { label: 'second foragers', defs: ['foragers_camp', 'hunting_blind', 'fishing_dock'], satisfied: (_s, _c, n) => countOf(n, ['foragers_camp', 'hunting_blind', 'fishing_dock']) >= 2 },
+  { label: 'second woodcutter', defs: ['woodcutter_camp'], satisfied: (_s, _c, n) => countOf(n, ['woodcutter_camp']) >= 2 },
   { label: 'second well', defs: ['well'], satisfied: (_s, c, n) => countOf(n, ['well']) >= 2 || c.waterDays > 10 },
   { label: 'workshop tier', defs: ['sawmill', 'workshop', 'smelter', 'brickworks'], satisfied: (_s, _c, n) => countOf(n, ['sawmill', 'workshop', 'smelter', 'brickworks']) >= 1 },
 ];
@@ -118,6 +124,24 @@ function producedResources(state: GameState, content: Content, cap: Settlement):
     if (def.storage) out.add('__storage');
   }
   return out;
+}
+
+/** Buildings that currently produce food (gathered or crafted edible output). */
+function foodProducerCount(state: GameState, content: Content, cap: Settlement): number {
+  let n = 0;
+  for (const b of state.buildings) {
+    if (b.settlementId !== cap.id) continue;
+    const def = content.buildings[b.typeId];
+    if (!def) continue;
+    const producesFood = def.recipes.some((rid) => {
+      const r = content.recipes[rid];
+      if (!r) return false;
+      if (r.gather && (content.resources[r.gather.resource]?.edible ?? 0) > 0) return true;
+      return Object.keys(r.outputs).some((res) => (content.resources[res]?.edible ?? 0) > 0);
+    });
+    if (producesFood || def.category === 'food' || def.category === 'gathering') n++;
+  }
+  return n;
 }
 
 /** Bonus for a gathering building that supplies something we still lack. */
@@ -191,11 +215,33 @@ export class Autoplay {
 
     // 3. Research: buy the cheapest available tech the auto-study queue has not
     //    covered (the research system then studies `current` day by day).
+    //    Cultivation is force-bought: farms are the backbone of the food economy.
+    {
+      const forced = ['cultivation', 'agriculture'].find((id) => {
+        const t = content.techs[id];
+        return t && techsAvailable(state, content).some((x) => x.id === id) && state.research.insight >= t.cost;
+      });
+      if (forced) {
+        const res = chooseTech(a, forced);
+        if (res.ok) this.stats.techsChosen++;
+      }
+    }
     if (!state.research.current) {
       const era = state.research.era;
+      const TECH_PRIORITY = ['cultivation', 'foraging_lore', 'sheltercraft', 'well_digging', 'agriculture', 'irrigation', 'masonry', 'craft'];
+      const priorityOf = (t: TechDef): number => {
+        const idx = TECH_PRIORITY.indexOf(t.id);
+        if (idx >= 0) return idx;
+        // Techs that unlock a food or gathering building are valuable early.
+        if (t.unlocksBuildings?.some((b) => {
+          const bt = content.buildings[b]?.category;
+          return bt === 'food' || bt === 'gathering';
+        })) return TECH_PRIORITY.length + 1;
+        return TECH_PRIORITY.length + 2;
+      };
       const available = techsAvailable(state, content)
         .filter((t: TechDef) => state.research.insight >= t.cost)
-        .sort((x: TechDef, y: TechDef) => (x.era > era ? 1 : 0) - (y.era > era ? 1 : 0) || x.cost - y.cost || x.id.localeCompare(y.id));
+        .sort((x: TechDef, y: TechDef) => (x.era > era ? 1 : 0) - (y.era > era ? 1 : 0) || priorityOf(x) - priorityOf(y) || x.cost - y.cost || x.id.localeCompare(y.id));
       // Keep a little insight for the auto-studying project: only buy when flush.
       const buffered = available.length && state.research.insight >= available[0].cost * 1.5 ? available[0] : null;
       if (buffered) {
@@ -211,22 +257,52 @@ export class Autoplay {
 
     // 4. Construction: one attempt per cadence, like a player watching costs.
     const cadence = cap.population < 8 ? 1 : 2;
-    if (state.tick % cadence === 0) {
-      const pick = this.pickBuilding(state, content, cap);
-      if (pick) {
-        const pos = this.findPlacement(a, pick, cap);
-        if (pos) {
-          const res = placeBuilding(a, pick.id, pos.x, pos.y, cap.id);
-          if (res.ok) {
-            this.stats.placed.push({ typeId: pick.id, day: state.tick, x: pos.x, y: pos.y });
-            this.logs.push(`day ${state.tick}: built ${pick.name} at (${pos.x},${pos.y})`);
-          } else {
-            this.stats.failedPlacements++;
-            this.noteFailure(`${pick.id}: ${res.message ?? 'unknown'}`);
-          }
+    if (state.tick % cadence === 0 && this.canStartSite(state, cap)) {
+      const build = (def: BuildingDef): boolean => {
+        const pos = this.findPlacement(a, def, cap);
+        if (!pos) return false;
+        const res = placeBuilding(a, def.id, pos.x, pos.y, cap.id);
+        if (res.ok) {
+          this.stats.placed.push({ typeId: def.id, day: state.tick, x: pos.x, y: pos.y });
+          this.logs.push(`day ${state.tick}: built ${def.name} at (${pos.x},${pos.y})`);
         } else {
           this.stats.failedPlacements++;
+          this.noteFailure(`${def.id}: ${res.message ?? 'unknown'}`);
         }
+        return true;
+      };
+
+      // Opening ladder first: if its next step is affordable, build exactly
+      // that; if it is unaffordable but the missing materials are produced
+      // locally, wait instead of spending them on a lower-priority structure.
+      const opening = this.nextOpeningDef(state, content, cap);
+      if (opening) {
+        if (this.cheapAffordable(opening, cap)) {
+          this.waitDays = 0;
+          build(opening);
+        } else {
+          const canWait =
+            this.waitDays < 18 &&
+            cap.foodDays >= 2 &&
+            cap.waterDays >= 1 &&
+            this.missingCostCoveredByProducers(state, content, cap, [opening]);
+          if (canWait) {
+            this.waitDays++;
+            return;
+          }
+          // Emergency / stalled: fall through to the best ranked structure.
+          for (const candidate of this.rankBuildings(state, content, cap)) {
+            if (!this.cheapAffordable(candidate.def, cap)) continue;
+            if (build(candidate.def)) return;
+          }
+        }
+        return;
+      }
+
+      // Ladder complete: try ranked candidates until one is placeable.
+      for (const candidate of this.rankBuildings(state, content, cap)) {
+        if (!this.cheapAffordable(candidate.def, cap)) continue;
+        if (build(candidate.def)) return;
       }
     }
 
@@ -276,14 +352,40 @@ export class Autoplay {
     }
   }
 
+  /**
+   * A settlement only works on so many sites at once. Only *staffed* sites
+   * count: a freshly placed site with no crew yet must not freeze all building.
+   */
+  private canStartSite(state: GameState, cap: Settlement): boolean {
+    const staffed = state.buildings.filter((b) => b.settlementId === cap.id && b.progress < 1 && b.workers > 0).length;
+    const allowed = cap.population <= 6 ? 1 : Math.max(2, Math.floor(cap.population / 4));
+    return staffed < allowed;
+  }
+
+  /** The next unmet opening-ladder building definition, if buildable at all. */
+  private nextOpeningDef(state: GameState, content: Content, cap: Settlement): BuildingDef | null {
+    const id = this.nextOpeningId(state, content, cap);
+    return id ? content.buildings[id] ?? null : null;
+  }
+
+  /** The next unmet opening-ladder building id, if it is currently buildable. */
+  private nextOpeningId(state: GameState, content: Content, cap: Settlement): BuildingId | null {
+    const counts = buildingCounts(state, cap);
+    const step = OPENING.find((st) => !st.satisfied(state, cap, counts));
+    if (!step) return null;
+    for (const id of step.defs) {
+      const def = content.buildings[id];
+      if (!def) continue;
+      if (def.era > state.research.era) continue;
+      if (def.requiresTech.some((t) => !state.research.completed[t])) continue;
+      return id;
+    }
+    return null;
+  }
+
   /** Choose the next most valuable underbuilt structure. */
   pickBuilding(state: GameState, content: Content, cap: Settlement): BuildingDef | null {
-    // A tiny settlement cannot build several sites at once: nobody is left to
-    // gather, and every unfinished site soaks up materials. Play it like a
-    // human: one or two sites at most while the workforce is small.
-    const underConstruction = state.buildings.filter((b) => b.settlementId === cap.id && b.progress < 1).length;
-    const allowed = cap.population <= 6 ? 1 : Math.max(2, Math.floor(cap.population / 4));
-    if (underConstruction >= allowed) return null;
+    if (!this.canStartSite(state, cap)) return null;
 
     // Opening plan first: secure the next missing rung of the economic ladder.
     const counts = buildingCounts(state, cap);
@@ -370,11 +472,13 @@ export class Autoplay {
       if (def.category === 'housing') {
         const spareBeds = cap.housing.capacity - cap.housing.occupied;
         // No spare bed blocks *all* growth (births and immigration both need
-        // one), so it is the single most urgent thing in a young settlement.
-        if (spareBeds <= 0) score += 150;
-        else if (spareBeds <= 1) score += 60;
-        else if (spareBeds <= 2) score += 25;
-        else score -= 40;
+        // one), so it is the single most urgent thing in a young settlement —
+        // but never more than two spare beds ahead of the population.
+        const thinLarder = cap.foodDays < 6;
+        if (spareBeds <= 0) score += thinLarder ? 70 : 160;
+        else if (spareBeds <= 1) score += thinLarder ? 30 : 90;
+        else if (spareBeds <= 2) score += 10;
+        else score -= 90;
       } else if (def.category === 'water') {
         // Thirst is the fastest death in the game: a settlement with no water
         // service must build a well before it builds anything comfortable.
@@ -386,9 +490,32 @@ export class Autoplay {
         if (cap.storageUsed > cap.storageCap * 0.7) score += 50;
         else score -= 25;
       } else if (def.category === 'gathering' || def.category === 'food') {
-        if (cap.foodDays < 3) score += 85;
+        // Priority rule: when the larder is thin, food comes before wood,
+        // housing, stone and water.
+        if (cap.foodDays < 3) score += 140;
+        else if (cap.foodDays < 10) score += 60;
         else if (cap.foodDays < 20) score += 15;
       }
+      // ---- population scaling -------------------------------------------------
+      const isFoodBuilding = def.category === 'food' || def.category === 'gathering';
+      const foodProducers = foodProducerCount(state, content, cap);
+      const popPerFoodProducer = cap.population / Math.max(1, foodProducers);
+      if (isFoodBuilding) {
+        // A growing town must keep building food capacity, not just housing:
+        // aim for at least one food building per ~10 people.
+        if (cap.foodDays < 12 || popPerFoodProducer > 10) score += 100;
+        else if (popPerFoodProducer > 6) score += 35;
+        if (def.era >= 1 && content.recipes && def.recipes.some((rid) => {
+          const r = content.recipes[rid];
+          return r && (Object.keys(r.outputs).some((res) => (content.resources[res]?.edible ?? 0) > 0) || (r.gather && (content.resources[r.gather.resource]?.edible ?? 0) > 0));
+        })) score += 35;
+      }
+      // Housing must never run far ahead of the food base.
+      if (def.category === 'housing' && foodProducers > 0 && cap.population / Math.max(1, foodProducers) > 10) score -= 70;
+      // Era-2 utilities: water towers/aqueducts and a market as the town grows.
+      if (def.category === 'water' && cap.population > 25) score += 35;
+      if (def.id === 'market' && state.research.era >= 2 && cap.population > 18) score += 70;
+      if ((def.id === 'aqueduct' || def.id === 'water_tower') && state.research.era >= 2) score += 60;
       score += gatherBonus(def, content, produced);
       // Do not over-mine stone: a small stock is all the early buildings need.
       if (def.category === 'gathering' && def.recipes.some((rid) => content.recipes[rid]?.gather?.resource === 'stone') && (cap.stock.stone ?? 0) > 18) {

@@ -104,6 +104,13 @@ for (const difficulty of difficulties) {
       avgFoodDaysLast60: foodDaysTail.length ? foodDaysTail.reduce((a, b) => a + b, 0) / foodDaysTail.length : null,
       avgPopLast60: popTail.length ? popTail.reduce((a, b) => a + b, 0) / popTail.length : null,
       starvingDays: s.milestones?.starvingDays ?? null,
+      deaths: s.final?.deaths ?? null,
+      pop100: s.metrics?.population?.[99] ?? null,
+      pop200: s.metrics?.population?.[199] ?? null,
+      pop400: s.metrics?.population?.[399] ?? null,
+      foodDaysMin: Array.isArray(s.metrics?.foodDays) && s.metrics.foodDays.length ? Math.min(...s.metrics.foodDays) : null,
+      foodDaysAvg: Array.isArray(s.metrics?.foodDays) && s.metrics.foodDays.length ? s.metrics.foodDays.reduce((a, b) => a + b, 0) / s.metrics.foodDays.length : null,
+      waterDaysAvg: Array.isArray(s.metrics?.waterDays) && s.metrics.waterDays.length ? s.metrics.waterDays.reduce((a, b) => a + b, 0) / s.metrics.waterDays.length : null,
       eventsFired: s.milestones?.eventsFired ?? null,
       techs: s.final?.techs ?? null,
       buildings: s.final?.buildings ?? null,
@@ -118,24 +125,28 @@ for (const difficulty of difficulties) {
   }
 }
 
-const header = ['  seed', 'difficulty', 'era1', 'era2', '1stTech', 'pop10', 'finalPop', 'peakPop', 'foodD~', 'starveD', 'events', 'techs', 'bld', 'ms/day'];
-const widths = [12, 10, 5, 5, 7, 6, 8, 8, 7, 7, 6, 5, 4, 7];
+const header = ['  seed', 'difficulty', 'era1', 'era2', 'pop10', 'pop100', 'pop200', 'pop400', 'finPop', 'peak', 'foodMin', 'foodAvg', 'watAvg', 'starveD', 'deaths', 'events', 'ms/day'];
+const widths = [12, 10, 5, 5, 6, 6, 6, 6, 6, 5, 7, 7, 7, 7, 6, 6, 7];
 console.log('\n' + header.map((h, i) => pad(h, widths[i], true)).join(' '));
 for (const r of rows) {
+  const num = (v, d = 1) => (v == null ? '-' : typeof v === 'number' ? v.toFixed(d) : v);
   const cells = [
     r.seed,
     r.difficulty,
     r.era1Day ?? '-',
     r.era2Day ?? '-',
-    r.firstTechDay ?? '-',
     r.pop10Day ?? '-',
+    num(r.pop100, 0),
+    num(r.pop200, 0),
+    num(r.pop400, 0),
     r.finalPop ?? '-',
     r.peakPop ?? '-',
-    r.avgFoodDaysLast60 != null ? r.avgFoodDaysLast60.toFixed(1) : '-',
+    num(r.foodDaysMin),
+    num(r.foodDaysAvg),
+    num(r.waterDaysAvg),
     r.starvingDays ?? '-',
+    r.deaths ?? '-',
     r.eventsFired ?? '-',
-    r.techs ?? '-',
-    r.buildings ?? '-',
     r.msPerDay ?? '-',
   ];
   console.log(cells.map((c, i) => pad(c, widths[i], i < 2)).join(' '));

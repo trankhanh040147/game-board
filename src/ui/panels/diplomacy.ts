@@ -57,7 +57,7 @@ export class DiplomacyPanel implements GamePanel {
     return `
       <div class="fh-gp-scroll">
         <div class="fh-summary-row">
-          <div class="fh-sum-card"><span class="fh-sum-label">${icon('handshake', 'fh-icon is-tiny')} Neighbours met</span><b>${met.length}</b><small>${civs.length} exist in the world</small></div>
+          <div class="fh-sum-card"><span class="fh-sum-label">${icon('handshake', 'fh-icon is-tiny')} Neighbours met</span><b>${met.length}</b><small>${civs.length} ${civs.length === 1 ? 'people' : 'peoples'} in the world</small></div>
           <div class="fh-sum-card"><span class="fh-sum-label">${icon('compass', 'fh-icon is-tiny')} Valley charted</span><b>${pct(mapReveal)}</b><small>${fmtInt(s.exploration.sitesFound)} sites found</small></div>
           <div class="fh-sum-card"><span class="fh-sum-label">${icon('trade', 'fh-icon is-tiny')} Trade balance</span><b>${signed(s.market.tradeBalance, 0)}</b><small>coin this age</small></div>
           <div class="fh-sum-card"><span class="fh-sum-label">${icon('shield', 'fh-icon is-tiny')} Our strength</span><b>${fmtInt(totalPop)}</b><small>people to defend</small></div>
@@ -78,12 +78,23 @@ export class DiplomacyPanel implements GamePanel {
 
   private emptyState(): string {
     const s = stateOf(this.svc);
-    return `<div class="fh-empty">
-      ${icon('compass', 'fh-icon is-large')}
-      <p class="fh-empty-title">The valley feels empty</p>
-      <p class="fh-empty-body">No other people have been met yet. Send a scouting party along the rivers — smoke on the horizon is usually a hearth.</p>
+    return `<div class="fh-empty fh-empty-hero">
+      <div class="fh-compass-art" aria-hidden="true">
+        <span class="fh-compass-ring is-outer"></span>
+        <span class="fh-compass-ring is-inner"></span>
+        <span class="fh-compass-needle"></span>
+        ${icon('compass', 'fh-icon is-large')}
+      </div>
+      <span class="fh-eyebrow">Uncharted</span>
+      <h2 class="display">The valley feels empty</h2>
+      <p class="fh-empty-body">No other people have been met yet. Smoke on the horizon is usually a hearth — but someone must go and look. Send a party along the rivers and see who answers.</p>
+      <div class="fh-chipwrap fh-empty-ways">
+        <span class="fh-chip is-info">${icon('eye', 'fh-icon is-tiny')}Scouts reveal the land</span>
+        <span class="fh-chip is-brass">${icon('compass', 'fh-icon is-tiny')}Surveyors find sites</span>
+        <span class="fh-chip is-neutral">${icon('flag', 'fh-icon is-tiny')}Settlers found new hearths</span>
+      </div>
       <button type="button" class="fh-btn is-ember clickable" data-act="open-expeditions">${icon('compass', 'fh-icon is-tiny')} Plan an expedition</button>
-      <p class="fh-faint fh-small">${pct(s.exploration.mapReveal)} of the valley charted so far.</p>
+      <p class="fh-faint fh-small">${pct(s.exploration.mapReveal)} of the valley charted so far · ${fmtInt(s.exploration.sitesFound)} sites found</p>
     </div>`;
   }
 

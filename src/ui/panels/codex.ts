@@ -196,7 +196,7 @@ export class CodexPanel implements GamePanel {
           ? `<span class="fh-tech-need">needs ${missing.map((r) => c.techs[r]?.name ?? r).join(', ') || `era ${roman(t.era + 1)}`}</span>`
           : unlocks.length
             ? `<span class="fh-tech-unlocks">${icon('hammer', 'fh-icon is-tiny')}${unlocks.slice(0, 2).join(', ')}</span>`
-            : `<span class="fh-tech-flavor serif">${t.flavor ? `“${t.flavor}”` : ''}</span>`
+            : ''
       }
     </button>`;
   }

@@ -38,9 +38,9 @@ const CHARTS: ChartSpec[] = [
   { key: 'morale', label: 'Morale', tone: 'brass', icon: 'heart', hint: 'Average spirits of your people.' },
   { key: 'health', label: 'Health', tone: 'info', icon: 'hospital', hint: 'Average physical condition.' },
   { key: 'treasury', label: 'Treasury', tone: 'brass', icon: 'coin', hint: 'Coin held across settlements.' },
-  { key: 'pollution', label: 'Pollution', tone: 'bad', icon: 'cloud', hint: 'Average pollution over claimed land.', scale: 100, format: (v) => fmt(v * 100, 0) + '%' },
+  { key: 'pollution', label: 'Pollution', tone: 'bad', icon: 'cloud', hint: 'Average pollution over claimed land.', scale: 100, format: (v) => fmt(v, 0) + '%' },
   { key: 'insight', label: 'Insight', tone: 'violet', icon: 'star', hint: 'Unspent insight, the fuel of discovery.' },
-  { key: 'biodiversity', label: 'Biodiversity', tone: 'good', icon: 'leaf', hint: 'The living richness of the valley.', scale: 100, format: (v) => fmt(v * 100, 0) + '%' },
+  { key: 'biodiversity', label: 'Biodiversity', tone: 'good', icon: 'leaf', hint: 'The living richness of the valley.', scale: 100, format: (v) => fmt(v, 0) + '%' },
 ];
 
 export class AlmanacPanel implements GamePanel {
@@ -64,11 +64,13 @@ export class AlmanacPanel implements GamePanel {
     const chartCards = CHARTS.map((spec) => {
       const series = s.metrics.series[spec.key] ?? [];
       const last = series.length ? series[series.length - 1] : 0;
+      const scaledLast = spec.scale ? last * spec.scale : last;
       const slope = seriesSlope(s, spec.key, 12);
+      const scaledSlope = spec.scale ? slope * spec.scale : slope;
       return `<figure class="fh-chart-card" ${tipText(spec.hint)}>
         <figcaption>
           <span class="fh-chart-title">${icon(spec.icon, 'fh-icon is-tiny')}${esc(spec.label)}</span>
-          <span class="fh-chart-value">${esc(spec.format ? spec.format(last) : fmt(last))}<small class="${toneClass(slope)}">${signed(spec.format ? slope * (spec.scale ? 100 : 1) : slope, 1)}/d</small></span>
+          <span class="fh-chart-value">${esc(spec.format ? spec.format(scaledLast) : fmt(scaledLast))}<small class="${toneClass(scaledSlope)}">${signed(scaledSlope, 1)}/d</small></span>
         </figcaption>
         <canvas class="fh-chart-canvas" data-chart="${spec.key}" height="118" aria-label="${esc(spec.label)} chart"></canvas>
       </figure>`;

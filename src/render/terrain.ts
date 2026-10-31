@@ -24,6 +24,7 @@ import {
   darkenColor,
   hash2,
   makeCanvas,
+  shadeColor,
 } from './utils';
 
 interface Chunk {
@@ -233,31 +234,23 @@ export class Terrain {
     );
   }
 
-  /** Fast low-detail fill for chunks that are not baked yet. */
+  /** Fallback for chunks not baked yet: draw the tiles directly (identical art). */
   private drawFlatChunk(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
     const w = this.world;
     if (!w) return;
-    const pal = this.palette;
     const x0 = cx * CHUNK_TILES;
     const y0 = cy * CHUNK_TILES;
     const x1 = Math.min(w.width - 1, x0 + CHUNK_TILES - 1);
     const y1 = Math.min(w.height - 1, y0 + CHUNK_TILES - 1);
     if (x0 > w.width - 1 || y0 > w.height - 1) return;
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
+    for (let s = x0 + y0; s <= x1 + y1; s++) {
+      const xs = Math.max(x0, s - y1);
+      const xe = Math.min(x1, s - y0);
+      for (let x = xs; x <= xe; x++) {
+        const y = s - x;
         const t = w.tiles[y * w.width + x];
         if (!t) continue;
-        const h = pal.heightPx(t);
-        const mx = (x - y) * HALF_W;
-        const ny = (x + y) * HALF_H - h;
-        ctx.beginPath();
-        ctx.moveTo(mx, ny);
-        ctx.lineTo(mx + HALF_W, ny + HALF_H);
-        ctx.lineTo(mx, ny + TILE_H);
-        ctx.lineTo(mx - HALF_W, ny + HALF_H);
-        ctx.closePath();
-        ctx.fillStyle = cssColor(pal.hasWater(t) ? pal.waterColor(t, x, y) : pal.groundColor(t, x, y));
-        ctx.fill();
+        this.drawTile(ctx, w, t, x, y, false);
       }
     }
   }
@@ -274,10 +267,18 @@ export class Terrain {
     const pal = this.palette;
     const scale = this.bucket;
 
+    // Bake one extra ring of tiles so neighbouring chunks overlap by a full
+    // tile: this hides any sub-pixel filtering seam at chunk borders.
+    const bx0 = Math.max(0, x0 - 1);
+    const bx1 = Math.min(w.width - 1, x1 + 1);
+    const by0 = Math.max(0, y0 - 1);
+    const by1 = Math.min(w.height - 1, y1 + 1);
+
     let top = Infinity;
     let bottom = -Infinity;
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
+    let maxWall = 0;
+    for (let y = by0; y <= by1; y++) {
+      for (let x = bx0; x <= bx1; x++) {
         const t = w.tiles[y * w.width + x];
         if (!t) continue;
         const h = pal.heightPx(t);
@@ -285,14 +286,23 @@ export class Terrain {
         if (ny < top) top = ny;
         const b = (x + y) * HALF_H + TILE_H;
         if (b > bottom) bottom = b;
+        // south-facing cliff walls extend below the tile's base plane: the
+        // chunk canvas must contain them or they get clipped into "plate" edges.
+        const nE = x + 1 < w.width ? w.tiles[y * w.width + x + 1] : null;
+        const nS = y + 1 < w.height ? w.tiles[(y + 1) * w.width + x] : null;
+        const hE = nE ? pal.heightPx(nE) : -38;
+        const hS = nS ? pal.heightPx(nS) : -38;
+        const wall = Math.max(0, h - hE, h - hS);
+        if (wall > maxWall) maxWall = wall;
       }
     }
     if (!Number.isFinite(top)) return null;
+    maxWall = Math.min(maxWall, 190);
 
-    const left = (x0 - y1 - 1) * HALF_W - 6;
-    const right = (x1 + 1 - y0) * HALF_W + 6;
+    const left = (bx0 - by1 - 1) * HALF_W - 6;
+    const right = (bx1 + 1 - by0) * HALF_W + 6;
     top -= 6;
-    bottom += 8;
+    bottom += maxWall + 8;
 
     const mapW = right - left;
     const mapH = bottom - top;
@@ -304,9 +314,9 @@ export class Terrain {
 
     const lowDetail = scale < 0.7;
 
-    for (let s = x0 + y0; s <= x1 + y1; s++) {
-      const xs = Math.max(x0, s - y1);
-      const xe = Math.min(x1, s - y0);
+    for (let s = bx0 + by0; s <= bx1 + by1; s++) {
+      const xs = Math.max(bx0, s - by1);
+      const xe = Math.min(bx1, s - by0);
       for (let x = xs; x <= xe; x++) {
         const y = s - x;
         const t = w.tiles[y * w.width + x];
@@ -345,7 +355,7 @@ export class Terrain {
     const height = w.height;
     const water = pal.isWaterSurface(t);
     const river = pal.isRiver(t);
-    const h = pal.heightPx(t);
+    const h = pal.hasWater(t) ? pal.smoothHeightPx(w, x, y) : pal.heightPx(t);
     const mx = (x - y) * HALF_W;
     const ny = (x + y) * HALF_H - h;
     const nx = mx;
@@ -361,8 +371,8 @@ export class Terrain {
     const nW = x - 1 >= 0 ? w.tiles[y * width + x - 1] : null; // -x, shares N-E
     const nN = y - 1 >= 0 ? w.tiles[(y - 1) * width + x] : null; // -y, shares N-W
 
-    const hE = nE ? pal.heightPx(nE) : -38;
-    const hS = nS ? pal.heightPx(nS) : -38;
+    const hE = nE ? (pal.hasWater(nE) ? pal.smoothHeightPx(w, x + 1, y) : pal.heightPx(nE)) : -38;
+    const hS = nS ? (pal.hasWater(nS) ? pal.smoothHeightPx(w, x, y + 1) : pal.heightPx(nS)) : -38;
 
     const sideCol = pal.sideColor(t, x, y, 0);
     const sideCol2 = pal.sideColor(t, x, y, 1);
@@ -379,34 +389,34 @@ export class Terrain {
 
     // -- top face -----------------------------------------------------------
     if (water) {
+      const baseWater = pal.waterColor(t, x, y);
+      const deep = shadeColor(baseWater, 0.82);
       if (river) {
-        // river: ground first, then an inset water ribbon leaving muddy banks
-        ctx.fillStyle = cssColor(pal.groundColor(t, x, y));
+        // river: continuous water ribbon, muddy bank only on land edges
+        ctx.fillStyle = cssColor(baseWater);
         diamond(ctx, nx, ny);
         ctx.fill();
-        const inset = 6;
-        ctx.fillStyle = cssColor(pal.waterColor(t, x, y));
+        ctx.fillStyle = cssColorAlpha(deep, 0.3);
         ctx.beginPath();
-        ctx.moveTo(nx, ny + inset);
-        ctx.lineTo(nx + HALF_W - inset * 0.9, ny + HALF_H);
-        ctx.lineTo(nx, ny + TILE_H - inset);
-        ctx.lineTo(nx - HALF_W + inset * 0.9, ny + HALF_H);
+        ctx.moveTo(nx, ny + 4);
+        ctx.lineTo(nx + HALF_W * 0.6, ny + HALF_H);
+        ctx.lineTo(nx, ny + TILE_H - 4);
+        ctx.lineTo(nx - HALF_W * 0.6, ny + HALF_H);
         ctx.closePath();
         ctx.fill();
       } else {
-        ctx.fillStyle = cssColor(pal.waterColor(t, x, y));
+        ctx.fillStyle = cssColor(baseWater);
         diamond(ctx, nx, ny);
         ctx.fill();
-      }
-      // depth: a darker band just under the surface edge (fake refraction)
-      if (!lowDetail) {
-        ctx.strokeStyle = cssColorAlpha(0x0a2030, 0.16);
-        ctx.lineWidth = 2;
+        // soft depth band on the open-water side (keeps the surface continuous)
+        ctx.fillStyle = cssColorAlpha(deep, 0.25);
         ctx.beginPath();
-        ctx.moveTo(nx + HALF_W * 0.55, ny + HALF_H * 1.5);
-        ctx.lineTo(nx, ny + TILE_H - 4);
-        ctx.lineTo(nx - HALF_W * 0.55, ny + HALF_H * 1.5);
-        ctx.stroke();
+        ctx.moveTo(nx, ny + 3);
+        ctx.lineTo(nx + HALF_W * 0.86, ny + HALF_H);
+        ctx.lineTo(nx, ny + TILE_H - 3);
+        ctx.lineTo(nx - HALF_W * 0.86, ny + HALF_H);
+        ctx.closePath();
+        ctx.fill();
       }
       // coast foam along edges shared with land
       const foam = pal.foamColor();
@@ -419,33 +429,61 @@ export class Terrain {
       for (let i = 0; i < 4; i++) {
         const nb = edges[i][4];
         if (!nb || pal.hasWater(nb)) continue;
-        const a = 0.34 + hash2(x * 3 + i, y * 5 + i, 71) * 0.34;
+        const a = 0.45 + hash2(x * 3 + i, y * 5 + i, 71) * 0.3;
         ctx.strokeStyle = cssColorAlpha(foam, a);
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(edges[i][0], edges[i][1]);
         ctx.lineTo(edges[i][2], edges[i][3]);
         ctx.stroke();
+        // second, thinner inner foam line
+        ctx.strokeStyle = cssColorAlpha(foam, 0.2);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(edges[i][0] + (nx - edges[i][0]) * 0.06, edges[i][1] + (ny - edges[i][1]) * 0.06);
+        ctx.lineTo(edges[i][2] + (nx - edges[i][2]) * 0.06, edges[i][3] + (ny - edges[i][3]) * 0.06);
+        ctx.stroke();
       }
     } else {
-      ctx.fillStyle = cssColor(pal.groundColor(t, x, y));
+      const shade = pal.shadeAt(w, x, y) * pal.occlusionAt(w, x, y);
+      const ground = shadeColor(pal.groundColor(t, x, y), shade);
+      ctx.fillStyle = cssColor(ground);
       diamond(ctx, nx, ny);
       ctx.fill();
 
+      // painterly grass / soil texture — short strokes break up flat fields
+      if (!lowDetail) {
+        const dn = hash2(x * 7 + 3, y * 11 + 5, 131);
+        const strokes = t.road > 0 ? 0 : 2;
+        for (let k = 0; k < strokes; k++) {
+          const h1 = hash2(x * 13 + k * 7, y * 17 + k * 3, 149);
+          const h2 = hash2(x * 19 + k * 5, y * 23 + k * 11, 157);
+          const px = nx + (h1 - 0.5) * HALF_W * 1.2;
+          const py = ny + HALF_H * 0.4 + h2 * HALF_H;
+          const len = 2 + h2 * 3;
+          ctx.strokeStyle = cssColorAlpha(dn > 0.7 ? 0x243a1c : dn > 0.4 ? 0x3f5a2c : 0xcfc89a, 0.1 + h2 * 0.1);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px - len * 0.4, py - len);
+          ctx.stroke();
+        }
+        // occasional pebble / bare patch
+        if (dn > 0.86) {
+          ctx.beginPath();
+          ctx.ellipse(nx + (dn - 0.5) * 30, ny + HALF_H + (dn - 0.5) * 8, 2.6, 1.5, 0, 0, Math.PI * 2);
+          ctx.fillStyle = cssColorAlpha(0x8a8274, 0.4);
+          ctx.fill();
+        }
+      }
+
       // sun rim on the upper edges (subtle painterly light)
       if (!lowDetail) {
-        ctx.strokeStyle = cssColorAlpha(0xf5ead0, 0.055);
-        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = cssColorAlpha(0xf5ead0, 0.04);
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(wx, wy);
         ctx.lineTo(nx, ny);
-        ctx.lineTo(ex, ey);
-        ctx.stroke();
-        // contact shadow along the lower edges keeps tiles readable
-        ctx.strokeStyle = cssColorAlpha(0x000000, 0.05);
-        ctx.beginPath();
-        ctx.moveTo(wx, wy);
-        ctx.lineTo(nx, sy);
         ctx.lineTo(ex, ey);
         ctx.stroke();
       }
@@ -498,9 +536,9 @@ export class Terrain {
       }
     }
 
-    // -- subtle tile grid ---------------------------------------------------
-    if (this.showGrid && !lowDetail && !water) {
-      ctx.strokeStyle = cssColorAlpha(0x2a2418, 0.075);
+    // -- barely-there tile grid (placement aid, not decoration) -------------
+    if (this.showGrid && !lowDetail && !water && this.bucket >= 1.25) {
+      ctx.strokeStyle = cssColorAlpha(0x2a2418, 0.03);
       ctx.lineWidth = 1;
       diamond(ctx, nx, ny);
       ctx.stroke();

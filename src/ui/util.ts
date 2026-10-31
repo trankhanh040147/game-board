@@ -351,6 +351,17 @@ export function skillLabel(c: Content, id: string): string {
   return c.skills[id]?.name ?? titleCase(id);
 }
 
+/** Modifier keys whose values are flat amounts, not fractions. */
+const FLAT_MODIFIERS = new Set<string>(['insightFlat', 'moraleFlat']);
+
+export function modValueText(key: ModifierKey, value: number): string {
+  if (FLAT_MODIFIERS.has(key)) {
+    const unit = key === 'insightFlat' ? ' day' : '';
+    return `${signed(value, 2)}${unit}`;
+  }
+  return `${signed(value * 100, 0)}%`;
+}
+
 /** Human-readable modifier effect lines. */
 export function modLines(mods: ModifierDelta | undefined, limit = 8): { key: ModifierKey; label: string; value: number; good: boolean; text: string }[] {
   if (!mods) return [];
@@ -360,7 +371,7 @@ export function modLines(mods: ModifierDelta | undefined, limit = 8): { key: Mod
     if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) < 0.0005) continue;
     const meta = MODIFIER_META[rawKey];
     const good = value * (meta?.good ?? 1) > 0;
-    out.push({ key: rawKey, label: meta?.label ?? titleCase(rawKey), value, good, text: `${meta?.label ?? rawKey} ${signed(value * 100, 0)}%` });
+    out.push({ key: rawKey, label: meta?.label ?? titleCase(rawKey), value, good, text: `${meta?.label ?? rawKey} ${modValueText(rawKey, value)}` });
   }
   out.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
   return out.slice(0, limit);
@@ -372,7 +383,7 @@ export function modChips(mods: ModifierDelta | undefined, limit = 6): string {
   return lines
     .map(
       (l) =>
-        `<span class="fh-modchip ${l.good ? 'is-good' : 'is-bad'}" ${tipText(`${l.label}: ${signed(l.value * 100, 0)}%`)}>${esc(l.label)} <b>${esc(signed(l.value * 100, 0))}%</b></span>`,
+        `<span class="fh-modchip ${l.good ? 'is-good' : 'is-bad'}" ${tipText(`${l.label}: ${modValueText(l.key, l.value)}`)}>${esc(l.label)} <b>${esc(modValueText(l.key, l.value))}</b></span>`,
     )
     .join('');
 }

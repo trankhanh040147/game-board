@@ -4,6 +4,7 @@
  */
 import type { PolicyDef } from '../../sim/types';
 import { isPolicyUnlocked, modOfState } from '../../sim/core';
+import { policyInfluenceCost } from '../../sim/actions';
 import { icon } from '../icons';
 import {
   chip,
@@ -168,7 +169,8 @@ export class SocietyPanel implements GamePanel {
     const st = selectedSettlement(this.svc);
     const on = !!s.society.policies[p.id];
     const unlocked = isPolicyUnlocked(s, c, p.id);
-    const affordable = (st?.influence ?? 0) >= p.cost;
+    const cost = policyInfluenceCost(p);
+    const affordable = (st?.influence ?? 0) >= cost;
     const conflicts = (p.conflicts ?? []).filter((cid) => s.society.policies[cid]);
     const blocked = !unlocked || (!on && (conflicts.length > 0 || !affordable));
     if (!unlocked && !this.showLocked && !on) return '';
@@ -185,13 +187,14 @@ export class SocietyPanel implements GamePanel {
     return `<article class="fh-policy ${on ? 'is-on' : ''} ${!unlocked ? 'is-locked' : ''}">
       <div class="fh-policy-head">
         <span class="fh-policy-icon">${icon(on ? 'policy' : 'policy', 'fh-icon is-small')}</span>
-        <span class="fh-policy-title"><b>${esc(p.name)}</b><small>${on ? 'in force' : unlocked ? `cost ${p.cost} influence` : `era ${roman(p.era + 1)}`}</small></span>
-        <button type="button" class="fh-toggle clickable ${on ? 'is-on' : ''}" data-act="policy" data-policy="${p.id}" data-on="${on ? '0' : '1'}" aria-pressed="${on}" ${blocked && !on ? 'aria-disabled="true"' : ''} ${tipText(on ? 'Repeal this policy' : !unlocked ? `Requires ${reqText || `era ${roman(p.era + 1)}`}` : conflicts.length ? `Conflicts with ${conflicts.map((x) => c.policies[x]?.name ?? x).join(', ')}` : !affordable ? `Needs ${p.cost} influence` : `Enact for ${p.cost} influence`)}>${icon(on ? 'check' : 'dot', 'fh-icon is-tiny')}<span>${on ? 'Repeal' : 'Enact'}</span></button>
+        <span class="fh-policy-title"><b>${esc(p.name)}</b><small>${on ? 'in force' : unlocked ? `cost ${cost} influence` : `era ${roman(p.era + 1)}`}</small></span>
+        <button type="button" class="fh-toggle clickable ${on ? 'is-on' : ''}" data-act="policy" data-policy="${p.id}" data-on="${on ? '0' : '1'}" aria-pressed="${on}" ${blocked && !on ? 'aria-disabled="true"' : ''} ${tipText(on ? 'Repeal this policy' : !unlocked ? `Requires ${reqText || `era ${roman(p.era + 1)}`}` : conflicts.length ? `Conflicts with ${conflicts.map((x) => c.policies[x]?.name ?? x).join(', ')}` : !affordable ? `Needs ${cost} influence` : `Enact for ${cost} influence`)}>${icon(on ? 'check' : 'dot', 'fh-icon is-tiny')}<span>${on ? 'Repeal' : 'Enact'}</span></button>
       </div>
       <p class="fh-policy-desc">${esc(p.desc)}</p>
       <div class="fh-policy-mods">${modChips(p.effects, 4)}</div>
       ${p.classSupport ? `<div class="fh-policy-support">${support}</div>` : ''}
       ${upkeep ? `<div class="fh-policy-foot">${icon('hourglass', 'fh-icon is-tiny')} upkeep ${esc(upkeep)}</div>` : ''}
+      ${!on && unlocked && !affordable ? `<div class="fh-policy-foot is-warn">${icon('influence', 'fh-icon is-tiny')} needs ${cost} influence</div>` : ''}
       ${!on && unlocked && conflicts.length ? `<div class="fh-policy-foot is-bad">${icon('warning', 'fh-icon is-tiny')} conflicts with ${esc(conflicts.map((x) => c.policies[x]?.name ?? x).join(', '))}</div>` : ''}
     </article>`;
   }

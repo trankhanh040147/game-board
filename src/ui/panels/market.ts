@@ -91,7 +91,7 @@ export class MarketPanel implements GamePanel {
           <div class="fh-sum-card"><span class="fh-sum-label">${icon('coin', 'fh-icon is-tiny')} Treasury</span><b>${fmt(treasury)}</b><small>coin available</small></div>
           <div class="fh-sum-card"><span class="fh-sum-label">${icon('trade', 'fh-icon is-tiny')} Trade balance</span><b class="${toneClass(market.tradeBalance)}">${signed(market.tradeBalance, 0)}</b><small>coin this age</small></div>
           <div class="fh-sum-card" ${tipText('A tariff is charged on every import and withheld on every export.')}><span class="fh-sum-label">${icon('tariff', 'fh-icon is-tiny')} Tariff</span><b>${pct(market.tariff)}</b><small>on foreign trade</small></div>
-          <div class="fh-sum-card"><span class="fh-sum-label">${icon('road', 'fh-icon is-tiny')} Routes</span><b>${market.routes.filter((r) => r.active).length}</b><small>${s.neighbors.civs.filter((n) => n.discovered).length} neighbours met</small></div>
+          <div class="fh-sum-card"><span class="fh-sum-label">${icon('road', 'fh-icon is-tiny')} Routes</span><b>${market.routes.filter((r) => r.active).length}</b><small>${(() => { const n = s.neighbors.civs.filter((x) => x.discovered).length; return `${n} ${n === 1 ? 'neighbour' : 'neighbours'} met`; })()}</small></div>
         </div>
         ${
           !hasMarketBuilding

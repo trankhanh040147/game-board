@@ -11,7 +11,11 @@ peoples — and discover what your civilisation costs the land that feeds it.
 It is built as a *simulation first*: a deterministic, headless TypeScript core with a
 Canvas 2D isometric world and a dense, readable interface on top.
 
-![First Hearth](shots/hero.png)
+![First Hearth](shots/first-hearth-hero-1600.png)
+
+*Year 4: a walled town of 27 souls, three eras in — fields, workshops, temples, and the roads that tie them together.*
+
+More screenshots: [hero 1920](shots/first-hearth-hero-1920.png) · [the Codex](shots/first-hearth-codex-1920.png) · [1280×800 layout](shots/first-hearth-1280.png)
 
 ## Play
 

@@ -56,7 +56,7 @@ interface TreeColors {
   snow: number;
 }
 
-function treeColors(species: TreeSpecies, season: SeasonId): TreeColors {
+function treeColors(species: TreeSpecies, season: SeasonId, variant = 0): TreeColors {
   const snow = season === 'winter' ? 1 : 0;
   const base: TreeColors = {
     dark: 0x2f4a24,
@@ -71,10 +71,10 @@ function treeColors(species: TreeSpecies, season: SeasonId): TreeColors {
   };
   switch (species) {
     case 'oak':
-      if (season === 'spring') return { ...base, dark: 0x3a5c2c, mid: 0x4f7c34, light: 0x76a046, rim: 0xa9c96a, blossom: 0xf0c8d4 };
+      if (season === 'spring') return { ...base, dark: 0x2c4a22, mid: 0x3e6429, light: 0x5f8a36, rim: 0x8fb254, blossom: 0xeec2ce };
       if (season === 'autumn') return { ...base, dark: 0x7a3a1c, mid: 0xa85a24, light: 0xc9822e, rim: 0xe0b45e, blossom: 0 };
       if (season === 'winter') return { ...base, bare: true, trunk: 0x4f4034, trunkLit: 0x6b5a48 };
-      return { ...base, dark: 0x2a4520, mid: 0x3a6329, light: 0x517a33, rim: 0x7ba045 };
+      return { ...base, dark: 0x223a1b, mid: 0x304f24, light: 0x466b2e, rim: 0x6f9440 };
     case 'pine':
       return {
         ...base,
@@ -88,7 +88,10 @@ function treeColors(species: TreeSpecies, season: SeasonId): TreeColors {
         blossom: 0,
       };
     case 'willow':
-      if (season === 'autumn') return { ...base, dark: 0x7f6a22, mid: 0xa88a2e, light: 0xc9a83a, rim: 0xe0cc6a, blossom: 0 };
+      if (season === 'autumn') {
+        if (variant === 2) return { ...base, dark: 0x6b6a22, mid: 0x8a8a2e, light: 0xa8a83a, rim: 0xc9c46a, blossom: 0 };
+        return { ...base, dark: 0x7f6a22, mid: 0xa88a2e, light: 0xc9a83a, rim: 0xe0cc6a, blossom: 0 };
+      }
       if (season === 'winter') return { ...base, bare: true, trunk: 0x4f4034, trunkLit: 0x6b5a48 };
       return { ...base, dark: 0x3f5c24, mid: 0x557a2e, light: 0x76973a, rim: 0xa9c25a };
     case 'acacia':
@@ -139,131 +142,140 @@ function drawCanopyBlob(ctx: CanvasRenderingContext2D, x: number, y: number, rx:
 
 function drawTree(ctx: CanvasRenderingContext2D, species: TreeSpecies, variant: number, h: number, c: TreeColors): void {
   const s = h / 34;
-  const trunkW = 2.4 * s;
-  const trunkH = h * (species === 'pine' ? 0.22 : species === 'palm' ? 0.5 : 0.36);
-  const rnd = (i: number): number => hash2(variant * 13 + i, i * 7 + 3, 19);
-  // ground shadow
+  const rnd = (i: number): number => hash2(variant * 131 + i * 17, i * 29 + 7, 193);
+  // contact shadow thrown to the south-east (sun from the upper-left)
   ctx.beginPath();
-  ctx.ellipse(0, 2 * s, h * 0.3, h * 0.11, 0, 0, Math.PI * 2);
-  ctx.fillStyle = cssColorAlpha(0x0a0806, 0.28);
+  ctx.ellipse(5.5 * s, 2.4 * s, h * 0.34, h * 0.125, 0, 0, Math.PI * 2);
+  ctx.fillStyle = cssColorAlpha(0x11150c, 0.3);
   ctx.fill();
 
-  if (species === 'palm') {
-    // curved trunk
-    ctx.beginPath();
-    ctx.moveTo(-trunkW, 0);
-    ctx.quadraticCurveTo(-trunkW + 2 * s, -trunkH * 0.6, trunkW * 0.6, -trunkH);
-    ctx.lineTo(trunkW * 1.6, -trunkH);
-    ctx.quadraticCurveTo(trunkW + 2 * s, -trunkH * 0.6, trunkW * 1.4, 0);
-    ctx.closePath();
-    ctx.fillStyle = cssColor(c.trunk);
-    ctx.fill();
-    // trunk rings
-    for (let i = 1; i < 5; i++) {
-      const yy = -trunkH * (i / 5);
-      ctx.beginPath();
-      ctx.moveTo(-trunkW + 0.5 * s, yy);
-      ctx.lineTo(trunkW * 1.2, yy - 0.6 * s);
-      ctx.strokeStyle = cssColorAlpha(darkenColor(c.trunk, 0.3), 0.6);
-      ctx.lineWidth = 0.7 * s;
-      ctx.stroke();
-    }
-    // fronds
-    const topX = trunkW * 1.1;
-    const topY = -trunkH;
-    for (let i = 0; i < 7; i++) {
-      const a = -Math.PI * 0.92 + (i / 6) * Math.PI * 0.84 + (rnd(i) - 0.5) * 0.2;
-      const len = h * (0.42 + rnd(i + 3) * 0.12);
-      const ex = topX + Math.cos(a) * len;
-      const ey = topY + Math.sin(a) * len * 0.62;
-      ctx.beginPath();
-      ctx.moveTo(topX, topY);
-      ctx.quadraticCurveTo(topX + Math.cos(a) * len * 0.6, topY + Math.sin(a) * len * 0.25 - 4 * s, ex, ey);
-      ctx.strokeStyle = cssColor(i % 2 ? c.mid : c.dark);
-      ctx.lineWidth = 1.9 * s;
-      ctx.stroke();
-      // leaflet ticks
-      for (let k = 1; k <= 3; k++) {
-        const u = k / 4;
-        const px = topX + (ex - topX) * u;
-        const py = topY + (ey - topY) * u - Math.sin(u * Math.PI) * 2 * s;
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + 2.2 * s, py + 1.6 * s);
-        ctx.strokeStyle = cssColor(c.light);
-        ctx.lineWidth = 0.9 * s;
-        ctx.stroke();
-      }
-    }
-    drawCanopyBlob(ctx, topX, topY, 2 * s, 1.6 * s, c.dark);
-    return;
-  }
+  const trunkH = h * (species === 'pine' ? 0.24 : species === 'palm' ? 0.52 : species === 'willow' ? 0.3 : species === 'acacia' ? 0.46 : species === 'reed' ? 0.2 : 0.4);
+  const trunkW = Math.max(1.3, h * 0.05);
 
-  // trunk
+  // trunk: dark silhouette + lit left edge
   ctx.beginPath();
   ctx.moveTo(-trunkW, 0);
-  ctx.lineTo(-trunkW * 0.6, -trunkH);
-  ctx.lineTo(trunkW * 0.6, -trunkH);
+  ctx.lineTo(-trunkW * 0.62, -trunkH);
+  ctx.lineTo(trunkW * 0.62, -trunkH);
   ctx.lineTo(trunkW, 0);
   ctx.closePath();
   ctx.fillStyle = cssColor(c.trunk);
   ctx.fill();
   ctx.beginPath();
   ctx.moveTo(-trunkW, 0);
-  ctx.lineTo(-trunkW * 0.6, -trunkH);
+  ctx.lineTo(-trunkW * 0.62, -trunkH);
   ctx.lineTo(0, -trunkH);
   ctx.lineTo(0, 0);
   ctx.closePath();
   ctx.fillStyle = cssColor(c.trunkLit);
   ctx.fill();
+  // root flare
+  ctx.beginPath();
+  ctx.moveTo(-trunkW * 1.5, 0.6 * s);
+  ctx.lineTo(-trunkW * 0.7, -1.6 * s);
+  ctx.lineTo(trunkW * 0.7, -1.6 * s);
+  ctx.lineTo(trunkW * 1.5, 0.6 * s);
+  ctx.closePath();
+  ctx.fillStyle = cssColor(darkenColor(c.trunk, 0.18));
+  ctx.fill();
 
-  // branches for bare trees or as structure under the canopy
   const branch = (bx: number, by: number, tx: number, ty: number, w: number): void => {
     ctx.beginPath();
     ctx.moveTo(bx, by);
     ctx.quadraticCurveTo((bx + tx) / 2 + (rnd(7) - 0.5) * 3 * s, (by + ty) / 2, tx, ty);
     ctx.strokeStyle = cssColor(c.trunk);
     ctx.lineWidth = w;
+    ctx.lineCap = 'round';
     ctx.stroke();
   };
 
+  if (species === 'palm') {
+    const topX = trunkW * 0.9;
+    const topY = -trunkH;
+    // curved trunk
+    ctx.beginPath();
+    ctx.moveTo(-trunkW, 0);
+    ctx.quadraticCurveTo(-trunkW + 2 * s, -trunkH * 0.6, topX - trunkW, topY);
+    ctx.lineTo(topX + trunkW, topY);
+    ctx.quadraticCurveTo(trunkW + 2 * s, -trunkH * 0.6, trunkW * 1.6, 0);
+    ctx.closePath();
+    ctx.fillStyle = cssColor(c.trunk);
+    ctx.fill();
+    for (let i = 1; i < 6; i++) {
+      const yy = -trunkH * (i / 6);
+      ctx.beginPath();
+      ctx.moveTo(-trunkW + 0.4 * s, yy);
+      ctx.lineTo(trunkW * 1.3, yy - 0.7 * s);
+      ctx.strokeStyle = cssColorAlpha(darkenColor(c.trunk, 0.3), 0.55);
+      ctx.lineWidth = 0.7 * s;
+      ctx.stroke();
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = -Math.PI * 0.96 + (i / 7) * Math.PI * 0.92 + (rnd(i) - 0.5) * 0.16;
+      const len = h * (0.4 + rnd(i + 3) * 0.14);
+      const ex = topX + Math.cos(a) * len;
+      const ey = topY + Math.sin(a) * len * 0.6;
+      // frond spine
+      ctx.beginPath();
+      ctx.moveTo(topX, topY);
+      ctx.quadraticCurveTo(topX + Math.cos(a) * len * 0.55, topY + Math.sin(a) * len * 0.22 - 4 * s, ex, ey);
+      ctx.strokeStyle = cssColor(i % 2 ? c.mid : c.dark);
+      ctx.lineWidth = 1.7 * s;
+      ctx.stroke();
+      // leaflets
+      for (let k = 1; k <= 4; k++) {
+        const u = k / 5;
+        const px = topX + (ex - topX) * u;
+        const py = topY + (ey - topY) * u - Math.sin(u * Math.PI) * 2.4 * s;
+        const ll = (3.6 - k * 0.5) * s;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + ll * 0.7, py + ll * 0.9);
+        ctx.strokeStyle = cssColor(i % 2 ? c.light : c.mid);
+        ctx.lineWidth = 0.8 * s;
+        ctx.stroke();
+      }
+    }
+    drawCanopyBlob(ctx, topX, topY, 2.4 * s, 1.8 * s, c.dark);
+    return;
+  }
+
   if (species === 'pine') {
-    // tiered conifer
-    const tiers = 4;
-    const baseW = h * 0.34;
+    const tiers = 5;
+    const baseW = h * 0.32;
     for (let i = 0; i < tiers; i++) {
       const u = i / tiers;
-      const y = -trunkH - u * (h - trunkH) * 0.92;
-      const w = baseW * (1 - u * 0.72) + 2 * s;
-      const tierH = (h - trunkH) * 0.34;
+      const y = -trunkH - u * (h - trunkH) * 0.94;
+      const w = baseW * (1 - u * 0.78) + 2 * s;
+      const tierH = (h - trunkH) * 0.3;
       ctx.beginPath();
       ctx.moveTo(-w, y);
-      ctx.lineTo(-w * 0.62, y - tierH * 0.35);
+      ctx.lineTo(-w * 0.58, y - tierH * 0.32);
       ctx.lineTo(0, y - tierH);
-      ctx.lineTo(w * 0.62, y - tierH * 0.35);
+      ctx.lineTo(w * 0.58, y - tierH * 0.32);
       ctx.lineTo(w, y);
-      ctx.lineTo(w * 0.4, y - 1.6 * s);
-      ctx.lineTo(-w * 0.4, y - 1.6 * s);
+      ctx.lineTo(w * 0.35, y - 1.4 * s);
+      ctx.lineTo(-w * 0.35, y - 1.4 * s);
       ctx.closePath();
       ctx.fillStyle = cssColor(i % 2 === 0 ? c.mid : c.dark);
       ctx.fill();
-      // lit left edge
+      // lit left edge + needle streaks
       ctx.beginPath();
       ctx.moveTo(-w, y);
       ctx.lineTo(0, y - tierH);
-      ctx.lineTo(-w * 0.2, y - tierH * 0.55);
+      ctx.lineTo(-w * 0.25, y - tierH * 0.5);
       ctx.closePath();
-      ctx.fillStyle = cssColorAlpha(c.light, 0.55);
+      ctx.fillStyle = cssColorAlpha(c.light, 0.5);
       ctx.fill();
       // snow on the tiers
       if (c.snow > 0) {
         ctx.beginPath();
-        ctx.moveTo(-w * 0.85, y - tierH * 0.08);
-        ctx.lineTo(0, y - tierH * 0.92);
-        ctx.lineTo(w * 0.55, y - tierH * 0.2);
-        ctx.lineTo(w * 0.2, y - tierH * 0.2);
+        ctx.moveTo(-w * 0.9, y - tierH * 0.06);
+        ctx.lineTo(0, y - tierH * 0.94);
+        ctx.lineTo(w * 0.62, y - tierH * 0.2);
+        ctx.lineTo(w * 0.24, y - tierH * 0.22);
         ctx.closePath();
-        ctx.fillStyle = cssColorAlpha(0xe8f0f6, 0.42);
+        ctx.fillStyle = cssColorAlpha(0xeef4f8, 0.5);
         ctx.fill();
       }
     }
@@ -271,140 +283,144 @@ function drawTree(ctx: CanvasRenderingContext2D, species: TreeSpecies, variant: 
   }
 
   if (species === 'reed') {
-    const stalks = 5 + Math.floor(rnd(1) * 3);
+    const stalks = 6 + Math.floor(rnd(1) * 3);
     for (let i = 0; i < stalks; i++) {
-      const sx = (i - stalks / 2) * 2.6 * s + (rnd(i) - 0.5) * 2 * s;
-      const sh = h * (0.55 + rnd(i + 2) * 0.45);
+      const sx = (i - stalks / 2) * 2.4 * s + (rnd(i) - 0.5) * 2 * s;
+      const sh = h * (0.5 + rnd(i + 2) * 0.5);
       ctx.beginPath();
       ctx.moveTo(sx, 0);
-      ctx.quadraticCurveTo(sx + 1.5 * s, -sh * 0.6, sx + (rnd(i + 5) - 0.5) * 4 * s, -sh);
+      ctx.quadraticCurveTo(sx + 1.4 * s, -sh * 0.6, sx + (rnd(i + 5) - 0.5) * 4 * s, -sh);
       ctx.strokeStyle = cssColor(i % 3 === 0 ? c.mid : c.dark);
-      ctx.lineWidth = 1.2 * s;
+      ctx.lineWidth = 1.1 * s;
       ctx.stroke();
-      // seed head
       ctx.beginPath();
-      ctx.ellipse(sx + (rnd(i + 5) - 0.5) * 4 * s, -sh - 1.2 * s, 1.1 * s, 2.4 * s, 0, 0, Math.PI * 2);
-      ctx.fillStyle = cssColor(mixColor(c.rim, 0x6b4a2f, 0.5));
+      ctx.ellipse(sx + (rnd(i + 5) - 0.5) * 4 * s, -sh - 1.4 * s, 1.1 * s, 2.6 * s, 0, 0, Math.PI * 2);
+      ctx.fillStyle = cssColor(mixColor(c.rim, 0x6b4a2f, 0.45));
       ctx.fill();
     }
-    // base tuft
-    for (let i = 0; i < 4; i++) {
-      const sx = (rnd(i + 9) - 0.5) * 8 * s;
+    for (let i = 0; i < 5; i++) {
+      const sx = (rnd(i + 9) - 0.5) * 9 * s;
       ctx.beginPath();
       ctx.moveTo(sx, 1);
-      ctx.lineTo(sx + 2 * s, -4 * s);
+      ctx.quadraticCurveTo(sx + 2 * s, -3 * s, sx + 3.4 * s, -6 * s);
       ctx.strokeStyle = cssColor(c.light);
-      ctx.lineWidth = 0.9 * s;
+      ctx.lineWidth = 0.8 * s;
       ctx.stroke();
     }
     return;
   }
 
   if (species === 'bush') {
-    const blobs = 3;
-    for (let i = 0; i < blobs; i++) {
-      const bx = (i - 1) * 3.4 * s;
-      const by = -h * (0.3 + rnd(i) * 0.1);
-      drawCanopyBlob(ctx, bx, by, h * 0.26, h * 0.2, i === 1 ? c.mid : c.dark);
+    for (let i = 0; i < 4; i++) {
+      const bx = (i - 1.5) * 3.2 * s + (rnd(i) - 0.5) * 2 * s;
+      const by = -h * (0.2 + rnd(i) * 0.14);
+      drawCanopyBlob(ctx, bx, by, h * 0.22, h * 0.18, i % 2 ? c.mid : c.dark);
     }
-    drawCanopyBlob(ctx, -2 * s, -h * 0.46, h * 0.18, h * 0.14, c.light);
-    drawCanopyBlob(ctx, -3 * s, -h * 0.5, h * 0.08, h * 0.06, c.rim);
+    drawCanopyBlob(ctx, -2.4 * s, -h * 0.4, h * 0.15, h * 0.12, c.light);
+    drawCanopyBlob(ctx, -3.4 * s, -h * 0.44, h * 0.07, h * 0.05, c.rim, 0.8);
     return;
   }
 
   if (c.bare) {
-    // bare winter / dead tree: trunk + angular branches
     const tips: [number, number][] = [
-      [-h * 0.34, -trunkH - h * 0.3],
-      [h * 0.3, -trunkH - h * 0.38],
-      [-h * 0.16, -trunkH - h * 0.52],
-      [h * 0.16, -trunkH - h * 0.6],
-      [0, -trunkH - h * 0.7],
-      [h * 0.42, -trunkH - h * 0.2],
+      [-h * 0.32, -trunkH - h * 0.28],
+      [h * 0.28, -trunkH - h * 0.36],
+      [-h * 0.15, -trunkH - h * 0.5],
+      [h * 0.15, -trunkH - h * 0.58],
+      [0, -trunkH - h * 0.68],
+      [h * 0.4, -trunkH - h * 0.18],
+      [-h * 0.42, -trunkH - h * 0.16],
     ];
     for (let i = 0; i < tips.length; i++) {
-      branch(0, -trunkH * (0.7 + (i % 3) * 0.12), tips[i][0], tips[i][1], (1.6 - i * 0.13) * s);
+      branch(0, -trunkH * (0.7 + (i % 3) * 0.1), tips[i][0], tips[i][1], Math.max(0.8, (1.7 - i * 0.12) * s));
     }
     if (c.snow > 0) {
-      for (let i = 0; i < tips.length; i++) {
-        drawCanopyBlob(ctx, tips[i][0], tips[i][1] - 1, 2.1 * s, 0.9 * s, 0xe8f0f6, 0.5);
-      }
+      for (const [tx, ty] of tips) drawCanopyBlob(ctx, tx, ty - 0.8, 2.0 * s, 0.85 * s, 0xeef4f8, 0.55);
     }
     return;
   }
 
   if (species === 'willow') {
-    // drooping crown
-    const cy = -trunkH - h * 0.22;
-    drawCanopyBlob(ctx, 0, cy, h * 0.3, h * 0.24, c.dark);
-    drawCanopyBlob(ctx, -h * 0.12, cy - h * 0.06, h * 0.22, h * 0.16, c.mid);
-    drawCanopyBlob(ctx, -h * 0.2, cy - h * 0.12, h * 0.1, h * 0.08, c.light);
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI - Math.PI * 0.05;
-      const sx = Math.cos(a) * h * 0.28;
-      const sy = cy + Math.sin(a) * h * 0.12 - h * 0.02;
-      const len = h * (0.2 + rnd(i) * 0.22);
+    const cy = -trunkH - h * 0.2;
+    for (let i = 0; i < 5; i++) {
+      const bx = (rnd(i) - 0.5) * h * 0.4;
+      const by = cy + (rnd(i + 4) - 0.5) * h * 0.14;
+      drawCanopyBlob(ctx, bx, by, h * 0.18, h * 0.14, i % 2 ? c.dark : c.mid);
+    }
+    drawCanopyBlob(ctx, -h * 0.14, cy - h * 0.08, h * 0.16, h * 0.11, c.light);
+    drawCanopyBlob(ctx, -h * 0.2, cy - h * 0.12, h * 0.07, h * 0.05, c.rim, 0.85);
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * Math.PI - Math.PI * 0.03;
+      const sx = Math.cos(a) * h * 0.26;
+      const sy = cy + Math.sin(a) * h * 0.1;
+      const len = h * (0.18 + rnd(i) * 0.26);
       ctx.beginPath();
       ctx.moveTo(sx, sy);
-      ctx.quadraticCurveTo(sx * 1.15, sy + len * 0.6, sx * 1.05, sy + len);
+      ctx.quadraticCurveTo(sx * 1.18, sy + len * 0.62, sx * 1.02, sy + len);
       ctx.strokeStyle = cssColor(i % 3 === 0 ? c.light : c.mid);
-      ctx.lineWidth = 1.1 * s;
+      ctx.lineWidth = 1.0 * s;
       ctx.stroke();
     }
     return;
   }
 
   if (species === 'acacia') {
-    // umbrella canopy on a forked trunk
-    branch(0, -trunkH * 0.85, -h * 0.2, -trunkH - h * 0.16, 1.6 * s);
-    branch(0, -trunkH * 0.85, h * 0.2, -trunkH - h * 0.2, 1.6 * s);
-    const cy = -trunkH - h * 0.22;
-    drawCanopyBlob(ctx, 0, cy, h * 0.36, h * 0.11, c.dark);
-    drawCanopyBlob(ctx, -h * 0.1, cy - h * 0.05, h * 0.24, h * 0.08, c.mid);
-    drawCanopyBlob(ctx, h * 0.1, cy - h * 0.03, h * 0.2, h * 0.07, c.light);
-    for (let i = 0; i < 4; i++) {
-      drawCanopyBlob(ctx, (rnd(i) - 0.5) * h * 0.5, cy - h * 0.1 - rnd(i + 1) * h * 0.05, h * 0.06, h * 0.04, c.rim);
+    branch(0, -trunkH * 0.8, -h * 0.18, -trunkH - h * 0.14, 1.4 * s);
+    branch(0, -trunkH * 0.8, h * 0.18, -trunkH - h * 0.17, 1.4 * s);
+    const cy = -trunkH - h * 0.19;
+    for (let i = 0; i < 5; i++) {
+      drawCanopyBlob(ctx, (rnd(i) - 0.5) * h * 0.62, cy + (rnd(i + 3) - 0.5) * h * 0.08, h * 0.19, h * 0.07, i % 2 ? c.dark : c.mid);
     }
+    drawCanopyBlob(ctx, -h * 0.12, cy - h * 0.05, h * 0.14, h * 0.05, c.light);
+    drawCanopyBlob(ctx, h * 0.06, cy - h * 0.03, h * 0.1, h * 0.04, c.rim, 0.8);
     return;
   }
 
-  // oak / default: layered blob canopy with a lit crown
-  const cy = -trunkH - h * 0.25;
-  const blobs: [number, number, number, number][] = [
-    [-h * 0.22, cy + h * 0.05, h * 0.23, h * 0.18],
-    [h * 0.2, cy + h * 0.03, h * 0.22, h * 0.17],
-    [0, cy - h * 0.1, h * 0.26, h * 0.2],
-    [-h * 0.1, cy + h * 0.14, h * 0.2, h * 0.15],
-    [h * 0.1, cy + h * 0.16, h * 0.18, h * 0.13],
+  // oak / default: layered irregular canopy with a sunlit crown
+  const cy = -trunkH - h * 0.2;
+  const canopyR = h * 0.29;
+  branch(0, -trunkH * 0.85, -h * 0.12, cy + h * 0.08, 1.5 * s);
+  branch(0, -trunkH * 0.85, h * 0.14, cy + h * 0.1, 1.4 * s);
+  // dark silhouette
+  const lobes: [number, number, number][] = [
+    [-0.72, 0.18, 0.56],
+    [-0.32, -0.42, 0.62],
+    [0.18, -0.5, 0.58],
+    [0.66, -0.1, 0.52],
+    [0.34, 0.34, 0.56],
+    [-0.22, 0.46, 0.5],
+    [0.02, 0.02, 0.66],
   ];
-  for (let i = 0; i < blobs.length; i++) {
-    const [bx, by, brx, bry] = blobs[i];
-    drawCanopyBlob(ctx, bx, by, brx, bry, i % 2 === 0 ? c.dark : c.mid);
+  for (const [lx, ly, lr] of lobes) {
+    drawCanopyBlob(ctx, canopyR * lx, cy + canopyR * ly, canopyR * lr, canopyR * lr * 0.9, c.dark);
   }
-  // mid-layer
-  drawCanopyBlob(ctx, -h * 0.12, cy - h * 0.02, h * 0.2, h * 0.15, c.mid);
-  drawCanopyBlob(ctx, h * 0.1, cy - h * 0.05, h * 0.18, h * 0.14, c.mid);
-  // lit crown (upper-left, sun from upper-left)
-  drawCanopyBlob(ctx, -h * 0.13, cy - h * 0.11, h * 0.15, h * 0.11, c.light);
-  drawCanopyBlob(ctx, -h * 0.2, cy - h * 0.16, h * 0.09, h * 0.07, c.rim);
-  drawCanopyBlob(ctx, h * 0.05, cy - h * 0.16, h * 0.08, h * 0.06, lightenColor(c.light, 0.12));
-  // leaf speckle
-  for (let i = 0; i < 10; i++) {
+  // mid layer, shifted up-left toward the sun
+  for (let i = 0; i < lobes.length - 2; i++) {
+    const [lx, ly, lr] = lobes[i];
+    drawCanopyBlob(ctx, canopyR * lx - 1.4 * s, cy + canopyR * ly - 2.2 * s, canopyR * lr * 0.78, canopyR * lr * 0.7, i % 2 ? c.mid : c.dark);
+  }
+  // lit crown
+  drawCanopyBlob(ctx, -canopyR * 0.34, cy - canopyR * 0.36, canopyR * 0.52, canopyR * 0.42, c.mid);
+  drawCanopyBlob(ctx, -canopyR * 0.42, cy - canopyR * 0.46, canopyR * 0.36, canopyR * 0.28, c.light);
+  drawCanopyBlob(ctx, -canopyR * 0.5, cy - canopyR * 0.52, canopyR * 0.2, canopyR * 0.15, c.rim);
+  drawCanopyBlob(ctx, canopyR * 0.18, cy - canopyR * 0.5, canopyR * 0.22, canopyR * 0.15, lightenColor(c.light, 0.12));
+  // sharp dark underside so the canopy sits on the trunk
+  drawCanopyBlob(ctx, canopyR * 0.05, cy + canopyR * 0.52, canopyR * 0.5, canopyR * 0.18, darkenColor(c.dark, 0.2), 0.75);
+  // leaf specks / edge leaves
+  for (let i = 0; i < 12; i++) {
     const a = rnd(i) * Math.PI * 2;
-    const rr = rnd(i + 4) * h * 0.22;
-    ctx.beginPath();
-    ctx.arc(Math.cos(a) * rr - h * 0.05, cy + Math.sin(a) * rr * 0.6 - h * 0.06, 0.9 * s, 0, Math.PI * 2);
-    ctx.fillStyle = cssColorAlpha(c.rim, 0.7);
-    ctx.fill();
+    const rr = canopyR * (0.55 + rnd(i + 4) * 0.5);
+    drawCanopyBlob(ctx, Math.cos(a) * rr - 1.2 * s, cy + Math.sin(a) * rr * 0.8, 1.3 * s, 1.0 * s, i % 3 === 0 ? c.rim : c.mid, 0.9);
   }
-  // blossoms (spring) / snow cap (winter wouldn't be here)
-  if (c.blossom) {
-    for (let i = 0; i < 9; i++) {
+  // spring blossom: a few tiny pale blooms, not white blobs
+  if (c.blossom && variant === 0) {
+    for (let i = 0; i < 7; i++) {
       const a = rnd(i + 11) * Math.PI * 2;
-      const rr = rnd(i + 21) * h * 0.2;
-      drawCanopyBlob(ctx, Math.cos(a) * rr - h * 0.04, cy + Math.sin(a) * rr * 0.6 - h * 0.08, 1.2 * s, 1 * s, c.blossom, 0.85);
+      const rr = canopyR * (0.2 + rnd(i + 21) * 0.65);
+      drawCanopyBlob(ctx, Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.7 - canopyR * 0.12, 0.62 * s, 0.5 * s, c.blossom, 0.6);
     }
   }
+  void s;
 }
 
 function drawStump(ctx: CanvasRenderingContext2D, h: number, c: TreeColors): void {
@@ -962,11 +978,11 @@ export class SpriteBank {
     const key = `${species}|${variant}|${sizeClass}|${season}`;
     const hit = this.trees.get(key);
     if (hit) return hit;
-    const h = [26, 35, 45][sizeClass] ?? 35;
-    const w = [34, 46, 58][sizeClass] ?? 46;
+    const h = [28, 38, 49][sizeClass] ?? 38;
+    const w = [36, 48, 60][sizeClass] ?? 48;
     const y0 = -(h + 14);
     const mapH = h + 14 + 8;
-    const c = treeColors(species, season);
+    const c = treeColors(species, season, variant);
     return this.make(key, this.trees, -w * 0.5, y0, w, mapH, TREE_SCALE, (ctx) => {
       drawTree(ctx, species, variant, h, c);
     });
@@ -977,7 +993,7 @@ export class SpriteBank {
     const hit = this.trees.get(key);
     if (hit) return hit;
     const h = 24;
-    const c = treeColors(species, season);
+    const c = treeColors(species, season, 0);
     return this.make(key, this.trees, -16, -26, 32, 34, TREE_SCALE, (ctx) => {
       drawStump(ctx, h, c);
     });

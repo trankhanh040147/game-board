@@ -48,6 +48,7 @@ import {
   cssColor,
   cssColorAlpha,
   diamondPath,
+  fbm2,
   hash2,
   hashInt,
   lightenColor,
@@ -244,6 +245,9 @@ export class WorldRenderer {
   private pointerInside = false;
 
   // debug
+  /** Debug toggles used by QA/screenshots. */
+  fogEnabled = true;
+  cloudsEnabled = true;
   private dayPhaseOverride: number | null = null;
   private stats: RenderStats = {
     frames: 0,
@@ -274,7 +278,7 @@ export class WorldRenderer {
     const cx = cap?.x ?? app.state.world.startX;
     const cy = cap?.y ?? app.state.world.startY;
     this.cam.setWorld(app.state.world.width, app.state.world.height);
-    this.cam.centerOnTile(cx, cy, 1);
+    this.cam.centerOnTile(cx, cy, 0.92);
     this.cam.snap();
 
     this.attachInput();
@@ -489,7 +493,7 @@ export class WorldRenderer {
     ctx.lineJoin = 'round';
 
     this.drawWorldSlab(ctx, world);
-    this.terrain.draw(ctx, this.cam, 2, { showGrid: !!this.app.view?.showGrid });
+    this.terrain.draw(ctx, this.cam, 6, { showGrid: !!this.app.view?.showGrid });
 
     if (this.overlay !== 'none') this.drawOverlay(ctx, state, world);
 
@@ -505,13 +509,17 @@ export class WorldRenderer {
     this.drawExpeditions(ctx, state, timeMs);
     this.drawMarkers(ctx, state, timeMs);
 
-    // fog of war
-    this.updateFog(state, world, dtMs);
-    if (this.fog) this.drawFogLayer(ctx, world);
-
     // ambient tint + lights
     const phase = this.dayPhaseOverride ?? this.palette.dayPhase(timeMs);
     const amb = this.palette.ambient(phase);
+
+    // advance the atmosphere (smoke plumes now know where the chimneys are)
+    this.fx.update(dt, world, weather, this.cam, timeMs, this.emitters);
+    if (this.cloudsEnabled) this.fx.drawClouds(ctx, world, amb, timeMs);
+
+    // fog of war
+    this.updateFog(state, world, dtMs);
+    if (this.fogEnabled && this.fog) this.drawFogLayer(ctx, world);
 
     // sky / grade
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -604,6 +612,22 @@ export class WorldRenderer {
     const h = world.height;
     const pal = this.palette;
 
+    // Tiles within one step of a building become a clearing: this is what makes
+    // a settlement readable inside a forest.
+    const clearing = new Uint8Array(tiles.length);
+    for (const b of state.buildings) {
+      const def = this.app.content.buildings[b.typeId];
+      const size = def?.size ?? 1;
+      for (let dy = -1; dy <= size; dy++) {
+        for (let dx = -1; dx <= size; dx++) {
+          const xx = b.x + dx;
+          const yy = b.y + dy;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          clearing[yy * w + xx] = 1;
+        }
+      }
+    }
+
     for (let y = 0; y < h; y++) {
       const row = y * w;
       for (let x = 0; x < w; x++) {
@@ -629,13 +653,18 @@ export class WorldRenderer {
           }
         } else if (seen) {
           const forest = t.forest ?? 0;
-          if (forest > 0.09 && t.buildingId < 0) {
+          // clump the canopy with low-frequency noise so forests have thickets,
+          // glades and edges instead of an even tree carpet
+          const clump = fbm2(x * 0.085 + 13, y * 0.085 + 29, 311);
+          const thicket = clamp01(forest * (0.32 + 1.35 * clump));
+          const cleared = clearing[idx] === 1 || t.buildingId >= 0 || t.road > 0;
+          if (thicket > 0.22 && !cleared) {
             const species = pal.treeSpecies(t);
             const speciesIdx = SPECIES_KEYS[species] ?? 0;
             let count = 1;
-            if (forest > 0.55) count = 3;
-            else if (forest > 0.3) count = 2;
-            const imp = clamp01(forest);
+            if (thicket > 0.8) count = 3;
+            else if (thicket > 0.5) count = 2;
+            const imp = clamp01(thicket);
             for (let k = 0; k < count; k++) {
               const hv = hash2(x * 7 + k * 13, y * 5 + k * 3, 97);
               const ox = (hv - 0.5) * 20;
@@ -656,7 +685,7 @@ export class WorldRenderer {
               });
               total++;
             }
-          } else if (forest <= 0.09 && (pal.style(t).def?.forest ?? 0) > 0.45 && t.buildingId < 0 && hash2(x, y, 211) > 0.45) {
+          } else if (forest <= 0.09 && (pal.style(t).def?.forest ?? 0) > 0.45 && !cleared && hash2(x, y, 211) > 0.45) {
             // depleted forest: stumps & brash
             const speciesIdx = SPECIES_KEYS[pal.treeSpecies(t)] ?? 0;
             bucket.push({ x, y, mx, my, kind: DECO_STUMP, sub: speciesIdx, imp: 0.5, phase: hash2(x, y, 29), color: 0, ref: -1 });
@@ -846,9 +875,9 @@ export class WorldRenderer {
     const cx = W * 0.5;
     const cy = H * 0.42;
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.72);
-    g.addColorStop(0, '#1c1710');
-    g.addColorStop(0.55, '#151109');
-    g.addColorStop(1, '#0a0806');
+    g.addColorStop(0, '#241d14');
+    g.addColorStop(0.55, '#191309');
+    g.addColorStop(1, '#0d0a07');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
@@ -978,13 +1007,13 @@ export class WorldRenderer {
     const a = t * 0.8 + e.phase * 6.283;
     const s1 = Math.sin(a);
     const s2 = Math.sin(a * 1.7 + 2.1);
-    const alpha = 0.05 + 0.07 * (s1 * 0.5 + 0.5);
+    const alpha = 0.09 + 0.13 * (s1 * 0.5 + 0.5);
     if (alpha <= 0.02) return;
     const wobX = Math.cos(a * 0.7) * 7;
     const wobY = Math.sin(a * 1.3) * 2.4;
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = cssColorAlpha(0xe8f4f8, 1);
-    ctx.lineWidth = 1.1;
+    ctx.strokeStyle = cssColorAlpha(0xeaf6fa, 1);
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(e.mx - 9 + wobX, e.my + wobY);
     ctx.quadraticCurveTo(e.mx + wobX, e.my - 2.2 + wobY, e.mx + 9 + wobX, e.my + wobY);
@@ -1526,42 +1555,47 @@ export class WorldRenderer {
         tctx.closePath();
       }
     }
-    tctx.fillStyle = 'rgba(12,10,8,1)';
+    tctx.fillStyle = 'rgba(19,16,12,1)';
     tctx.fill();
-    // soft cloud edge + parchment ink texture
+    // soft cloud edge: a tight feather plus a wide halo
     fctx.setTransform(1, 0, 0, 1, 0, 0);
     fctx.clearRect(0, 0, cw, ch);
-    const blur = 5;
     const canFilter = typeof (fctx as CanvasRenderingContext2D & { filter?: string }).filter === 'string';
     if (canFilter) {
-      fctx.filter = `blur(${blur}px)`;
+      fctx.filter = 'blur(4px)';
+      fctx.globalAlpha = 0.97;
+      fctx.drawImage(fog.temp, 0, 0);
+      fctx.filter = 'blur(14px)';
+      fctx.globalAlpha = 0.4;
       fctx.drawImage(fog.temp, 0, 0);
       fctx.filter = 'none';
+      fctx.globalAlpha = 1;
     } else {
       fctx.drawImage(fog.temp, 0, 0);
     }
-    // mottled ink so unexplored land isn't a flat void
-    const tone = this.palette.fogColor();
-    const mottle = makeCanvas(24, 24);
-    const mctx = mottle.getContext('2d');
-    if (mctx) {
-      for (let i = 0; i < 60; i++) {
-        const px = hash2(i, 3, 5) * 24;
-        const py = hash2(i, 7, 9) * 24;
-        const r = 1 + hash2(i, 11, 13) * 3.2;
-        mctx.beginPath();
-        mctx.arc(px, py, r, 0, Math.PI * 2);
-        mctx.fillStyle = cssColorAlpha(tone, 0.10 + hash2(i, 17, 19) * 0.1);
-        mctx.fill();
+    // faint warm ink wash inside the fog so it reads as vellum, not void
+    fctx.globalCompositeOperation = 'source-atop';
+    fctx.fillStyle = 'rgba(76,60,38,0.16)';
+    fctx.fillRect(0, 0, cw, ch);
+    const paper = makeCanvas(96, 96);
+    const pctx = paper.getContext('2d');
+    if (pctx) {
+      for (let i = 0; i < 220; i++) {
+        const px = hash2(i, 3, 5) * 96;
+        const py = hash2(i, 7, 9) * 96;
+        const r = 0.6 + hash2(i, 11, 13) * 2.4;
+        pctx.beginPath();
+        pctx.arc(px, py, r, 0, Math.PI * 2);
+        pctx.fillStyle = cssColorAlpha(0x2a2116, 0.05 + hash2(i, 17, 19) * 0.08);
+        pctx.fill();
       }
     }
-    const pat = fctx.createPattern(mottle, 'repeat');
+    const pat = fctx.createPattern(paper, 'repeat');
     if (pat) {
-      fctx.globalCompositeOperation = 'source-atop';
       fctx.fillStyle = pat;
       fctx.fillRect(0, 0, cw, ch);
-      fctx.globalCompositeOperation = 'source-over';
     }
+    fctx.globalCompositeOperation = 'source-over';
   }
 
   private drawFogLayer(ctx: CanvasRenderingContext2D, world: WorldState): void {

@@ -497,7 +497,7 @@ export const ERAS: EraDef[] = [
     name: 'The Walled Towns',
     index: 2,
     desc: 'Timber and stone become streets. There are people who have never seen the field that feeds them, and laws about who owns which shadow.',
-    requirement: { techs: 14, population: 30, buildings: 10, culture: 15 },
+    requirement: { techs: 14, population: 25, buildings: 10, culture: 15 },
     doctrines: ['chroniclers', 'emberwardens'],
     unlocksText: 'Libraries, clinics, temples, brick and glass, standing walls, and the first codified law.',
   },

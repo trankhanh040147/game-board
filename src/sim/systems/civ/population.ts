@@ -38,6 +38,7 @@ import {
   buildingDef,
   clamp,
   foodDaysOf,
+  foodUnits,
   isFood,
   modOf,
   professionClass,
@@ -507,21 +508,24 @@ function processCitizen(ctx: SimContext, day: SettlementDay, c: Citizen, byId: M
   const healthRate = clamp(1 + modOf(ctx, st.id, 'healthRate'), 0.4, 1.8);
   c.health = clamp(c.health + (healthTarget - c.health) * 0.055 * healthRate, 0, 100);
 
-  // Starvation and thirst are lethal, not merely sad: the damage grows faster
-  // than the body can recover, so a settlement that ignores its stores loses
-  // people rather than drifting along at low health forever.
+  // Starvation and thirst are lethal, but only in a real famine: a settlement
+  // that is merely short rations gets hungry and weak, while one with almost
+  // nothing left loses people. (Lead's fairness rule: no deaths until supply is
+  // below ~a third of demand, so warnings always arrive before the funerals.)
   const frail = c.age < 6 || c.age > 65 ? 1.3 : 1;
   // Damage worsens as the body weakens, so decline is a slope rather than a
   // plateau: a starving settlement loses people within a couple of weeks.
   const weakFactor = 1 + Math.max(0, 60 - c.health) / 60;
-  if (c.hunger > 62) {
-    const severity = (c.hunger - 62) / 38;
+  const trueFamine = day.foodSat < 32;
+  const trueDrought = day.waterSat < 32 && (c.thirst > 90 || !day.foodSat);
+  if (trueFamine && c.hunger > 75) {
+    const severity = (c.hunger - 75) / 25;
     const damage =
       LIMITS.starvationHealthLoss * severity * (1 + severity * 1.6) * frail * weakFactor * (1 + Math.max(0, mods.deathRate ?? 0));
     c.health = clamp(c.health - damage, 0, 100);
   }
-  if (c.thirst > 60) {
-    const severity = (c.thirst - 60) / 40;
+  if (trueDrought && c.thirst > 70) {
+    const severity = (c.thirst - 70) / 30;
     const damage = LIMITS.dehydrationHealthLoss * severity * (1 + severity * 1.4) * frail * weakFactor;
     c.health = clamp(c.health - damage, 0, 100);
   }
@@ -672,7 +676,7 @@ function processSettlement(ctx: SimContext, st: Settlement): void {
 
   // ---- births --------------------------------------------------------------
   const housingSpare = st.housing.capacity - st.housing.occupied;
-  if (housingSpare > 0 && foodSat > 45 && st.foodDays > 2 && avgMorale > 30) {
+  if (housingSpare > 0 && foodSat > 45 && st.foodDays > 5 && avgMorale > 30) {
     for (const c of citizens) {
       if (!isFertile(c)) continue;
       if (c.homeBuildingId < 0) continue; // a couple needs a roof before a cradle
@@ -680,6 +684,7 @@ function processSettlement(ctx: SimContext, st: Settlement): void {
       const spouse = s.citizens.find((x) => x.id === c.spouseId);
       if (!spouse || !spouse.alive) continue;
       if (spouse.homeBuildingId < 0) continue;
+      if (st.foodDays < 5) continue; // no cradles in a thin larder
       let chance = rules.birthChance;
       chance *= 1 + modOf(ctx, st.id, 'birthRate');
       chance *= 1 + (c.age >= 20 && c.age <= 34 ? 0.25 : 0);
@@ -767,6 +772,33 @@ function processSettlement(ctx: SimContext, st: Settlement): void {
     }
   }
 
+  // ---- famine exodus: families leave before the dying starts -----------------
+  // Emigration is the safety valve: people would rather walk to a cousin's
+  // hearth than starve in yours. This happens *before* death rolls so a doomed
+  // winter sheds people instead of corpses, and it is visible in the chronicle.
+  let famineExodusToday = 0;
+  if (st.foodDays < 2 && avgMorale < 45 && citizens.length > 2) {
+    const doomed = st.foodDays < 0.5 && avgMorale < 20;
+    const foodAvailable = foodUnits(ctx.c, st) > 1;
+    const rate = 0.01 + clamp((45 - avgMorale) / 100, 0, 0.02); // 1-3% of adults/day
+    const leavers = citizens.filter((c) => c.alive && !c.notable && c.age >= 16 && c.childIds.length === 0 && !c.pregnant);
+    for (const leaver of leavers) {
+      if (!doomed && citizens.length - famineExodusToday <= 2) break;
+      if (foodAvailable && citizens.length - famineExodusToday <= 2) break;
+      if (ctx.rng() >= rate) continue;
+      departCitizen(ctx, st, leaver, 'left for a better larder');
+      famineExodusToday++;
+    }
+    if (famineExodusToday > 0) {
+      ctx.notify(
+        `Families are leaving ${st.name}. The stores are empty and people would rather walk than starve.`,
+        'bad',
+        'homesick',
+      );
+      st.morale = clamp(st.morale - 2, 0, 100);
+    }
+  }
+
   // ---- natural death -------------------------------------------------------
   const deathRate = 1 + Math.max(0, modOf(ctx, st.id, 'deathRate'));
   let starvedToday = 0;
@@ -804,6 +836,13 @@ function processSettlement(ctx: SimContext, st: Settlement): void {
   const openBorders = !!s.society.policies['open_borders'];
   const closedBorders = !!s.society.policies['closed_borders'];
   const spareBeds = Math.max(0, st.housing.capacity - st.housing.occupied);
+  const foodStockUnits = foodUnits(ctx.c, st);
+  const winter = s.world.weather.season === 'winter';
+  // Nobody joins a settlement that cannot feed the people it already has. This
+  // is the main guard against immigration-driven overshoot into a famine.
+  const foodSurplus = st.foodDays > 5 && foodStockUnits >= totalPop * 2;
+  const canTakeOne = foodSurplus && st.foodDays > (winter ? 8 : 6);
+  const canTakeTwo = foodSurplus && st.foodDays > (winter ? 12 : 10);
   const foodFactor = clamp(st.foodDays / 10, 0.15, 1.15);
   let moraleFactor = clamp(avgMorale / 60, 0.25, 1.3);
   if (openBorders) moraleFactor *= 1.2;
@@ -856,9 +895,9 @@ function processSettlement(ctx: SimContext, st: Settlement): void {
   // The first companion: guaranteed by day 5 as soon as there is a spare bed.
   if (st.population <= 2 && spareBeds > 0 && st.foodDays > 3 && ctx.tick >= 4) {
     spawnImmigrants(Math.min(1, spareBeds), 'first-wanderer');
-  } else if (ctx.tick >= 6 && ctx.tick % 3 === 0 && spareBeds > 0 && st.foodDays > 3) {
-    // Word of a growing hearth travels with pedlars and herdsmen. Spare beds are
-    // the binding constraint: no roof, no newcomer.
+  } else if (ctx.tick >= 6 && ctx.tick % 3 === 0 && spareBeds > 0 && canTakeOne) {
+    // Word of a growing hearth travels with pedlars and herdsmen. Spare beds and
+    // a full larder are both binding: no roof or no surplus, no newcomer.
     const foodSurplusBonus = st.foodDays > 10 ? 0.15 : st.foodDays > 5 ? 0.06 : 0;
     const moraleBonus = avgMorale > 65 ? 0.08 : 0;
     let chance = clamp(0.12 + 0.22 * spareBeds + foodSurplusBonus + moraleBonus, 0, 0.8);
@@ -867,7 +906,9 @@ function processSettlement(ctx: SimContext, st: Settlement): void {
     if (closedBorders) chance *= 0.75;
     if (s.difficulty === 'harsh') chance *= 0.8;
     if (ctx.rng() < chance) {
-      const wanted = Math.min(spareBeds, chance > 0.6 && ctx.rng() < 0.35 ? 2 : 1);
+      // Families only travel when there is enough to eat; singles when merely tight.
+      const wantsTwo = canTakeTwo && chance > 0.5 && ctx.rng() < 0.4;
+      const wanted = Math.min(spareBeds, wantsTwo ? 2 : 1);
       spawnImmigrants(Math.max(1, wanted), 'immigrant');
     }
   }
@@ -890,8 +931,8 @@ function processSettlement(ctx: SimContext, st: Settlement): void {
     }
   }
 
-  // Emigration: the miserable vote with their feet.
-  const hopeless = avgMorale < 26 || (st.foodDays < 1 && citizens.length > 2);
+  // Emigration: the miserable vote with their feet (not twice in one day).
+  const hopeless = famineExodusToday === 0 && (avgMorale < 26 || (st.foodDays < 1 && citizens.length > 2));
   if (hopeless && citizens.length > 1 && ctx.rng() < 0.018 + (30 - avgMorale) * 0.0008) {
     const leavers = citizens.filter((c) => !c.notable && c.age >= 16 && c.childIds.length === 0);
     if (leavers.length > 0) {
@@ -1098,7 +1139,13 @@ export const populationSystem: SimSystem = (ctx: SimContext): void => {
   // Rebuild the full citizen list once; it can change while we run.
   for (const st of s.settlements) {
     try {
-      if (st.population === 0 && !s.citizens.some((c) => c.alive && c.settlementId === st.id)) {
+      const hasDetailed = s.citizens.some((c) => c.alive && c.settlementId === st.id);
+      const hasCohorts = s.cohorts.some((co) => co.settlementId === st.id && co.count > 0);
+      if (!hasDetailed && !hasCohorts) {
+        // Truly empty: keep the caches honest without doing needless work.
+        st.population = 0;
+        st.foodDays = foodDaysOf(s, ctx.c, st);
+        st.waterDays = waterDaysOf(s, st);
         continue;
       }
       processSettlement(ctx, st);

@@ -6,7 +6,8 @@
  *  - new-game, save/load/settings/help modals
  *  - first-run onboarding overlay
  */
-import type { Content, EventChoice, EventEffect, GameState, PendingDecision } from '../sim/types';
+import type { Content, EventChoice, EventEffect, GameState, ModifierKey, PendingDecision } from '../sim/types';
+import { MODIFIER_META } from '../sim/types';
 import { capitalOf, dateLabel, evalCondition } from '../sim/core';
 import { computeMetric } from '../sim/metrics';
 import { DIFFICULTIES, type Difficulty } from '../sim/config';
@@ -16,6 +17,7 @@ import {
   chip,
   costChips,
   esc,
+  modValueText,
   escAttr,
   fmt,
   fmtInt,
@@ -148,6 +150,13 @@ export class ModalHost {
     while (this.stack.length) this.close();
   }
 
+  /** Close every modal except one id (used when a decision demands attention). */
+  closeOthers(keepId: string): void {
+    for (const entry of [...this.stack]) {
+      if (entry.config.id !== keepId) this.close(entry.config.id);
+    }
+  }
+
   private syncBody(): void {
     document.body.classList.toggle('fh-has-modal', this.stack.length > 0);
   }
@@ -208,6 +217,8 @@ export class DecisionModal {
     const key = `${decision.id}:${s.tick >> 3}:${pending.length}`;
     if (this.host.isOpen('decision') && this.lastKey === key) return;
     this.lastKey = key;
+    // A decision takes precedence over any other dialog on screen.
+    this.host.closeOthers('decision');
     this.show(decision, pending.length);
   }
 
@@ -429,6 +440,7 @@ export class EraBanner {
   private timer = 0;
   private lastEra = -1;
   private dismissed = new Set<string>();
+  private action: 'codex' | null = null;
 
   constructor(private readonly svc: Services) {
     this.root = document.createElement('div');
@@ -437,7 +449,14 @@ export class EraBanner {
     this.root.hidden = true;
     this.root.addEventListener('click', (ev) => {
       const target = ev.target instanceof Element ? ev.target.closest('[data-dismiss]') : null;
-      if (target) this.hide();
+      if (target) {
+        this.hide();
+        return;
+      }
+      if (this.action === 'codex') {
+        this.hide();
+        this.svc.openPanel('codex');
+      }
     });
   }
 
@@ -462,11 +481,13 @@ export class EraBanner {
     // Doctrine offers are also a moment worth flagging.
     if (s.research.doctrineChoices?.length && !s.research.doctrine && !this.dismissed.has('doctrine')) {
       this.dismissed.add('doctrine');
-      this.show('A creed is offered', 'Your people look for a shape to believe in. Three paths lie open — choose one in the Codex.', 'Open the Codex to choose your doctrine.', 'Doctrine');
+      this.action = 'codex';
+      this.show('A creed is offered', 'Your people look for a shape to believe in. A path must be chosen — click here to open the Codex.', 'Choose your doctrine →', 'Doctrine');
     }
   }
 
   show(title: string, body: string, foot: string, eyebrow: string): void {
+    if (eyebrow !== 'Doctrine') this.action = null;
     this.root.hidden = false;
     this.root.classList.add('is-visible');
     this.root.innerHTML = `
@@ -550,6 +571,8 @@ export class WelcomeOverlay {
   }
 
   shouldShow(): boolean {
+    const s = this.svc.app.state;
+    if (s.tick > 1 || (s.tutorial?.step ?? 0) > 0) return false;
     try {
       return localStorage.getItem(WELCOME_KEY) !== '1';
     } catch {
@@ -601,7 +624,7 @@ export function openNewGameModal(svc: Services, host: ModalHost): void {
       const d = DIFFICULTIES[key];
       const mods = Object.entries(d.mods ?? {})
         .filter(([, v]) => typeof v === 'number' && v !== 0)
-        .map(([k, v]) => `${pretty(k)} ${signed((v as number) * 100, 0)}%`);
+        .map(([k, v]) => `${MODIFIER_META[k as ModifierKey]?.label ?? pretty(k)} ${modValueText(k as ModifierKey, v as number)}`);
       return `<button type="button" class="fh-difficulty ${key === difficulty ? 'is-active' : ''} clickable" data-difficulty="${key}" aria-pressed="${key === difficulty}">
         <span class="fh-difficulty-title">${esc(d.label)}</span>
         <span class="fh-difficulty-desc">${esc(d.desc)}</span>

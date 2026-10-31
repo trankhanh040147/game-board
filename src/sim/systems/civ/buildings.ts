@@ -35,6 +35,7 @@ import {
   clamp,
   clamp01,
   canAfford,
+  foodDaysOf,
   modOf,
   radiusIndices,
   removeStock,
@@ -64,8 +65,16 @@ export const BUILDINGS_TUNING = {
   repairCostFraction: 0.16,
   /** Repair only cares about meaningful damage. */
   repairThreshold: 0.995,
-  /** Days a ruined shell stands before it collapses. */
-  ruinCollapseDays: 15,
+  /** Days a ruined *collapsible* shell stands before it collapses (industry only). */
+  ruinCollapseDays: 60,
+  /** Critical civic buildings never collapse from neglect; they stop at this condition. */
+  ruinedCriticalFloor: 0.02,
+  /** A building at/below this condition counts as a repairable ruin. */
+  ruinConditionThreshold: 0.1,
+  /** Fraction of build cost to restore a ruin straight back to working order. */
+  restorationCostFraction: 0.3,
+  /** Condition a restored ruin comes back at. */
+  restorationCondition: 0.6,
   /** Minimum construction progress per day with no workers at all. */
   noWorkerConstructionRate: 0.055,
   /** Pollution emitted per def.pollution point, per tile per day. */
@@ -100,6 +109,16 @@ export const BUILDINGS_TUNING = {
 
 /** Modifier keys whose values are flat units, not fractions. */
 export const FLAT_MODIFIER_KEYS = new Set<ModifierKey>(['moraleFlat', 'insightFlat']);
+
+/**
+ * Civic categories a settlement cannot lose to neglect: if they fall into ruin
+ * they remain repairable shells forever. Losing a well/granary/house to a bad
+ * harvest turns a survivable famine into an extinction event.
+ */
+const CRITICAL_CATEGORIES = new Set<string>(['housing', 'food', 'gathering', 'water', 'storage', 'society', 'science']);
+
+/** Only heavy works with no survival function may collapse from long neglect. */
+const COLLAPSIBLE_CATEGORIES = new Set<string>(['industry', 'beauty', 'energy', 'defence']);
 
 const EPS = 1e-6;
 
@@ -201,8 +220,23 @@ export function energyResourceId(c: Content): ResourceId | null {
  * food and timber: it is a small survival buffer, topped up by wells/waterworks
  * a little at a time, since population also draws from rivers and rain.
  */
-export function waterBufferTarget(st: Settlement): number {
-  return Math.max(8, Math.min(st.storageCap * 0.2, st.population * 1.5 + 8));
+export function waterBufferTarget(ctx: SimContext, st: Settlement): number {
+  // A useful cistern: 2-3 wells should fill a reservoir worth days of drinking,
+  // not saturate after one bucket. Capped as a share of total storage so water
+  // can never crowd out food and timber.
+  const base = Math.max(40, st.population * 2 + 20);
+  return Math.max(8, Math.min(st.storageCap * waterCapacityShare(ctx, st.id), base));
+}
+
+/** Share of storage a settlement will ever dedicate to water (towers unlock more). */
+function waterCapacityShare(ctx: SimContext, settlementId: number): number {
+  for (const b of ctx.s.buildings) {
+    if (b.settlementId !== settlementId || b.progress < 1) continue;
+    const def = ctx.c.buildings[b.typeId];
+    if (!def) continue;
+    if (b.typeId === 'water_tower' || def.tags?.includes('water_tower') || def.tags?.includes('tower')) return 0.3;
+  }
+  return 0.22;
 }
 
 /** True when the building's work is exposed to the sky (winter / storms hurt). */
@@ -246,6 +280,17 @@ export function setSettlementAlert(st: Settlement, alert: Alert): void {
 
 export function clearSettlementAlert(st: Settlement, kind: Alert['kind'], title: string): void {
   st.alerts = st.alerts.filter((a) => !(a.kind === kind && a.title === title));
+}
+
+/**
+ * True while a settlement is in an active crisis (famine, or literally nothing
+ * left in the store to maintain anything). In that state nobody repairs and
+ * buildings stop decaying: "the people are starving; the walls remain".
+ */
+export function settlementInCrisis(ctx: SimContext, st: Settlement): boolean {
+  if (foodDaysOf(ctx.s, ctx.c, st) < 2) return true;
+  if (stockTotal(st) < 0.5) return true;
+  return false;
 }
 
 /**
@@ -314,6 +359,9 @@ export function buildingsSystem(ctx: SimContext): void {
     const serviceCap: Record<string, number> = {};
     const upkeepNeed: Record<ResourceId, number> = {};
     const waterId = waterResourceId(c);
+    // In a famine (or with literally nothing left to maintain anything) decay
+    // halts entirely: starving people do not repair, but the walls remain.
+    const crisis = settlementInCrisis(ctx, st);
 
     // -----------------------------------------------------------------
     // Pass 1 — construction progress, decay, aggregates
@@ -338,11 +386,16 @@ export function buildingsSystem(ctx: SimContext): void {
       const activity = activityOf(c, b);
       const tile = tileAt(s.world, b.x, b.y);
       const pollutionStress = clamp01(tile?.pollution ?? 0);
-      const decay =
-        BUILDINGS_TUNING.conditionDecayPerDay *
-        (0.4 + 0.6 * activity) *
-        (1 + pollutionStress * BUILDINGS_TUNING.pollutionDecayStress);
-      b.condition = Math.max(0, b.condition - decay);
+      const critical = CRITICAL_CATEGORIES.has(def.category);
+      if (!crisis) {
+        const decay =
+          BUILDINGS_TUNING.conditionDecayPerDay *
+          (0.4 + 0.6 * activity) *
+          (1 + pollutionStress * BUILDINGS_TUNING.pollutionDecayStress);
+        let next = b.condition - decay;
+        if (critical && next < BUILDINGS_TUNING.ruinedCriticalFloor) next = BUILDINGS_TUNING.ruinedCriticalFloor;
+        b.condition = Math.max(0, next);
+      }
 
       const condFactor = 0.3 + 0.7 * b.condition;
 
@@ -394,9 +447,16 @@ export function buildingsSystem(ctx: SimContext): void {
 
     if (paidRatio < 0.999) {
       const unpaidFraction = 1 - paidRatio;
-      for (const b of list) {
-        if (b.progress < 1) continue;
-        b.condition = Math.max(0, b.condition - BUILDINGS_TUNING.unpaidUpkeepDecay * unpaidFraction);
+      if (!crisis) {
+        for (const b of list) {
+          if (b.progress < 1) continue;
+          const def = c.buildings[b.typeId];
+          if (!def) continue;
+          const critical = CRITICAL_CATEGORIES.has(def.category);
+          let next = b.condition - BUILDINGS_TUNING.unpaidUpkeepDecay * unpaidFraction;
+          if (critical && next < BUILDINGS_TUNING.ruinedCriticalFloor) next = BUILDINGS_TUNING.ruinedCriticalFloor;
+          b.condition = Math.max(0, next);
+        }
       }
       setSettlementAlert(st, {
         id: `upkeep_unpaid_${st.id}`,
@@ -411,42 +471,88 @@ export function buildingsSystem(ctx: SimContext): void {
     }
 
     if (st.governor.autoRepair) {
+      const costMod = 1 + modOf(ctx, st.id, 'constructionCost');
       for (const b of list) {
         if (b.progress < 1 || b.condition >= BUILDINGS_TUNING.repairThreshold) continue;
         const def = c.buildings[b.typeId];
         if (!def) continue;
+
+        if (b.condition <= BUILDINGS_TUNING.ruinConditionThreshold) {
+          // Repairable ruin: pay a lump sum of materials to bring it back to
+          // working order. Nothing is ever lost silently.
+          const restore = scaleCost(def.cost, BUILDINGS_TUNING.restorationCostFraction * costMod);
+          if (!canAfford(st, restore)) continue;
+          if (!payCost(st, restore)) continue;
+          b.condition = BUILDINGS_TUNING.restorationCondition;
+          b.active = b.enabled;
+          b.status = b.enabled ? 'Working' : 'Paused';
+          delete s.flags[`ruin_days_${b.id}`];
+          continue;
+        }
+
         const damage = 1 - b.condition;
-        const cost = scaleCost(
-          def.cost,
-          damage * BUILDINGS_TUNING.repairCostFraction * (1 + modOf(ctx, st.id, 'constructionCost')),
-        );
+        const cost = scaleCost(def.cost, damage * BUILDINGS_TUNING.repairCostFraction * costMod);
         if (!canAfford(st, cost)) continue;
         if (!payCost(st, cost)) continue;
         b.condition = Math.min(1, b.condition + BUILDINGS_TUNING.repairGain * damage);
       }
     }
 
-    // Ruined shells collapse after standing abandoned for a while.
+    // Ruins: critical civic buildings become permanent repairable shells; only
+    // collapsible industry may eventually be lost to long neglect, and never
+    // while the settlement is in crisis.
+    let anyRuin = false;
+    const noticeKey = `ruin_notice_${st.id}`;
     for (const b of list) {
       if (b.progress < 1) continue;
       const def = c.buildings[b.typeId];
       if (!def) continue;
       const key = `ruin_days_${b.id}`;
+      const critical = CRITICAL_CATEGORIES.has(def.category);
+      const atRuin = b.condition <= BUILDINGS_TUNING.ruinConditionThreshold;
+
+      if (atRuin) {
+        anyRuin = true;
+        if (!s.flags[noticeKey]) {
+          s.flags[noticeKey] = 1;
+          ctx.notify(
+            `Buildings are falling into ruin at ${st.name} — materials are needed for repairs.`,
+            'warn',
+            'hammer',
+          );
+        }
+        setSettlementAlert(st, {
+          id: `ruin_${st.id}`,
+          kind: 'economy',
+          severity: 2,
+          title: 'Buildings in ruin',
+          detail: 'Roofs are giving way for want of maintenance. Restore materials to repair them.',
+          sinceTick: ctx.tick,
+        });
+      }
+
       if (b.condition <= 0.05) {
         b.active = false;
         b.status = 'Ruined';
+      }
+
+      const mayCollapse =
+        COLLAPSIBLE_CATEGORIES.has(def.category) && !critical && !crisis && st.population > 0 && stockTotal(st) > 0.5;
+      if (atRuin && mayCollapse) {
         const days = (s.flags[key] ?? 0) + 1;
         s.flags[key] = days;
-        if (days === 1) {
-          ctx.notify(`${def.name} has fallen into ruin.`, 'warn', 'skull');
-        } else if (days > BUILDINGS_TUNING.ruinCollapseDays) {
+        if (days > BUILDINGS_TUNING.ruinCollapseDays) {
           delete s.flags[key];
-          destroyBuilding(s, c, b, 'neglect');
-          ctx.notify(`The ruined ${def.name} has collapsed.`, 'bad', 'skull');
+          destroyBuilding(s, c, b, 'long neglect');
+          ctx.notify(`The ruined ${def.name} has finally collapsed.`, 'bad', 'skull');
         }
       } else if (s.flags[key] !== undefined) {
         delete s.flags[key];
       }
+    }
+    if (!anyRuin) {
+      clearSettlementAlert(st, 'economy', 'Buildings in ruin');
+      if (s.flags[noticeKey] !== undefined) delete s.flags[noticeKey];
     }
 
     // -----------------------------------------------------------------
@@ -478,7 +584,7 @@ export function buildingsSystem(ctx: SimContext): void {
         const mult = 1 + modOf(ctx, st.id, 'waterAvailability');
         const gross = waterService * Math.max(0, mult);
         const currentWater = stockOf(st, waterId);
-        const bufferTarget = waterBufferTarget(st);
+        const bufferTarget = waterBufferTarget(ctx, st);
         const targetRoom = Math.max(0, bufferTarget - currentWater);
         let globalRoom = Math.max(0, st.storageCap - stockTotal(st));
         let wanted = Math.min(gross, targetRoom);

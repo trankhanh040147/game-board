@@ -13,7 +13,7 @@ export const RULES: GameRules = {
   daysPerSeason: DAYS_PER_SEASON,
   daysPerYear: DAYS_PER_YEAR,
   foodPerCitizen: 0.6,
-  waterPerCitizen: 0.9,
+  waterPerCitizen: 0.75,
   insightPerScholar: 1.15,
   laborFraction: 0.62,
   birthChance: 0.0115,
@@ -22,8 +22,8 @@ export const RULES: GameRules = {
   metricsMaxPoints: 420,
   startingResources: {
     berries: 18,
-    wood: 30,
-    stone: 10,
+    wood: 42,
+    stone: 14,
     fiber: 10,
   },
 };

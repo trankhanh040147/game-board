@@ -433,7 +433,7 @@ export function foodDaysOf(s: GameState, c: Content, st: Settlement): number {
 
 export function waterDaysOf(s: GameState, st: Settlement): number {
   if (st.population <= 0) return 0;
-  const need = Math.max(0.001, st.population * 0.9);
+  const need = Math.max(0.001, st.population * 0.75);
   return (st.stock.water ?? 0) / need;
 }
 

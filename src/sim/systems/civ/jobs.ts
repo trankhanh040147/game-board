@@ -87,7 +87,9 @@ interface Candidate {
 // ---------------------------------------------------------------------------
 
 function workingEligible(c: Citizen): boolean {
-  return c.alive && isWorkingAge(c.age) && c.health > 30 && !c.pregnant;
+  // People work through hardship: a hungry settlement needs hands in the field,
+  // not a workforce that all quits at once. Only the truly dying are excused.
+  return c.alive && isWorkingAge(c.age) && c.health > 18 && c.hunger < 92 && c.thirst < 95;
 }
 
 function traitsBonus(c: Citizen): number {
@@ -270,6 +272,7 @@ function assignSettlement(ctx: SimContext, st: Settlement): void {
     score += c.health * 0.04;
     score += c.morale * 0.02;
     score += clamp(c.education, 0, 100) * 0.04;
+    if (c.pregnant) score -= 6;
     const home = c.homeBuildingId >= 0 ? buildingById.get(c.homeBuildingId) : null;
     score -= (home ? Math.hypot(home.x - b.x, home.y - b.y) : 1.5) * 1.1;
     if (c.hunger > 55) score -= 12;
@@ -408,7 +411,35 @@ function assignSettlement(ctx: SimContext, st: Settlement): void {
     if (order[i]!.construction && needs[i]! > 0) unfilledConstruction.push(order[i]!.building);
   }
 
+  // 4b) Critical work: when the larder is nearly empty, at least one food or
+  // gathering building must be staffed even if that means pulling a hand off a
+  // workshop. A settlement can postpone pottery; it cannot postpone eating.
+  if (st.foodDays < 5) {
+    const foodEntries = order.filter((e) => !e.construction && (e.def.category === 'food' || e.def.category === 'gathering'));
+    const unstaffedFood = foodEntries.find((e) => e.building.workers === 0);
+    if (unstaffedFood) {
+      const nonCritical = order
+        .filter((e) => !e.construction && e.def.category !== 'food' && e.def.category !== 'gathering' && e.building.workerIds.length > 0)
+        .sort((a, b) => a.priority - b.priority)[0];
+      if (nonCritical) {
+        const stolen = nonCritical.building.workerIds.pop();
+        if (stolen !== undefined) {
+          nonCritical.building.workers = nonCritical.building.workerIds.length;
+          const c = ctx.s.citizens.find((x) => x.id === stolen);
+          const targetUnit = unitsByEntry[order.indexOf(unstaffedFood)]?.[unstaffedFood.building.workerIds.length];
+          unstaffedFood.building.workerIds.push(stolen);
+          unstaffedFood.building.workers = unstaffedFood.building.workerIds.length;
+          if (c) {
+            c.jobBuildingId = unstaffedFood.building.id;
+            if (targetUnit) c.profession = targetUnit.profession;
+          }
+        }
+      }
+    }
+  }
+
   // 5) LOD cohorts: abstract hands fill what detailed citizens could not.
+  const cohortGiven = new Map<number, number>();
   let detailedWorkers = 0;
   for (const b of s.buildings) if (b.settlementId === st.id) detailedWorkers += b.workers;
   let cohortHands = 0;
@@ -422,8 +453,28 @@ function assignSettlement(ctx: SimContext, st: Settlement): void {
     if (open <= 0) continue;
     const give = Math.min(open, labour);
     b.workers += give;
+    cohortGiven.set(b.id, (cohortGiven.get(b.id) ?? 0) + give);
     labour -= give;
     cohortHands += give;
+  }
+
+  // 5b) Normalise caches: b.workers is exactly the roster, workerIds are unique
+  // and every assigned citizen points at the building that pays them.
+  for (const b of s.buildings) {
+    if (b.settlementId !== st.id) continue;
+    const seen = new Set<number>();
+    const unique: number[] = [];
+    for (const id of b.workerIds) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      unique.push(id);
+    }
+    b.workerIds = unique;
+    b.workers = b.workerIds.length + (cohortGiven.get(b.id) ?? 0);
+    for (const id of b.workerIds) {
+      const c = ctx.s.citizens.find((x) => x.id === id);
+      if (c && c.jobBuildingId !== b.id) c.jobBuildingId = b.id;
+    }
   }
 
   // 6) Idle citizens get their social role back and a little grievance.

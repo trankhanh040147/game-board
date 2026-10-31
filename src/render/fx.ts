@@ -272,8 +272,8 @@ export class Fx {
       const c = this.clouds[i];
       const sx = c.x;
       const sy = c.y + Math.sin(timeMs * 0.00006 + i * 2.1) * 60;
-      const w = sprite.mapW * c.scale;
-      ctx.globalAlpha = clamp01(c.alpha * day * (0.5 + (ambient.alpha < 0.2 ? 0.5 : 0.2)));
+      const w = sprite.mapW * c.scale * 0.7;
+      ctx.globalAlpha = clamp01(c.alpha * day * 0.14);
       ctx.drawImage(sprite.canvas, sx - w / 2, sy - w / 2, w, w);
     }
     ctx.globalAlpha = 1;
@@ -393,7 +393,7 @@ export class Fx {
       this.vignetteSprite = { canvas: this.bank.vignette(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)), key).canvas };
     }
     if (this.vignetteSprite) {
-      ctx.globalAlpha = 0.9;
+      ctx.globalAlpha = 0.66;
       ctx.drawImage(this.vignetteSprite.canvas, 0, 0, w, h);
       ctx.globalAlpha = 1;
     }
@@ -409,7 +409,7 @@ export class Fx {
     if (this.pattern && ctx === this.patternCtx) {
       ctx.save();
       ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = 0.045;
+      ctx.globalAlpha = 0.026;
       ctx.fillStyle = this.pattern;
       ctx.fillRect(0, 0, w, h);
       ctx.restore();

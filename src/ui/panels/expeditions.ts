@@ -115,6 +115,15 @@ export class ExpeditionsPanel implements GamePanel {
         <span>${icon('compass', 'fh-icon is-tiny')} ${fmtInt(s.exploration.revealedTiles)} tiles charted</span>
         <span>${icon('handshake', 'fh-icon is-tiny')} ${s.neighbors.civs.filter((n) => n.discovered).length} neighbours met</span>
       </div>
+      ${panelSection(
+        'How a journey unfolds',
+        `<div class="fh-steps">
+          <div class="fh-step"><span class="fh-step-num">I</span><span><b>Choose a target</b><small>Pick a kind of party, then click anywhere on the map. The further the journey, the longer the wait.</small></span></div>
+          <div class="fh-step"><span class="fh-step-num">II</span><span><b>The land is revealed</b><small>Your party uncovers tiles as it travels — terrain, sites, deposits and eventually other peoples.</small></span></div>
+          <div class="fh-step"><span class="fh-step-num">III</span><span><b>The horizon returns</b><small>Sites may be visited for boons; settlers found a new hearth with its own people and stores.</small></span></div>
+        </div>`,
+        `${s.exploration.expeditions.length} afield`,
+      )}
       <p class="fh-gp-footnote">${icon('info', 'fh-icon is-tiny')} Expeditions cost supplies now and reveal the map as they travel. Settlement parties found a new hearth with its own stock and people.</p>
     </div>`;
   }

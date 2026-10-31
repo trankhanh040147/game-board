@@ -60,27 +60,40 @@ interface Col {
 function paletteFor(def: BuildingDef, opts: ArtOptions): Col {
   const v = def.visual;
   const wall = mixColorSafe(v.wall, 0x8a7a62);
-  const roof = mixColorSafe(v.roof, 0x8a5a3a);
+  let roof = mixColorSafe(v.roof, 0x8a5a3a);
   const accent = mixColorSafe(v.accent ?? '#c9a55b', 0xc9a55b);
   const snow = clamp01(opts.snow);
   const winter = opts.season === 'winter';
-  const wallS = mixColor(glaze(wall, winter), 0xe8eef2, snow * 0.22);
-  const roofS = mixColor(glaze(roof, winter), 0xe8eef2, snow * 0.5);
+  let wallS = mixColor(glaze(wall, winter), 0xe8eef2, snow * 0.22);
+  let roofS = mixColor(glaze(roof, winter), 0xe8eef2, snow * 0.5);
+  // Roofs and walls often share a similar value in the content pack: push them
+  // apart so the silhouette reads at strategy-game zoom.
+  const luma = (c: number): number => ((c >>> 16) & 0xff) * 0.299 + ((c >>> 8) & 0xff) * 0.587 + (c & 0xff) * 0.114;
+  const diff = luma(roofS) - luma(wallS);
+  if (Math.abs(diff) < 26) {
+    if (diff >= 0) {
+      roofS = darkenColor(roofS, 0.2);
+      wallS = lightenColor(wallS, 0.08);
+    } else {
+      roofS = lightenColor(roofS, 0.12);
+      wallS = darkenColor(wallS, 0.06);
+    }
+  }
   return {
     wall: wallS,
-    wallLit: lightenColor(wallS, 0.09),
-    wallShade: darkenColor(wallS, 0.1),
+    wallLit: lightenColor(wallS, 0.16),
+    wallShade: darkenColor(wallS, 0.2),
     roof: roofS,
-    roofLit: lightenColor(roofS, 0.12),
-    roofShade: darkenColor(roofS, 0.16),
+    roofLit: lightenColor(roofS, 0.2),
+    roofShade: darkenColor(roofS, 0.26),
     accent,
-    trim: mixColor(wallS, 0xf0e4c8, 0.45),
-    stone: mixColor(0x8d857a, wallS, 0.25),
-    stoneLit: mixColor(0xa9a196, wallS, 0.2),
-    wood: mixColor(0x6b4a2f, wallS, 0.2),
-    woodLit: mixColor(0x8a6440, wallS, 0.18),
-    dark: darkenColor(wallS, 0.45),
-    glass: mixColor(0xffd99a, 0x2a2418, 0.25),
+    trim: mixColor(wallS, 0xf0e4c8, 0.5),
+    stone: mixColor(0x8d857a, wallS, 0.2),
+    stoneLit: mixColor(0xa9a196, wallS, 0.16),
+    wood: mixColor(0x6b4a2f, wallS, 0.16),
+    woodLit: mixColor(0x8a6440, wallS, 0.15),
+    dark: darkenColor(wallS, 0.5),
+    glass: mixColor(0x3a3020, 0x9fc4d8, 0.3),
   };
 }
 
@@ -243,10 +256,13 @@ function drawGableRoof(
   }
   // near slope
   poly(ctx, [t3[0], t3[1], t2[0], t2[1], r2[0], r2[1], r1[0], r1[1]], opts.roofB ?? col.roof);
-  // eave shadow line
-  line2(ctx, t3[0], t3[1], t2[0], t2[1], darkenColor(col.roof, 0.4), 1.4, 0.5);
+  // roof silhouette outline (keeps the shape crisp against trees)
+  stroke(ctx, [t3[0], t3[1], t2[0], t2[1], r2[0], r2[1], r1[0], r1[1]], darkenColor(col.roof, 0.5), 1.2, 0.45);
+  // eave shadow band
+  poly(ctx, [t3[0], t3[1], t2[0], t2[1], t2[0] - 0.5, t2[1] - 3.2, t3[0] + 0.5, t3[1] - 3.2], darkenColor(col.roof, 0.5), 0.5);
   // ridge highlight
-  line2(ctx, r1[0], r1[1], r2[0], r2[1], lightenColor(col.roof, 0.24), 1.6, 0.75);
+  line2(ctx, r1[0], r1[1], r2[0], r2[1], lightenColor(col.roof, 0.32), 2, 0.85);
+  line2(ctx, r1[0], r1[1], r2[0], r2[1], 0xfff0d0, 0.9, 0.3);
   // shingle / thatch strokes
   if (opts.shingle !== false) {
     const strokes = 5;
@@ -256,7 +272,7 @@ function drawGableRoof(
       const ay = t3[1] + (t2[1] - t3[1]) * u;
       const bx = r1[0] + (r2[0] - r1[0]) * u;
       const by = r1[1] + (r2[1] - r1[1]) * u;
-      line2(ctx, ax, ay, bx, by, darkenColor(col.roof, 0.22), 1, 0.28);
+      line2(ctx, ax, ay, bx, by, darkenColor(col.roof, 0.34), 1, 0.34);
     }
     // warm light on the near slope
     poly(ctx, [t3[0], t3[1], t2[0], t2[1], r2[0], r2[1], r1[0], r1[1]], 0xffffff, 0.03);
@@ -286,6 +302,8 @@ function drawFoundation(ctx: CanvasRenderingContext2D, base: number[], col: Col,
   poly(ctx, [qx(base, 2), qy(base, 2), qx(base, 3), qy(base, 3), qx(base, 3), qy(base, 3) + depth, qx(base, 2), qy(base, 2) + depth], darkenColor(col.stone, 0.4));
   poly(ctx, top, col.stone);
   stroke(ctx, top, darkenColor(col.stone, 0.25), 1, 0.6);
+  // dark base band so buildings sit visually on the ground
+  poly(ctx, [qx(base, 1), qy(base, 1), qx(base, 2), qy(base, 2), qx(base, 2), qy(base, 2), qx(base, 1), qy(base, 1)], darkenColor(col.stone, 0.3), 0.6);
 }
 
 function drawShadow(ctx: CanvasRenderingContext2D, size: number, alpha = 0.24): void {
@@ -424,10 +442,10 @@ function drawCracks(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: n
 // ---------------------------------------------------------------------------
 
 function drawHouse(ctx: CanvasRenderingContext2D, def: BuildingDef, col: Col, d: DetailCtx, size: number, H: number, seed: number, era: number): void {
-  const base = blockQuad(size, size >= 2 ? 0.3 : 0.2);
-  drawFoundation(ctx, base, col, 14);
+  const base = blockQuad(size, size >= 2 ? 0.24 : 0.15);
+  drawFoundation(ctx, base, col, 16);
   const top = drawBox(ctx, base, H, col);
-  const roofH = clamp(H * 0.52, 9, 22);
+  const roofH = clamp(H * 0.54, 11, 26);
   const { r2 } = drawGableRoof(ctx, top, roofH, col, { overhang: 1.12 });
 
   // walls: right face +x (C1->C2), left face +y (C2->C3)
@@ -500,8 +518,8 @@ function drawFlagPole(ctx: CanvasRenderingContext2D, x: number, y: number, col: 
 }
 
 function drawTower(ctx: CanvasRenderingContext2D, def: BuildingDef, col: Col, d: DetailCtx, size: number, H: number, era: number): void {
-  const base = blockQuad(size, size >= 2 ? 0.32 : 0.22);
-  drawFoundation(ctx, base, col, 16);
+  const base = blockQuad(size, size >= 2 ? 0.26 : 0.17);
+  drawFoundation(ctx, base, col, 18);
   const hh = H * 1.35;
   const top = drawBox(ctx, base, hh, col);
   const roofH = clamp(hh * 0.45, 12, 26);
@@ -533,10 +551,10 @@ function drawTower(ctx: CanvasRenderingContext2D, def: BuildingDef, col: Col, d:
 }
 
 function drawHall(ctx: CanvasRenderingContext2D, def: BuildingDef, col: Col, d: DetailCtx, size: number, H: number, seed: number, era: number): void {
-  const base = blockQuad(size, size >= 2 ? 0.26 : 0.2);
-  drawFoundation(ctx, base, col, 16);
+  const base = blockQuad(size, size >= 2 ? 0.22 : 0.15);
+  drawFoundation(ctx, base, col, 18);
   const top = drawBox(ctx, base, H, col);
-  const roofH = clamp(H * 0.42, 10, 20);
+  const roofH = clamp(H * 0.44, 12, 24);
   const { r2 } = drawGableRoof(ctx, top, roofH, col, { overhang: 1.16, gable: mixColor(col.trim, col.accent, 0.15) });
 
   const ax = qx(base, 1);
@@ -576,8 +594,8 @@ function drawHall(ctx: CanvasRenderingContext2D, def: BuildingDef, col: Col, d: 
 }
 
 function drawWorks(ctx: CanvasRenderingContext2D, def: BuildingDef, col: Col, d: DetailCtx, size: number, H: number, seed: number): void {
-  const base = blockQuad(size, size >= 2 ? 0.24 : 0.18);
-  drawFoundation(ctx, base, col, 14);
+  const base = blockQuad(size, size >= 2 ? 0.2 : 0.14);
+  drawFoundation(ctx, base, col, 16);
   const hh = H * 0.9;
   const top = drawBox(ctx, base, hh, col, { topColor: darkenColor(col.roof, 0.22) });
   // flat roof with parapet
@@ -637,8 +655,8 @@ function drawCrates(ctx: CanvasRenderingContext2D, x: number, y: number, col: Co
 }
 
 function drawEngine(ctx: CanvasRenderingContext2D, def: BuildingDef, col: Col, d: DetailCtx, size: number, H: number): void {
-  const base = blockQuad(size, 0.2);
-  drawFoundation(ctx, base, col, 18);
+  const base = blockQuad(size, 0.14);
+  drawFoundation(ctx, base, col, 20);
   const hh = H * 1.05;
   const top = drawBox(ctx, base, hh, col, { topColor: darkenColor(col.roof, 0.28) });
   // sawtooth roof: three slanted teeth
@@ -1127,13 +1145,13 @@ function drawGarden(ctx: CanvasRenderingContext2D, def: BuildingDef, col: Col, d
 export function buildingSpriteRect(def: BuildingDef): { x0: number; y0: number; mapW: number; mapH: number } {
   const size = def.size ?? 1;
   const v = def.visual ?? ({} as BuildingDef['visual']);
-  const H = 9 + (v.height ?? 1) * 22;
+  const H = 14 + (v.height ?? 1) * 28;
   const shape = v.shape ?? 'house';
-  const topExtra = shape === 'temple' || shape === 'engine' ? 46 : shape === 'tower' ? 40 : 34;
-  const x0 = -size * HALF_W - 10;
+  const topExtra = shape === 'temple' || shape === 'engine' ? 54 : shape === 'tower' ? 48 : 40;
+  const x0 = -size * HALF_W - 12;
   const y0 = -H - topExtra - size * 8;
-  const mapW = size * HALF_W * 2 + 20;
-  const mapH = -y0 + size * TILE_H + 12;
+  const mapW = size * HALF_W * 2 + 24;
+  const mapH = -y0 + size * TILE_H + 14;
   return { x0, y0, mapW, mapH };
 }
 
@@ -1150,7 +1168,7 @@ export function drawBuildingArt(
   const size = def.size ?? 1;
   const v = def.visual ?? ({} as BuildingDef['visual']);
   const col = paletteFor(def, opts);
-  const H = 9 + (v.height ?? 1) * 22;
+  const H = 14 + (v.height ?? 1) * 28;
   const era = def.era ?? 0;
   const seed = hashInt(hashStringSeed(def.id));
   const d: DetailCtx = { lights: [], smoke: [], flag: [] };
@@ -1159,7 +1177,7 @@ export function drawBuildingArt(
   const isCampLike = def.id === 'fire_pit' || (shape === 'farm' && (def.tags?.includes('gather') ?? false));
   const isField = shape === 'farm' && !isCampLike && def.id !== 'orchard' && def.id !== 'garden';
 
-  drawShadow(ctx, size, 0.22);
+  drawShadow(ctx, size, 0.28);
   switch (shape) {
     case 'house':
       drawHouse(ctx, def, col, d, size, H, seed, era);

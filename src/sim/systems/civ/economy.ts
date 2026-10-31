@@ -37,9 +37,10 @@ import {
   round2,
   settlementById,
   stockOf,
+  stockTotal,
   totalPopulation,
 } from '../../core';
-import { setSettlementAlert, clearSettlementAlert } from './buildings';
+import { setSettlementAlert, clearSettlementAlert, freeStorageSpace } from './buildings';
 import { createCaravanFromPoint, LOGISTICS_TUNING } from './logistics';
 
 // ---------------------------------------------------------------------------
@@ -82,6 +83,16 @@ export const ECONOMY_TUNING = {
   autoTradeMaxSell: 20,
   /** Surplus multiplier over target stock before auto-selling. */
   autoSellSurplusFactor: 2.2,
+  /** Emergency starvation relief: days of food bought per purchase. */
+  emergencyFoodDays: 4,
+  /** Punitive price multiplier when a discovered neighbour can help. */
+  emergencyNeighbourPrice: 1.8,
+  /** Even with nobody on the map, a river trader will sell — at a price. */
+  emergencyRiverTraderPrice: 2.2,
+  /** One emergency purchase per this many days. */
+  emergencyCooldownDays: 3,
+  /** Emergency purchases are capped to keep them an act of desperation. */
+  emergencyMaxUnits: 80,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -98,6 +109,11 @@ export const economySystem: SimSystem = (ctx: SimContext): void => {
   processTradeRoutes(ctx);
   autoTrade(ctx);
   s.market.lastUpdateTick = ctx.tick;
+
+  // Refresh storage accounting after every stock mover has run (population
+  // consumption, taxes, trade purchases) so caches and a save/load rebuild
+  // agree. economy runs late in the tick pipeline, after population.
+  for (const st of s.settlements) st.storageUsed = round2(stockTotal(st));
 };
 
 // ---------------------------------------------------------------------------
@@ -447,8 +463,12 @@ function autoTrade(ctx: SimContext): void {
   const c = ctx.c;
   for (const st of s.settlements) {
     if (!st.governor.autoTrade) continue;
-    // No market, no orders: trading requires a completed market or trade post.
-    if (!hasMarket(ctx, st)) continue;
+    // No market means no ordinary trade — but a starving settlement can still
+    // pay ruinous prices for emergency relief (Lead fairness rule).
+    if (!hasMarket(ctx, st)) {
+      emergencyRelief(ctx, st);
+      continue;
+    }
     const flag = `autotrade_${st.id}`;
     if (ctx.tick - (s.flags[flag] ?? -999) < ECONOMY_TUNING.autoTradeInterval) continue;
     s.flags[flag] = ctx.tick;
@@ -560,6 +580,85 @@ function autoTrade(ctx: SimContext): void {
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Emergency relief (starvation backstop when there is no market)
+// ---------------------------------------------------------------------------
+
+/**
+ * A settlement without a market cannot trade — but it must not be able to sit on
+ * a thousand coins while its people starve. When food runs dangerously low we
+ * allow a punitive emergency purchase: from a discovered, non-hostile neighbour
+ * at 1.8x normal import cost, or from an abstract river trader at 2.2x even with
+ * no neighbours discovered. Rate-limited and capped: it averts catastrophe for a
+ * settlement with money, not for one without.
+ */
+function emergencyRelief(ctx: SimContext, st: Settlement): void {
+  const s = ctx.s;
+  const c = ctx.c;
+  const reserve = Math.max(1, st.governor.reserveFoodDays);
+  const days = foodDaysOf(s, c, st);
+  // True starvation backstop, not routine shopping: only below ~5 days of food.
+  const triggerDays = Math.max(2, Math.min(reserve, 5));
+  if (days >= triggerDays) return;
+
+  const flag = `emergency_relief_${st.id}`;
+  if (ctx.tick - (s.flags[flag] ?? -999) < ECONOMY_TUNING.emergencyCooldownDays) return;
+
+  // Who can sell? A discovered, non-hostile neighbour at a punitive-but-possible
+  // price; otherwise the abstract river trader at the ruinous price.
+  let hasHelpfulNeighbour = false;
+  for (const civ of s.neighbors.civs) {
+    if (!civ.discovered) continue;
+    if (civ.relation === 'war') continue;
+    hasHelpfulNeighbour = true;
+    break;
+  }
+  const priceMultiplier = hasHelpfulNeighbour
+    ? ECONOMY_TUNING.emergencyNeighbourPrice
+    : ECONOMY_TUNING.emergencyRiverTraderPrice;
+
+  // Pick the most calorie-dense affordable edible.
+  const neededFoodUnits = (reserve - days) * Math.max(0.1, st.population * 0.6);
+  const targetPurchaseUnits = Math.max(neededFoodUnits, st.population * 0.6 * ECONOMY_TUNING.emergencyFoodDays);
+  let best: { id: ResourceId; edible: number; unitCost: number; score: number } | null = null;
+  for (const resId of c.resourceOrder) {
+    const def = c.resources[resId];
+    if (!def?.edible) continue;
+    const price = s.market.prices[resId]?.price ?? def.basePrice;
+    if (!(price > 0)) continue;
+    const unitCost =
+      price * priceMultiplier * (1 + s.market.tariff) * (1 + modOf(ctx, st.id, 'tradeBuyPrice'));
+    if (st.treasury < unitCost) continue;
+    const score = def.edible / unitCost;
+    if (!best || score > best.score) best = { id: resId, edible: def.edible, unitCost, score };
+  }
+  if (!best) return; // no money: the famine remains a real risk, as it should be
+
+  const affordable = st.treasury / best.unitCost;
+  const amount = Math.floor(
+    Math.max(0, Math.min(ECONOMY_TUNING.emergencyMaxUnits, affordable, targetPurchaseUnits / Math.max(0.2, best.edible))),
+  );
+  if (amount < 1) return;
+
+  const cost = amount * best.unitCost;
+  st.treasury -= cost;
+  st.tradeBalance -= cost;
+  s.market.tradeBalance -= cost;
+  // Make room for relief food if the storehouse is packed with dry goods.
+  const space = Math.max(0, st.storageCap - stockTotal(st));
+  if (space < amount) freeStorageSpace(ctx, st, amount - space);
+  addStock(st, best.id, amount);
+  const info = s.market.prices[best.id];
+  if (info) info.demand += amount;
+  s.flags[flag] = ctx.tick;
+  const source = hasHelpfulNeighbour ? 'a neighbour' : 'a river trader';
+  ctx.notify(
+    `Emergency relief: ${st.name} buys ${round1(amount)} ${c.resources[best.id]?.name ?? best.id} from ${source} at ruinous prices.`,
+    'warn',
+    'coin',
+  );
 }
 
 // ---------------------------------------------------------------------------

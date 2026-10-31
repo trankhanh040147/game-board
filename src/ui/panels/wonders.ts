@@ -6,6 +6,7 @@ import { icon } from '../icons';
 import {
   chip,
   costChips,
+  modChips,
   esc,
   fmt,
   meter,
@@ -97,31 +98,7 @@ export class WondersPanel implements GamePanel {
   }
 
   private effectChips(effects: Record<string, number> | undefined): string {
-    if (!effects) return '';
-    const lines = Object.entries(effects).filter(([, v]) => Math.abs(v) > 0.0001);
-    if (!lines.length) return '';
-    return lines
-      .slice(0, 6)
-      .map(([key, value]) => {
-        const label = (() => {
-          const map: Record<string, string> = {
-            workSpeed: 'Work speed',
-            buildSpeed: 'Build speed',
-            researchRate: 'Insight rate',
-            cultureRate: 'Culture rate',
-            moraleRate: 'Morale',
-            healthRate: 'Health',
-            beauty: 'Beauty',
-            stability: 'Stability',
-            taxEfficiency: 'Tax',
-            storageCap: 'Storage',
-            migrationRate: 'Migration',
-          };
-          return map[key] ?? pretty(key);
-        })();
-        return `<span class="fh-modchip ${value > 0 ? 'is-good' : 'is-bad'}">${esc(label)} <b>${value > 0 ? '+' : ''}${Math.round(value * 100)}%</b></span>`;
-      })
-      .join('');
+    return modChips(effects as never, 6);
   }
 
   handleAction(act: string, el: HTMLElement, host: PanelHost): void {

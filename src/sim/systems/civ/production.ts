@@ -81,7 +81,12 @@ export const PRODUCTION_TUNING = {
   waterFloorFraction: 0.1,
   /** Seasonal penalties for outdoor work. */
   winterOutdoorFactor: 0.65,
-  winterFarmFactor: 0.22,
+  /** Crops stop growing but do not vanish: stored food carries the winter. */
+  winterCropFactor: 0.45,
+  /** Fishing through ice and tracking in snow still works, badly. */
+  winterFishHuntFactor: 0.75,
+  /** Winter logging is cold, muddy work, not impossible. */
+  winterForestryFactor: 0.8,
   stormFactor: 0.85,
   droughtFarmFactor: 0.7,
   /** Storage-full notification pacing. */
@@ -122,6 +127,27 @@ function extractionSurplusCap(ctx: SimContext, st: Settlement, resource: Resourc
   const reserve = Math.max(0, st.governor.reserveMaterials);
   if (resource === 'wood') return Math.max(15, Math.min(cap * 0.5, reserve * 3));
   return Math.max(8, Math.min(cap * 0.3, reserve * 2.5));
+}
+
+/** Soft cap for crafted goods so workshops idle instead of flooding the stores. */
+function processedSurplusCap(ctx: SimContext, st: Settlement): number {
+  const cap = Math.max(20, st.storageCap);
+  const reserve = Math.max(0, st.governor.reserveMaterials);
+  return Math.max(5, Math.min(cap * 0.12, reserve * 2));
+}
+
+/** The largest (by authored volume) output of a recipe, if any. */
+function primaryOutput(recipe: RecipeDef): ResourceId | null {
+  let bestId: ResourceId | null = null;
+  let bestAmount = 0;
+  for (const res in recipe.outputs) {
+    const amount = recipe.outputs[res] ?? 0;
+    if (amount > bestAmount) {
+      bestAmount = amount;
+      bestId = res;
+    }
+  }
+  return bestId;
 }
 
 function runBuilding(ctx: SimContext, st: Settlement, b: Building): void {
@@ -173,6 +199,19 @@ function runBuilding(ctx: SimContext, st: Settlement, b: Building): void {
     b.shortages = {};
     b.sourceStrength = 0;
     return;
+  }
+
+  // A workshop already drowning in its product stops converting inputs into it.
+  if (Object.keys(recipe.inputs).length > 0) {
+    const outId = primaryOutput(recipe);
+    const outDef = outId ? c.resources[outId] : undefined;
+    if (outId && outDef && !outDef.edible && outId !== waterResourceId(c) && stockOf(st, outId) >= processedSurplusCap(ctx, st)) {
+      b.status = 'Surplus';
+      b.efficiency = 0;
+      b.shortages = {};
+      b.sourceStrength = 0;
+      return;
+    }
   }
 
   const crew = Math.max(1, recipe.workers > 0 ? recipe.workers : countJobSlots(c, def));
@@ -335,13 +374,6 @@ function runBuilding(ctx: SimContext, st: Settlement, b: Building): void {
   let plannedUnits = plannedGather;
   for (const res in plannedOutputs) plannedUnits += plannedOutputs[res];
 
-  // Storage constrains only the NET volume added. A craft that consumes as much
-  // (or more) than it produces — sawing planks, milling grain, baking bread —
-  // keeps running even at capacity because it frees space as it works.
-  let inputUnits = 0;
-  for (const res in inputNeed) inputUnits += inputNeed[res] * inputFraction;
-  const netAdded = plannedUnits - inputUnits;
-
   let space = Math.max(0, st.storageCap - stockTotal(st));
   // Staple food is never refused: evict dry goods to make room for it.
   if (recipe.gather && gatherTarget && plannedGather > space) {
@@ -353,13 +385,11 @@ function runBuilding(ctx: SimContext, st: Settlement, b: Building): void {
   }
   // A full store never halts a building: outputs that cannot fit are lost (and
   // reported), while conversions continue to consume inputs and free space.
-  const storeFraction = 1;
-  const gatherAmount = plannedGather * storeFraction;
-  const outputScale = actualScale * storeFraction;
+  const gatherAmount = plannedGather;
 
   // Consume the inputs that the reduced run actually needs.
   for (const res in inputNeed) {
-    removeStock(st, res, inputNeed[res] * inputFraction * storeFraction);
+    removeStock(st, res, inputNeed[res] * inputFraction);
   }
   // Consuming inputs frees store space: a craft can complete even when the
   // granary was over capacity when the day began.
@@ -384,7 +414,7 @@ function runBuilding(ctx: SimContext, st: Settlement, b: Building): void {
   }
 
   for (const res in plannedOutputs) {
-    const amount = plannedOutputs[res] * storeFraction;
+    const amount = plannedOutputs[res];
     if (amount <= 0) continue;
     const added = addCapped(ctx, st, res, amount, space);
     space = Math.max(0, space - added);
@@ -667,12 +697,30 @@ function weatherFactorFor(ctx: SimContext, st: Settlement, def: BuildingDef): nu
   let factor = 1;
   const outdoor = isOutdoorBuilding(ctx.c, def);
   const tags = def.tags ?? [];
-  const isFarm = tags.includes('farm') || def.category === 'food';
+  const isCrop =
+    tags.includes('farm') ||
+    tags.includes('grain') ||
+    tags.includes('flax') ||
+    tags.includes('orchard') ||
+    tags.includes('fruit') ||
+    tags.includes('pasture') ||
+    tags.includes('herd') ||
+    tags.includes('wool');
+  const isFishHunt = tags.includes('fish') || tags.includes('hunt');
+  const isForestry = tags.includes('forest') || tags.includes('timber') || tags.includes('lumber');
+
   if (outdoor) {
-    if (weather.season === 'winter') factor *= isFarm ? PRODUCTION_TUNING.winterFarmFactor : PRODUCTION_TUNING.winterOutdoorFactor;
+    if (weather.season === 'winter') {
+      // Winter is a lean season, not an extinction event: crops slow hardest,
+      // but hunting, fishing and logging keep a settlement alive through it.
+      if (isFishHunt) factor *= PRODUCTION_TUNING.winterFishHuntFactor;
+      else if (isCrop) factor *= PRODUCTION_TUNING.winterCropFactor;
+      else if (isForestry) factor *= PRODUCTION_TUNING.winterForestryFactor;
+      else factor *= PRODUCTION_TUNING.winterOutdoorFactor;
+    }
     if (weather.storm > 0.25) factor *= PRODUCTION_TUNING.stormFactor;
-    if (weather.drought > 0.35 && isFarm) factor *= PRODUCTION_TUNING.droughtFarmFactor;
-    if (weather.snow > 0.5 && !isFarm) factor *= 0.9;
+    if (weather.drought > 0.35 && isCrop) factor *= PRODUCTION_TUNING.droughtFarmFactor;
+    if (weather.snow > 0.5 && !isCrop && !isFishHunt) factor *= 0.9;
   } else if (weather.storm > 0.6) {
     factor *= 0.95;
   }
@@ -691,7 +739,7 @@ function addCapped(ctx: SimContext, st: Settlement, res: ResourceId, amount: num
   // Water has its own small cistern buffer: a productive well must never fill
   // the storehouse and crowd out food.
   if (res === waterResourceId(ctx.c)) {
-    allowed = Math.min(allowed, Math.max(0, waterBufferTarget(st) - stockOf(st, res)));
+    allowed = Math.min(allowed, Math.max(0, waterBufferTarget(ctx, st) - stockOf(st, res)));
   }
   if (allowed <= 0) return 0;
   return addStock(st, res, allowed);
