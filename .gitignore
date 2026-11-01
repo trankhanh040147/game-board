@@ -47,3 +47,7 @@ games/first-hearth/shots/*
 
 # local tooling caches
 .taste-skill/
+
+# full-page proof captures are local-only; the viewport shots are committed
+shots/board/*-full.jpg
+shots/qa/final/*-full.jpg
