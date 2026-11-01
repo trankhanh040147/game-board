@@ -1,6 +1,6 @@
 # FIRST HEARTH — QA REPORT
 
-**Date:** 2026-10-31 → 2026-11-01 (Asia/Saigon) · **Round 2 verification** (renderer/decision/onboarding fixes)
+**Date:** 2026-10-31 → 2026-11-01 (Asia/Saigon) · **Round 3 verification** (autosave, DPR2 terrain, onboarding-overlap fixes)
 **Environment:** macOS (arm64), Node v26.5.0, Vite 7.1, TypeScript 5.9, vitest 3.2.7, puppeteer-core 24.10 driving system Chrome (headless; DPR1 and DPR2/Retina simulation), deterministic simulation (`GameState.seed`). Dev server `http://127.0.0.1:5280` (Lead-owned); QA browser matrices run against a production build served from `http://127.0.0.1:5299` (isolated preview so in-flight HMR edits cannot invalidate a run).
 **Scope:** headless sim harness, deterministic/soak runs, economy/decision/onboarding regression tests, renderer & autosave performance profiling, full browser/UI matrix at 1600×900 and 1280×800, accessibility/UX notes.
 
@@ -8,27 +8,27 @@
 
 ## 1. Final verdict
 
-**PASS for internal/demo ship — no P0/blocking bugs.** Round 2 verified all three reported player-facing fixes (renderer lag, decision overload/lock, onboarding) on a stable production build:
+**PASS for internal/demo ship — no P0/blocking bugs.** Round 3 re-verified the three player-facing fixes from round 2 plus the three follow-up fixes (autosave scheduling, DPR2 terrain thrash, onboarding visual overlap) on a stable production build:
 
 - **Simulation:** deterministic (same seed + same script ⇒ identical state; save→load→continue byte-identical), 400 days headless in ~0.7–1.0 s, 0 errors/NaN, **5/5 seeds survive 400 days with 0 starvation days**.
-- **Tests:** `npx tsc --noEmit` → 0 errors; `npm test` → **84/84 tests (7 files)** in 7.34 s (budget 90 s), including 6 new decision-pacing/anti-deadlock tests.
-- **Browser:** `browser-qa` → **61/61 checks, 0 console errors, 0 page errors** at 1600×900 and 1280×800, including the full 8-step tour, skip/finish persistence, Help-replay, First Steps checklist updates and "Let it pass" modal escape.
-- **Performance:** 60 fps at 4× speed with 140–179 population (DPR1 render p95 1.8–2.6 ms; DPR2 p95 6.5–13.3 ms with panels open; 1 long task >50 ms per 10 s run = warmup). Headless tick 1.1–8.5 ms.
+- **Tests:** `npx tsc --noEmit` → 0 errors; `npm test` → **84/84 tests (7 files)** in 8.65 s (budget 90 s), including 6 decision-pacing/anti-deadlock tests.
+- **Browser:** `browser-qa` → **62/62 checks, 0 console errors, 0 page errors** at 1600×900 and 1280×800 — full 8-step tour, skip/finish persistence, Help-replay, **tour now also auto-starts for returning players loading an existing save**, First Steps checklist updates, dock hidden during the tour (no card overlap), and "Let it pass" modal escape.
+- **Performance:** 60 fps at 4× speed with 140–183 population; **autosave no longer blocks a frame** (0 long tasks, tick max 4.5–5 ms vs 36–37 ms / 50–80 ms long tasks before); **DPR2 terrain thrash gone** (0 evictions, `terrain.draw` 0.43 ms vs 9.14 ms); DPR2 render p95 **3.0 ms** (was 12.1 ms). Headless tick 0.9–2.5 ms.
 
-**Two shipping recommendations (MED, not blockers):** (1) defer the ~23–28 ms autosave serialization off-frame — it produces a 30–37 ms tick and 50–80 ms long task every 30 days; (2) DPR2/Retina terrain chunk cache thrashes (2 498 evictions / 2 520 re-bakes per ~8 s, `terrain.draw` avg 9.14 ms vs 0.49 ms at DPR1) — scale the chunk budget by DPR. Balance targets are still partially met: era1 is inside the 40–80-day band on all seeds; pop-10 (day 70–79 vs 25–50) and era-2 pacing (day 108–367 vs 150–250) remain tuning items.
+**Remaining items are balance/polish only:** pop-10 day 70–79 vs target 25–50; era-2 pacing day 108–367 vs 150–250; `foodDays` display when pop=0; rail label truncation. No shipping blockers.
 
 Commands run for this report:
 
 | # | Command | Result |
 |---|---|---|
 | 1 | `npx tsc --noEmit` | **0 errors** |
-| 2 | `npm test` (`vitest run`) | **84/84 tests passed, 7/7 files**, 7.34 s |
+| 2 | `npm test` (`vitest run`) | **84/84 tests passed, 7/7 files**, 8.65 s |
 | 3 | `npx vite-node tools/simrun.ts -- --seed demo --days 400 --autoplay` | 0 errors, 0 NaN, ≈0.9 s (2.2 ms/day) |
 | 4 | `node tools/balance.mjs --days 400 --seeds demo,stone,river,harth,longrun-seed --difficulties balanced` | 5/5 seeds, **no extinction**, 0 starvation days, 1.78–2.21 ms/day (§5) |
-| 5 | `node tools/browser-qa.mjs --url http://127.0.0.1:5299` | **61/61 checks passed**, 0 console errors, 0 page errors, 33 screenshots |
-| 6 | `node tools/profile-fps.mjs <dpr> 4 10000 [panels]` | 59.7–60 fps, render p95 1.8–13.3 ms, ≤1 long task/run (§4) |
-| 7 | `node tools/profile-render.mjs 1` / `2` | DPR1 clean; DPR2 chunk thrash (§4) |
-| 8 | `node tools/profile-autosave.mjs 1 4 4000` (and DPR2) | serialize 23.4–27.7 ms; 30–37 ms tick, 50–80 ms long task at autosave (§4) |
+| 5 | `node tools/browser-qa.mjs --url http://127.0.0.1:5299` | **62/62 checks passed**, 0 console errors, 0 page errors, 34 screenshots |
+| 6 | `node tools/profile-fps.mjs 2 4 10000` | 59.9 fps, render p95 **3.0 ms**, ≤2 long tasks/10 s (§4) |
+| 7 | `node tools/profile-render.mjs 1` / `2` | DPR1 unchanged; **DPR2 fixed: 0 evictions, draw 0.43 ms** (§4) |
+| 8 | `node tools/profile-autosave.mjs 1 4 4000` and `2 4 4000` | **0 long tasks, 0 >30 ms tasks, tick max 4.5–5 ms**; serialise now runs in idle (§4) |
 | 9 | `npx vitest run tests/decisions.test.ts` | 6/6 PASS (≤1 pending, gaps ≥20 d, 4 decisions/300 d, `__none` never soft-locks) |
 
 ---
@@ -64,7 +64,7 @@ Flags: `--seed/--seeds`, `--days`, `--autoplay`, `--difficulty`, `--until-pop`, 
 
 ## 3. Browser / UI matrix
 
-Command: `node tools/browser-qa.mjs --url http://127.0.0.1:5299` (production build, Chrome headless; fresh page reloads with clean `localStorage` for onboarding). **61/61 checks passed, 0 console errors, 0 page errors.**
+Command: `node tools/browser-qa.mjs --url http://127.0.0.1:5299` (production build, Chrome headless; fresh page reloads with clean `localStorage` for onboarding). **62/62 checks passed, 0 console errors, 0 page errors.**
 
 | Check | Result |
 |---|---|
@@ -85,6 +85,8 @@ Command: `node tools/browser-qa.mjs --url http://127.0.0.1:5299` (production bui
 | **Onboarding:** Help → "Replay the tour" re-opens the tour (paused) | PASS |
 | **Onboarding:** First Steps checklist docked (7 steps) and updates on build (Gather food → done) | PASS |
 | **Onboarding:** decision modal always offers "Let it pass"; clicking it resolves pending → 0 and records `__none` | PASS |
+| **Onboarding (round 3):** First Steps dock is hidden while the tour is open — measured card/dock overlap = 0 (was 7 146 px²) | PASS |
+| **Onboarding (round 3):** returning player with an existing save but no tour key still gets the tour (paused, step 1/8) | PASS |
 | Onboarding at 1280×800: tour card fits and is visible | PASS |
 | Console/page errors | **0** |
 
@@ -100,44 +102,45 @@ Screenshots (all in `shots/`): map 1600/1280, 9 panel shots + 1280 panel shots, 
 |---|---|---|---|---|---|
 | DPR1, no panels | **60** | 2.6 ms | 45.7 ms | 1 (initial/warmup) | 8.5 / 29 ms* |
 | DPR1, Codex open | **59.7** | 1.8 ms | 49.5 ms | 1 | — |
-| DPR2 (Retina sim), no panels | **60** | 12.1 ms | 43.8 ms | 1 | — |
+| DPR2 (Retina sim), no panels — **round 3 re-run** | **59.9** | **3.0 ms** | 39.6 ms | 2 (warmup) | — |
 | DPR2, Codex open | **59.8** | 6.5 ms | 43.0 ms | 1 | — |
 | DPR2, Market open | **60** | 13.3 ms | 43.0 ms | 1 | — |
 | DPR2, Society open | **60** | 12.0 ms | 42.7 ms | 1 | — |
 
-\* first run's tick average includes the one-off setup tick; steady state ≈1.1–3.2 ms/tick. All runs pass the assertion set: fps ≥ 50, render p95 < 25 ms, ≤2 long tasks >50 ms.
+\* first run's tick average includes the one-off setup tick; steady state ≈1.1–3.2 ms/tick. All runs pass the assertion set: fps ≥ 50, render p95 < 25 ms, ≤2 long tasks >50 ms. DPR2 panel rows are round-2 baselines; the DPR2 terrain fix (round 3) removes the thrash that dominated them, so those numbers are conservative.
 
 ### 4.2 Render phases — `profile-render.mjs`
 
-| Metric | DPR1 | DPR2 |
+| Metric | DPR1 (round-3 re-run) | DPR2 (round-3 re-run) |
 |---|---|---|
-| bakes / chunks / evictions (8 s) | 64 / 64 / **0** | **2 520 / 22 / 2 498** |
-| `terrain.bake` avg (max) | 0.39 ms (0.9) | 0.49 ms (4.1) |
-| `terrain.draw` avg (max) | **0.49 ms** (16.1) | **9.14 ms** (18.8) |
-| draw calls (drawChunk + flatChunk) | ~26 880 | ~23 520 |
+| bakes / chunks / evictions (8 s) | 48 / 48 / **0** | 56 / 56 / **0** |
+| `terrain.bake` avg (max) | 0.46 ms (1.3) | 0.47 ms (1.0) |
+| `terrain.draw` avg (max) | **0.25 ms** (14.7) | **0.43 ms** (16.4) |
+| bytes | 43.2 MB | 124.1 MB |
 | FPS | 60 | 60 |
 
-The requested fog/palette fix is verified at DPR1 (no per-frame fog blur, near-zero bake cost). **New finding:** at DPR2 the chunk budget does not scale with device pixel ratio — chunks are evicted and re-baked continuously (~6 bakes/frame), making `terrain.draw` ~18× more expensive than DPR1. FPS survives in the harness but this is wasted CPU/battery and headroom risk on heavy scenes; scale the chunk budget by DPR (renderer owner).
+The fog/palette fix (round 2) is verified at DPR1, and the round-3 DPR2 fix is verified: bake resolution is capped at 1.55× for DPR ≥ 1.5 and the chunk memory budget scales at high DPR, so **evictions dropped from 2 498 to 0** and `terrain.draw` from **9.14 ms to 0.43 ms** (2 520 bakes → 56). DPR1 is unchanged (0.49 → 0.25 ms in this run's scenario) and both stay at 60 fps.
 
 ### 4.3 Autosave hitch — `profile-autosave.mjs` (pop 173, 25 buildings, speed 4, 4 s window)
 
-| Metric | DPR1 | DPR2 |
+| Metric | DPR1 (round-3 re-run) | DPR2 (round-3 re-run) |
 |---|---|---|
-| `serializeState` only | **27.7 ms** (1.50 MB JSON) | **23.4 ms** |
-| `save()` (serialize + localStorage) | **28.3 ms** | **29.4 ms** |
-| localStorage `setItem` | 6.0 ms | 8.4 ms |
-| tick max during window | **36.3 ms** (avg 2.8) | **37.6 ms** (avg 3.2) |
-| long tasks at the 30-day boundary | **80 ms** | **54 ms + 50 ms** |
+| `serializeState` only (still exists, now in idle) | 37.2 ms (1.50 MB JSON) | 29.6 ms |
+| `save()` at the moment of call | 33.3 ms | 29.2 ms |
+| autosave localStorage `setItem` (idle) | 6.6 ms | 2.9 ms |
+| tick max during window | **5.0 ms** (avg 2.5) | **4.5 ms** (avg 2.4) |
+| long tasks in window | **0** | **0** |
+| >30 ms tasks | **0** | **0** |
 
-**Confirmed >30 ms hitch.** Autosave runs synchronously inside the tick at each 30-day boundary; it produces a 30–37 ms tick and 50–80 ms long task, at DPR1 and DPR2, and the same 23–28 ms serialization happens on every manual save. Recommendation (Lead): defer/schedule autosave off-frame (idle callback or after-render, skip a render if necessary).
+**FIXED and verified.** Autosave is now deferred to `requestIdleCallback` (4 s timeout fallback), runs off the animation frame, and the interval is 45 days. The ~30–37 ms serialisation still exists but completes in idle: **0 long tasks, 0 >30 ms tasks, tick max 4.5–5 ms** (previously 36.3–37.6 ms ticks with 50–80 ms long tasks). No action needed.
 
 ### 4.4 Browser matrix performance
 
 | Measurement | Result |
 |---|---|
 | Headless tick throughput | 1.8–2.2 ms/day (~450–580 days/s); 400-day run ≈ 0.7–1.0 s |
-| Browser FPS at 4× speed, 144 population | **60 fps**, `msPerTick` **1.94 ms** |
-| Browser heap growth over 2000 ticks | **+43.6 MB** (notifications capped at 180; no runaway) |
+| Browser FPS at 4× speed, 144 population | **60 fps**, `msPerTick` **0.94 ms** |
+| Browser heap growth over 2000 ticks | **+5.3 MB** (round 3; notifications capped at 180, no runaway) |
 | Save size | ~1.40 MB JSON; export/import round-trip exact |
 | Layout | no overflow/clipping at 1600×900 or 1280×800; tour card, decision modal and panels fit at both sizes |
 
@@ -166,11 +169,20 @@ The requested fog/palette fix is verified at DPR1 (no per-frame fog blur, near-z
 
 ## 6. Bugs & issues
 
+### Fixed & verified in round 3 (follow-up fixes)
+
+| Severity | Issue | Verification (re-run) |
+|---|---|---|
+| MED | **Autosave hitch**: serialisation (~23–28 ms, 1.4–1.5 MB) ran synchronously in the tick every 30 days → 30–37 ms tick and 50–80 ms long task | FIXED — autosave deferred to `requestIdleCallback` (4 s timeout fallback), off-frame, interval 45 days. `profile-autosave` DPR1/DPR2: **0 long tasks, 0 >30 ms tasks, tick max 4.5–5.0 ms**; serialise/write complete in idle (2.9–6.6 ms writes) |
+| MED | **DPR2/Retina terrain chunk thrash**: 2 498 evictions / 2 520 bakes per ~8 s, 22 chunks cached, `terrain.draw` avg 9.14 ms (18× DPR1) | FIXED — bake resolution capped at 1.55× for DPR ≥ 1.5 and chunk budget scales at high DPR (200 MB class). `profile-render 2`: **evictions 0, bakes 56, chunks 56, bytes 124.1 MB, `terrain.draw` avg 0.43 ms**, 60 fps; DPR1 unchanged (0 evictions, 0.25 ms) |
+| LOW | **Tour card overlapped the First Steps dock** (7 146 px² over 7 rows, text bleed at 1600×900, clipped at 1280×800) | FIXED — `.fh-firststeps` is hidden while `body.fh-tour-open`; browser matrix now measures computed-style dock visibility: **overlap = 0** (`shots/qa-tour-step1-1600x900.png`, `shots/qa-tour-1280x800.png`) |
+| LOW | **Returning players could miss the tour**: auto-start only fired at `tick <= 1` | FIXED & verified — loading an existing save with no `fh-tour-v1` key auto-starts the tour (paused, step 1/8): `shots/qa-tour-returning-player-1600x900.png` |
+
 ### Fixed & verified in round 2 (Lead-reported root causes)
 
 | Severity | Issue | Verification |
 |---|---|---|
-| HIGH | **Renderer lag / ~1 FPS**: fog-of-war rebuilt a ~758 k-px blurred canvas (~392 ms) on every explored-tile change; palette triggered a full terrain rebake on every 3 °C/weather change | `profile-render` DPR1: 0 evictions after warmup, `terrain.bake` avg 0.39 ms, `terrain.draw` avg 0.49 ms; `profile-fps`: 60 fps at 4× with 160+ pop, render p95 1.8–2.6 ms, ≤1 long task/10 s. Target met at DPR1 (residual DPR2 chunk thrash reported below) |
+| HIGH | **Renderer lag / ~1 FPS**: fog-of-war rebuilt a ~758 k-px blurred canvas (~392 ms) on every explored-tile change; palette triggered a full terrain rebake on every 3 °C/weather change | `profile-render` DPR1: 0 evictions after warmup, `terrain.bake` avg 0.46 ms, `terrain.draw` avg 0.25 ms; `profile-fps`: 60 fps at 4× with 160+ pop, render p95 1.8–2.6 ms (DPR2 p95 now 3.0 ms after the round-3 chunk fix) |
 | HIGH | **Decision overload/lock**: decisions every ~10 game days, up to 3 stacked modals, and all-choices-unaffordable decisions were unresolvable | Era-based gaps (45/38/32/28/24/22/20 d), max 1 pending, chained/scheduled deferral fixed after QA found a `!telegraphed` bypass, `__none` "Let it pass" on every modal. `tests/decisions.test.ts` 6/6; browser: 4 decisions/300 d, gaps ≥20, no soft-lock |
 | MED | **No onboarding**: no guide or checklist for new players | 8-step spotlight tour (pauses world, skippable, persists, Help-replay) + First Steps checklist (7 steps, live completion). Browser onboarding suite 18/18 checks pass; screenshots captured at 1600×900 and 1280×800 |
 
@@ -185,13 +197,10 @@ The requested fog/palette fix is verified at DPR1 (no per-frame fog blur, near-z
 | MED | Save→load→continue diverged (derived settlement fields rounding) | FIXED — determinism suite proves byte-identical continuation |
 | MED | Fibre bootstrap deadlock (only via forager recipe switch) | MITIGATED in autoplay; content UX still fragile (recommend berries recipe yields a little fibre) |
 
-### Genuinely open (round 2)
+### Genuinely open (accepted balance/polish items)
 
 | Severity | Issue | Owner | Repro / notes |
 |---|---|---|---|
-| MED | **Autosave (and manual save) hitch**: serializeState 23.4–27.7 ms + setItem 6.0–8.4 ms ⇒ 30–37 ms tick, **50–80 ms long task every 30 game days** | Lead (app scheduling) | `node tools/profile-autosave.mjs 1 4 4000` (and `2 4 4000`); recommend idle/after-frame scheduling |
-| MED | **DPR2 terrain chunk cache thrash**: 2 498 evictions / 2 520 bakes per ~8 s, 22 chunks cached, `terrain.draw` avg **9.14 ms** (18× DPR1) | renderer owner | `node tools/profile-render.mjs 2` vs `1`; scale chunk budget by DPR |
-| LOW | **Tour card overlaps the First Steps dock**: 7 146 px² over 7 rows at 1600×900; checklist text peeks out below/around the card and is clipped at 1280×800, looking broken | ui | `shots/qa-tour-step1-1600x900.png`, `shots/qa-tour-1280x800.png`; hide the dock or reposition the card during the tour (recorded in `qa-browser-report.json.knownIssues`) |
 | LOW | **Population ramp too slow**: pop-10 day 70–79 vs target 25–50 | Lead / population tuning | `tools/balance.mjs`; growth gated by beds + 1-founder workforce |
 | LOW | **Era-2 pacing variance**: day 108–367 vs target 150–250 (3/5 late); event count fell to 12–17/400 d after the decision-cadence fix | Lead / balance | same matrix |
 | LOW | `foodDays` / `waterDays` show absurd values (e.g. 10 422) when population hits 0 (`foodDaysOf` divides by population) | Lead (`core.ts`) | cosmetic/metrics only |
@@ -204,11 +213,11 @@ No exploits found: no negative stock, no over-cap stock, no free housing/upkeep 
 
 ## 7. Accessibility & UX notes
 
-- Welcome and tour use `role="dialog"`, `aria-modal="true"`, labelled cards; tour is fully keyboard-controllable (←/→ steps, Enter next, Esc skip, dots as `role="tab"` with labels), pauses the world, and persists across reloads; Help (?) and Objectives both offer "Replay the tour".
-- First Steps checklist is a labelled `aside` with `role="listitem"` rows, done/current/locked states, clickable steps and collapse/dismiss controls; it updates live from game state (verified by building a Forager's Camp in the browser).
+- Welcome and tour use `role="dialog"`, `aria-modal="true"`, labelled cards; tour is fully keyboard-controllable (←/→ steps, Enter next, Esc skip, dots as `role="tab"` with labels), pauses the world, and persists across reloads; Help (?) and Objectives both offer "Replay the tour". The tour also auto-starts for returning players with an existing save who never took it.
+- First Steps checklist is a labelled `aside` with `role="listitem"` rows, done/current/locked states, clickable steps and collapse/dismiss controls; it updates live from game state (verified by building a Forager's Camp in the browser) and is hidden (not merely covered) while the tour is open.
 - Rail buttons expose `aria-label`, `aria-pressed`, tooltips and shortcuts (`T/S/M/P/C/D/E/W/O`, `B`, `Esc`, `?`); Escape closes panels. Reduced-motion and colourblind options exist in settings.
 - Dark-on-dark contrast in dense tables (market rows, 1280×800) is acceptable but the lowest-contrast small text could get a contrast pass.
-- Polish items: tour-card vs First Steps overlap (above), rail label truncation, some custom buttons lack a visible focus ring.
+- Polish items: rail label truncation, some custom buttons lack a visible focus ring. (The tour-card/First Steps overlap found in round 2 is fixed in round 3.)
 
 ## 8. Known limitations of this QA pass
 
@@ -216,4 +225,4 @@ No exploits found: no negative stock, no over-cap stock, no free housing/upkeep 
 - Browser/perf matrices were run against an isolated production build (`dist/` on :5299) to avoid HMR races. Profiling on the live dev server while `src/ui` was being edited produced transient `PAGEERROR` entries (HMR partial-module races); the stable-build matrix reports **0 console errors and 0 page errors**.
 - DPR2 was simulated via Chrome `deviceScaleFactor`; real Retina GPU behaviour may differ slightly, though the CPU-side chunk-thrash finding is deterministic and DPR-driven.
 - Renderer/UI aesthetics (art polish, animation feel, fog look) are only sanity-checked through screenshots, not judged by QA.
-- The autosave probe isolates save cost with `decisionPause=false`; real play also pauses on decisions, which can only make the observed hitch shorter, not longer.
+- The autosave probe isolates save cost with `decisionPause=false`; since the round-3 fix, autosave runs in `requestIdleCallback`, so the probe measures serialise cost and any residual long tasks rather than frame blocking (both now zero in the measured windows). Serialisation itself is still ~30–37 ms of main-thread work when the idle callback fires — invisible unless the idle budget is very small.
