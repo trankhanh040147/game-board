@@ -148,6 +148,7 @@ function gameRow(slug: string, index: number): string {
         ${playButton(play ?? '', 'Play ' + build.title)}
         <a class="link-arrow" href="/making-of/${attr(build.slug)}">How it was made <span class="link-arrow__arrow" aria-hidden="true">→</span></a>
       </div>
+      ${build.requirements ? `<p class="game-row__req meta">${esc(build.requirements)}</p>` : ''}
     </div>
   </article>`
 }

@@ -28,6 +28,8 @@ export interface GameEntry {
   playUrl: string
   sourceRef: string
   sortOrder: number
+  /** Human-input requirements, shown next to the Play action. */
+  requirements?: string
 }
 
 export interface SiteInfo {

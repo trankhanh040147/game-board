@@ -221,7 +221,7 @@ export function view(): PageView {
           ${count(aggregate.prompts)} human prompts · ${count(aggregate.totalSteps)} agent steps ·
           ${esc(compact(aggregate.totalTokens))} tokens · ${esc(hours(aggregate.activeMs))} agent-hours<br />
           Model ${esc(MODEL_LABEL)} · ${count(aggregate.subagentSessions)} subagent sessions ·
-          ${esc(hours(aggregate.wallMs))} h wall clock
+          ${esc(hours(aggregate.wallMs))} h wall clock <span class="meta">(three overlapping windows)</span>
         </p>
       </div>
     </section>

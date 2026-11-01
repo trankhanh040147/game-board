@@ -50,7 +50,8 @@
       },
       "playUrl": "",
       "sourceRef": "games/first-hearth",
-      "sortOrder": 1
+      "sortOrder": 1,
+      "requirements": "Mouse and keyboard; touch pans the map"
     },
     {
       "slug": "blade-and-mount",
@@ -94,7 +95,8 @@
       },
       "playUrl": "",
       "sourceRef": "games/blade-and-mount",
-      "sortOrder": 2
+      "sortOrder": 2,
+      "requirements": "Keyboard and mouse required — no touch controls"
     },
     {
       "slug": "alien-shooter",
@@ -138,7 +140,8 @@
       },
       "playUrl": "",
       "sourceRef": "games/alien-shooter",
-      "sortOrder": 3
+      "sortOrder": 3,
+      "requirements": "Mouse and keyboard, or touch"
     }
   ]
 }

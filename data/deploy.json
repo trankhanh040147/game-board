@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-01T09:11:30.921Z",
+  "generatedAt": "2026-11-01T09:16:50.462Z",
   "games": {
     "blade-and-mount": {
       "url": "https://blade-and-mount.vercel.app",
@@ -16,6 +16,6 @@
   },
   "board": {
     "url": "https://game-board-pi.vercel.app",
-    "deployedAt": "2026-11-01T09:11:29Z"
+    "deployedAt": "2026-11-01T09:16:48Z"
   }
 }
