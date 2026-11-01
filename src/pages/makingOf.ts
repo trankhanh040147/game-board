@@ -1,5 +1,5 @@
 import { attr, esc, qs, qsa } from '../lib/dom'
-import { compact, count, duration, hours, time } from '../lib/format'
+import { compact, count, duration, hours, time, workTime } from '../lib/format'
 import { aggregate, builds, MODEL_LABEL, spanOfPrompts } from '../data/telemetry'
 import { gameBySlug } from '../data/registry'
 import { legend, timelineChart, tokenStack } from '../components/ui'
@@ -11,10 +11,10 @@ const MEASURES: Array<{
   value: (build: (typeof builds)[number]) => number
   format: (build: (typeof builds)[number]) => string
 }> = [
-  { id: 'active', label: 'Agent-hours', value: (b) => b.activeMs, format: (b) => `${hours(b.activeMs)} h` },
+  { id: 'active', label: 'Agent work', value: (b) => b.activeMs, format: (b) => workTime(b.activeMs) },
   { id: 'wall', label: 'Wall clock', value: (b) => b.wallMs, format: (b) => duration(b.wallMs) },
   { id: 'prompts', label: 'Prompts', value: (b) => b.prompts.length, format: (b) => count(b.prompts.length) },
-  { id: 'turns', label: 'Agent turns', value: (b) => b.agentTurns, format: (b) => count(b.agentTurns) },
+  { id: 'steps', label: 'Agent steps', value: (b) => b.totalSteps, format: (b) => count(b.totalSteps) },
   { id: 'tokens', label: 'Tokens', value: (b) => b.totalTokens, format: (b) => compact(b.totalTokens) },
   { id: 'tools', label: 'Tool calls', value: (b) => b.toolCalls, format: (b) => count(b.toolCalls) },
   { id: 'files', label: 'Files', value: (b) => b.filesCreated, format: (b) => count(b.filesCreated) },
@@ -30,7 +30,7 @@ function accentOf(slug: string): string {
 function accentStyle(slug: string): string {
   const game = gameBySlug(slug)
   if (!game) return ''
-  const accentInk = slug === 'blade-and-mount' ? '#efe9df' : '#0b0b0c'
+  const accentInk = '#0b0b0c'
   return ` style="--accent:${attr(game.accent)};--accent-ink:${accentInk};--accent-deep:${attr(game.accent2)}"`
 }
 
@@ -41,6 +41,9 @@ function rankingRows(measureId: string): string {
   return ranked
     .map(
       (build) => `<a class="build-row" href="/making-of/${attr(build.slug)}"${accentStyle(build.slug)}>
+        <span class="build-row__thumb">
+          <img src="${attr(build.media.hero)}" alt="${attr(build.media.heroAlt)}" loading="lazy" decoding="async" width="320" height="200" />
+        </span>
         <span class="build-row__name">
           <span class="build-row__accent" aria-hidden="true"></span>
           <span>
@@ -55,7 +58,7 @@ function rankingRows(measureId: string): string {
           </span>
         </span>
         <span class="build-row__meta">
-          ${count(build.prompts.length)} ${build.prompts.length === 1 ? 'prompt' : 'prompts'} · ${count(build.agentTurns)} turns<br />
+          ${count(build.prompts.length)} ${build.prompts.length === 1 ? 'prompt' : 'prompts'} · ${count(build.totalSteps)} steps<br />
           ${esc(compact(build.totalTokens))} tokens · ${count(build.filesCreated)} files
         </span>
       </a>`,
@@ -80,7 +83,7 @@ function clocksChart(): string {
         (build) => `<div class="clock-row"${accentStyle(build.slug)}>
           <div class="clock-row__name">
             <span class="clock-row__title">${esc(build.title)}</span>
-            <span class="clock-row__detail">${count(build.prompts.length)} ${build.prompts.length === 1 ? 'prompt' : 'prompts'} · ${count(build.leadSteps)} lead turns · ${count(build.subagentSteps)} subagent turns</span>
+            <span class="clock-row__detail">${count(build.prompts.length)} ${build.prompts.length === 1 ? 'prompt' : 'prompts'} · ${count(build.leadSteps)} lead steps · ${count(build.subagentSteps)} subagent steps</span>
           </div>
           <div class="clock-row__tracks">
             <div class="clock-row__track"><span class="clock-row__fill clock-row__fill--wall" style="--w:${((build.wallMs / maxWall) * 100).toFixed(2)}%"></span></div>
@@ -88,7 +91,7 @@ function clocksChart(): string {
           </div>
           <div class="clock-row__values">
             <span>${esc(duration(build.wallMs))} <em>wall clock</em></span>
-            <span>${esc(hours(build.activeMs))} h <em>agent work</em></span>
+            <span>${esc(workTime(build.activeMs))} <em>agent work</em></span>
           </div>
         </div>`,
       )
@@ -138,8 +141,8 @@ interface Column {
 const COLUMNS: Column[] = [
   { key: 'name', label: 'build', value: (b) => b.title, numeric: false },
   { key: 'prompts', label: 'prompts', value: (b) => b.prompts.length, numeric: true },
-  { key: 'lead', label: 'lead turns', value: (b) => b.leadSteps, numeric: true },
-  { key: 'sub', label: 'subagent turns', value: (b) => b.subagentSteps, numeric: true },
+  { key: 'lead', label: 'lead steps', value: (b) => b.leadSteps, numeric: true },
+  { key: 'sub', label: 'subagent steps', value: (b) => b.subagentSteps, numeric: true },
   { key: 'agents', label: 'subagents', value: (b) => b.subagentSessions, numeric: true },
   { key: 'wall', label: 'wall clock', value: (b) => b.wallMs, numeric: true },
   { key: 'active', label: 'agent-hours', value: (b) => b.activeMs, numeric: true },
@@ -158,7 +161,7 @@ function cell(column: Column, build: (typeof builds)[number]): string {
   }
   const value = column.value(build)
   if (column.key === 'wall' || column.key === 'active') {
-    return column.key === 'active' ? `${esc(hours(build.activeMs))} h` : esc(duration(build.wallMs))
+    return column.key === 'active' ? esc(workTime(build.activeMs)) : esc(duration(build.wallMs))
   }
   if (column.key === 'tokens' || column.key === 'out' || column.key === 'cache') {
     return esc(compact(Number(value)))
@@ -198,12 +201,13 @@ function tableBody(): string {
 
 export function view(): PageView {
   const span = spanOfPrompts()
-  const prosePosition = `<style>@media (max-width: 720px){.mobile-only{display:block;font-size:11px;color:var(--ink-4)}}</style>`
+  const blade = builds.find((build) => build.slug === 'blade-and-mount')
+  const firstHearth = builds.find((build) => build.slug === 'first-hearth')
   return {
     title: 'The receipts — Game Board',
     description:
       'Every prompt, token, agent turn and tool call behind three browser games built by an AI agent: the comparison table, the two clocks and the token mix.',
-    html: `${prosePosition}
+    html: `
     <section class="wrap page-head" aria-labelledby="receipts-title">
       <div class="page-head__title">
         <h1 id="receipts-title">The receipts.</h1>
@@ -214,11 +218,24 @@ export function view(): PageView {
       </div>
       <div class="page-head__side">
         <p class="page-head__note">
-          ${count(aggregate.prompts)} human prompts · ${count(aggregate.agentTurns)} agent turns ·
+          ${count(aggregate.prompts)} human prompts · ${count(aggregate.totalSteps)} agent steps ·
           ${esc(compact(aggregate.totalTokens))} tokens · ${esc(hours(aggregate.activeMs))} agent-hours<br />
           Model ${esc(MODEL_LABEL)} · ${count(aggregate.subagentSessions)} subagent sessions ·
           ${esc(hours(aggregate.wallMs))} h wall clock
         </p>
+      </div>
+    </section>
+
+    <section class="wrap" aria-label="The three builds">
+      <div class="strip reveal">
+        ${builds
+          .map(
+            (build) => `<a class="strip__item" href="/making-of/${attr(build.slug)}"${accentStyle(build.slug)}>
+              <img src="${attr(build.media.hero)}" alt="${attr(build.media.heroAlt)}" loading="lazy" decoding="async" width="640" height="400" />
+              <span class="strip__label">${esc(build.title)}</span>
+            </a>`,
+          )
+          .join('')}
       </div>
     </section>
 
@@ -228,12 +245,20 @@ export function view(): PageView {
         <span class="story-section__note">one control, seven measures</span>
       </div>
       <div class="reveal">${toggle()}</div>
+      <p class="prose" style="margin-top:.85rem">
+        <span class="meta">Definition&nbsp;&nbsp;</span>
+        A step is one assistant message — a tool call, a decision or a reply, with its tool results. The
+        ${count(aggregate.prompts)} human prompts in this dataset produced ${count(aggregate.totalSteps)} steps;
+        agent-to-agent messages and harness plumbing are not counted as steps.
+      </p>
       <div class="builds reveal" id="build-ranking" aria-live="polite">${rankingRows(state.measure)}</div>
       <p class="prose" style="margin-top:1.5rem">
         <span class="meta">Read&nbsp;&nbsp;</span>
-        Changing the measure changes the winner. Blade &amp; Mount is the biggest build by every measure;
-        Alien Shooter wins on efficiency — one prompt, one agent, 39 minutes of work, and the game was
-        playable before the session ended.
+        Changing the measure changes the ranking, and no build leads everything. Blade &amp; Mount leads on
+        tokens, wall clock and agent-hours; First Hearth wrote more files
+        (${count(firstHearth?.filesCreated ?? 0)} vs ${count(blade?.filesCreated ?? 0)}) and ran more subagent
+        steps (${count(firstHearth?.subagentSteps ?? 0)} vs ${count(blade?.subagentSteps ?? 0)}). Alien
+        Shooter is the outlier: one prompt, one agent, 43 minutes in the log.
       </p>
     </section>
 
@@ -242,7 +267,7 @@ export function view(): PageView {
         <h2 class="story-section__title" id="clocks-title">Two clocks</h2>
         <span class="story-section__note">wall clock ≠ work done</span>
       </div>
-      <div class="reveal">
+      <div class="chart-panel reveal">
         <div class="chart__cap">
           <span class="chart__title">Hours per build</span>
           <span class="chart__note">First Hearth's turn ended at 00:11; the next prompt arrived at 07:59.</span>
@@ -262,7 +287,7 @@ export function view(): PageView {
         <h2 class="story-section__title" id="tokens-title">Where the tokens went</h2>
         <span class="story-section__note">${esc(compact(aggregate.totalTokens))} tokens, ${esc(compact(aggregate.cacheReadTokens))} of them re-used context</span>
       </div>
-      <div class="reveal">
+      <div class="chart-panel reveal">
         <div class="chart__cap">
           <span class="chart__title">Token mix per build</span>
           <span class="chart__note">bars drawn to the same ${esc(compact(aggregate.totalTokens))} scale</span>
@@ -282,13 +307,14 @@ export function view(): PageView {
         <h2 class="story-section__title" id="when-title">When the work happened</h2>
         <span class="story-section__note">${count(aggregate.prompts)} prompts across 31 Oct – 1 Nov, UTC+7</span>
       </div>
-      <div class="reveal">
+      <div class="chart-panel reveal">
         ${timelineChart(builds, span, accentOf)}
       </div>
       <p class="prose" style="margin-top:1.75rem">
-        The gaps are the story. Three sessions ran in parallel from ~22:50 on 31 October; the human went to
-        bed, the agents kept working, and the next prompt landed the following morning. The last spike is
-        the ${time('2026-11-01T14:16:07.909+07:00')} “stop the server” and the workspace move.
+        The gaps are the story. Blade &amp; Mount was already running when First Hearth's session opened at
+        22:53 on 31 October; the human went to bed, the agents kept working, and the next prompt did not
+        land until 07:59 the following morning. The last two marks are ${time('2026-11-01T14:16:07.909+07:00')}
+        (“stop the server”) and the move of the finished game into this repository.
       </p>
     </section>
 
@@ -315,14 +341,17 @@ export function view(): PageView {
         ${builds
           .map(
             (build) => `<a class="ticket reveal" href="/making-of/${attr(build.slug)}"${accentStyle(build.slug)}>
+              <span class="ticket__media">
+                <img src="${attr(build.media.hero)}" alt="${attr(build.media.heroAlt)}" loading="lazy" decoding="async" width="480" height="300" />
+              </span>
               <span>
                 <span class="ticket__title">${esc(build.title)}</span>
                 <span class="build-row__genre">${esc(build.subtitle)}</span>
               </span>
               <span class="ticket__stats">
-                <span>${count(build.prompts.length)} ${build.prompts.length === 1 ? 'prompt' : 'prompts'} · ${count(build.agentTurns)} turns</span>
+                <span>${count(build.prompts.length)} ${build.prompts.length === 1 ? 'prompt' : 'prompts'} · ${count(build.totalSteps)} steps</span>
                 <span>${esc(compact(build.totalTokens))} tokens · ${count(build.filesCreated)} files</span>
-                <span>${esc(hours(build.activeMs))} h of agent work</span>
+                <span>${esc(workTime(build.activeMs))} of agent work</span>
               </span>
               <span class="ticket__cta">Open the exhibit →</span>
             </a>`,

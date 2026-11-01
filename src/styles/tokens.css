@@ -13,7 +13,7 @@
   --ink: #efe9df;
   --ink-2: #cdc6b9;
   --ink-3: #9d9689;
-  --ink-4: #6f6961;
+  --ink-4: #8a8377;
 
   /* hairlines */
   --rule: rgba(239, 233, 223, 0.14);
@@ -23,6 +23,7 @@
   /* accent, overridden per game */
   --accent: #efe9df;
   --accent-ink: #0b0b0c;
+  --accent-text: #efe9df;
   --accent-deep: #3a352d;
 
   /* type */
@@ -59,17 +60,20 @@
 body[data-game='first-hearth'] {
   --accent: #e0a45f;
   --accent-ink: #0b0b0c;
+  --accent-text: #e0a45f;
   --accent-deep: #8c5a2b;
 }
 
 body[data-game='blade-and-mount'] {
   --accent: #c8553d;
-  --accent-ink: #efe9df;
+  --accent-ink: #0b0b0c;
+  --accent-text: #e2826b;
   --accent-deep: #7a2f22;
 }
 
 body[data-game='alien-shooter'] {
   --accent: #7ce8a4;
   --accent-ink: #0b0b0c;
+  --accent-text: #7ce8a4;
   --accent-deep: #1f6f47;
 }

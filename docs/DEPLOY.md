@@ -229,7 +229,7 @@ Production aliases after the first deploy:
 | `first-hearth` | <https://first-hearth.vercel.app> | canonical alias |
 | `blade-and-mount` | <https://blade-and-mount.vercel.app> | canonical alias |
 | `alien-shooter` | <https://alien-shooter-omega.vercel.app> | `alien-shooter.vercel.app` was already taken by another account, so Vercel assigned the `-omega` alias |
-| `game-board` | see `data/deploy.json` | recorded after the board deploy |
+| `game-board` | <https://game-board-pi.vercel.app> | `game-board.vercel.app` was taken, so Vercel assigned `-pi` |
 
 `data/deploy.json` is the authoritative list of URLs the board links to; do not
 hard-code them elsewhere. A re-deploy keeps the same production alias.
@@ -309,4 +309,6 @@ deployment.
 | `missing deploy config: games/<slug>/vercel.json` | A per-project config was deleted. Restore it from git before deploying. |
 | Build fails with `tsc: command not found` | Dev dependencies were pruned (`NODE_ENV=production` during install). Vercel installs devDependencies by default; do not set that variable. |
 | Verification fails on title only | The expected title in `scripts/deploy.sh` is the document `<title>` after HTML-entity decoding (`&amp;` → `&`). Update the `PROJECTS` table if the site changes a title. |
+| **Board deep links return Vercel's plain-text `NOT_FOUND`** (while `/` is 200) | `cleanUrls: true` in the root `vercel.json` makes Vercel redirect `/index.html` back to `/`, so a catch-all rewrite whose destination is `/index.html` resolves to nothing. Keep `cleanUrls: false` together with `rewrites: [{ "source": "/(.*)", "destination": "/index.html" }]`. The `scripts/deploy.sh` SPA check catches this. |
+| A stale hashed asset path returns 200 `text/html` instead of 404 | Expected SPA behaviour: the catch-all rewrite serves the app shell for any unknown path, including asset hashes from an older build. Current assets (referenced by the live `index.html`) are served with the right content types. |
 | `curl` gets 401/403 | Deployment protection is on — disable it for public projects. |

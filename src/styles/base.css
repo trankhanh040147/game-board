@@ -60,6 +60,9 @@ body {
 
 main {
   flex: 1 0 auto;
+  /* The router paints after first paint; keep the footer below the fold until then
+     so its jump does not register as layout shift. */
+  min-height: 100svh;
   outline: none;
 }
 
@@ -207,8 +210,8 @@ strong {
   background: var(--ink);
   color: var(--paper);
   padding: 0.85rem 1.1rem;
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
+  font-family: var(--font-serif);
+  font-size: var(--fs-small);
   text-decoration: none;
 }
 

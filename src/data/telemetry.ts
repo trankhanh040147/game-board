@@ -147,7 +147,7 @@ export interface Build extends GameEntry {
   activeMs: number
   leadSteps: number
   subagentSteps: number
-  agentTurns: number
+  totalSteps: number
   subagentSessions: number
   toolCalls: number
   tools: Array<{ name: string; count: number }>
@@ -199,7 +199,7 @@ export function toBuild(entry: GameEntry): Build | undefined {
     activeMs: raw.activeMs ?? 0,
     leadSteps,
     subagentSteps,
-    agentTurns: leadSteps + subagentSteps,
+    totalSteps: leadSteps + subagentSteps,
     subagentSessions: rounds.subagentSessions ?? 0,
     toolCalls: tools.reduce((sum, tool) => sum + tool.count, 0),
     tools,
@@ -236,7 +236,7 @@ export interface Aggregate {
   activeMs: number
   leadSteps: number
   subagentSteps: number
-  agentTurns: number
+  totalSteps: number
   subagentSessions: number
   toolCalls: number
   filesCreated: number
@@ -267,7 +267,7 @@ export const aggregate: Aggregate = {
   activeMs: sumBy(builds, (build) => build.activeMs),
   leadSteps: sumBy(builds, (build) => build.leadSteps),
   subagentSteps: sumBy(builds, (build) => build.subagentSteps),
-  agentTurns: sumBy(builds, (build) => build.agentTurns),
+  totalSteps: sumBy(builds, (build) => build.totalSteps),
   subagentSessions: sumBy(builds, (build) => build.subagentSessions),
   toolCalls: sumBy(builds, (build) => build.toolCalls),
   filesCreated: sumBy(builds, (build) => build.filesCreated),

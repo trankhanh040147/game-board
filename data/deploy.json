@@ -1,21 +1,21 @@
 {
-  "generatedAt": "2026-11-01T08:23:16.085Z",
+  "generatedAt": "2026-11-01T08:57:49.320Z",
   "games": {
     "blade-and-mount": {
       "url": "https://blade-and-mount.vercel.app",
-      "deployedAt": "2026-11-01T08:00:59Z"
+      "deployedAt": "2026-11-01T08:26:54Z"
     },
     "alien-shooter": {
       "url": "https://alien-shooter-omega.vercel.app",
-      "deployedAt": "2026-11-01T08:10:08Z"
+      "deployedAt": "2026-11-01T08:57:48Z"
     },
     "first-hearth": {
       "url": "https://first-hearth.vercel.app",
-      "deployedAt": "2026-11-01T08:02:33Z"
+      "deployedAt": "2026-11-01T08:26:35Z"
     }
   },
   "board": {
     "url": "https://game-board-pi.vercel.app",
-    "deployedAt": "2026-11-01T08:23:14Z"
+    "deployedAt": "2026-11-01T08:26:14Z"
   }
 }

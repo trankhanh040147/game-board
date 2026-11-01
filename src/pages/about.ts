@@ -1,13 +1,13 @@
 import { attr, esc } from '../lib/dom'
 import { compact, count, dateTime, duration, hours } from '../lib/format'
 import { aggregate, generatedAt, MODEL_LABEL, summary } from '../data/telemetry'
-import { site } from '../data/registry'
+import { games, site } from '../data/registry'
 import type { PageView } from './home'
 
 const CAVEATS: Array<{ label: string; body: string }> = [
   {
     label: 'wall clock',
-    body: 'The build window runs from the first prompt to the last turn, and it includes the hours the human spent asleep. The three windows total roughly 44 hours, which is not 44 hours of work.',
+    body: 'A build window runs from the first prompt to the last turn and includes the hours the human spent asleep. The three windows total 37.5 hours, and because they overlapped, about 22.3 hours of calendar time passed between the first prompt and the last turn. None of that is hours of work.',
   },
   {
     label: 'agent-hours',
@@ -26,16 +26,16 @@ const CAVEATS: Array<{ label: string; body: string }> = [
     body: 'File counts come from write tool calls, so they are a floor. Edits, generated builds and files written by shell commands are not counted.',
   },
   {
-    label: 'prompts',
-    body: 'Only human messages are counted as prompts. Agent-to-agent messages, subagent briefs and harness plumbing are excluded, so a build with one prompt is not a build with one instruction.',
+    label: 'prompts and steps',
+    body: 'Only human messages are counted as prompts. Agent-to-agent messages, subagent briefs and harness plumbing are excluded, so a build with one prompt is not a build with one instruction. A step is one assistant message — a tool call, a decision or a reply.',
   },
   {
     label: 'translation',
-    body: 'Prompts typed in Vietnamese are shown in English, translated by the extraction script. The originals are kept verbatim in the data. Pasted media URLs were removed from the display because they are unreadable, not to change the wording.',
+    body: 'Prompts typed in Vietnamese are shown in English, translated into English for publication. The extractor stores one fixed English rendering per prompt; the verbatim Vietnamese originals remain in the data. Pasted media URLs were removed from the display because they are unreadable, not to change the wording.',
   },
   {
     label: 'screenshots',
-    body: 'Every screenshot on this site was taken by the agent while testing its own work, then cropped and compressed. Nothing was re-staged. Alien Shooter shipped with a Vietnamese interface, so its screenshots show Vietnamese labels.',
+    body: 'Every screenshot on this site was captured from the games as they run today, then cropped and compressed. Nothing was re-staged. The first build of Alien Shooter had a Vietnamese interface; it was localised to English afterwards and its screenshots were re-captured from the English build.',
   },
   {
     label: 'not cherry-picked',
@@ -59,12 +59,19 @@ export function view(): PageView {
       <div class="page-head__side">
         <p class="page-head__note">
           ${count(aggregate.games)} games · ${count(aggregate.prompts)} human prompts ·
-          ${count(aggregate.agentTurns)} agent turns · ${esc(hours(aggregate.activeMs))} agent-hours<br />
+          ${count(aggregate.totalSteps)} agent steps · ${esc(hours(aggregate.activeMs))} agent-hours<br />
           ${esc(compact(aggregate.totalTokens))} tokens · ${count(aggregate.toolCalls)} tool calls ·
           ${count(aggregate.filesCreated)} files
         </p>
       </div>
     </section>
+
+    <div class="wrap">
+      <figure class="about-banner reveal">
+        <img src="/media/blade-and-mount/hero.webp" alt="The tournament board of Blade &amp; Mount: four houses advancing to the lists" width="1600" height="900" loading="lazy" decoding="async" />
+        <figcaption>Blade &amp; Mount, one of three builds on this board — the tournament board the agent built for round one.</figcaption>
+      </figure>
+    </div>
 
     <div class="wrap about-grid">
       <nav class="about-index" aria-label="On this page">
@@ -133,7 +140,7 @@ export function view(): PageView {
           <p>
             Every figure comes from a script that walks the session family for each build, decompresses
             the JSONL logs and sums the usage events per session. Some fields are exact; some are floors.
-            These are the caveats, in the same order they appear in the build-history report.
+            The caveats below are the same ones the build-history report carries.
           </p>
         </div>
         <div class="caveats reveal">
@@ -145,11 +152,29 @@ export function view(): PageView {
           ).join('')}
         </div>
 
+        <h2 id="proof">The proof</h2>
+        <div class="prose">
+          <p>
+            Three screenshots, one per build, taken by the agents themselves while testing. Every image on
+            this site comes from that loop — no renders, no mockups, no marketing frames.
+          </p>
+        </div>
+        <div class="about-proof reveal">
+          ${games
+            .map(
+              (game) => `<figure class="about-proof__item" style="--accent:${attr(game.accent)}">
+                <img src="${attr(game.media.hero)}" alt="${attr(game.media.heroAlt)}" loading="lazy" decoding="async" width="640" height="400" />
+                <figcaption>${esc(game.title)} — ${esc(game.genre)}</figcaption>
+              </figure>`,
+            )
+            .join('')}
+        </div>
+
         <h2 id="credits">Credits</h2>
         <div class="prose">
           <p>
             Built by <a href="${attr(site.authorUrl)}" target="_blank" rel="noopener">${esc(site.author)}</a>.
-            The games, the prompts and the taste are his; the code underneath them was written by
+            The games, the prompts and the taste are his; the game code underneath them was written by
             ${esc(MODEL_LABEL)}. Screenshots come from each game's own QA runs. This showcase site was built
             the same way it describes: prompts, an agent, a headless browser and a lot of screenshots.
           </p>
@@ -165,6 +190,12 @@ export function view(): PageView {
             ${esc(dateTime(generatedAt))}
           </p>
         </div>
+      </div>
+    </div>
+    <div class="wrap">
+      <div class="about-foot">
+        <span class="meta">${count(aggregate.games)} games · ${count(aggregate.prompts)} prompts · ${count(aggregate.totalSteps)} agent steps · ${esc(compact(aggregate.totalTokens))} tokens</span>
+        <a href="/making-of">Open the receipts →</a>
       </div>
     </div>`,
   }

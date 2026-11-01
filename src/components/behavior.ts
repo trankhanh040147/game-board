@@ -1,5 +1,5 @@
 import { prefersReducedMotion, qs, qsa } from '../lib/dom'
-import { compact, count, hours } from '../lib/format'
+import { compact, count, workTime } from '../lib/format'
 
 /* ------------------------------------------------------------------
    Reveals — an entrance for the parts of every section, not one fade
@@ -40,7 +40,8 @@ export function initReveal(root: ParentNode): void {
 
 function formatCount(value: number, format: string): string {
   if (format === 'compact') return compact(value)
-  if (format === 'hours') return hours(value)
+  if (format === 'hours') return workTime(value)
+  if (format === 'work') return workTime(value)
   return count(value)
 }
 

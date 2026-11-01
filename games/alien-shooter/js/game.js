@@ -915,11 +915,11 @@ class Game {
     const ss = String(Math.floor(this.elapsed % 60)).padStart(2, '0');
     this.el.goStats.innerHTML = [
       this._stat('SCORE', fmtNum(this.score), 'cyan'),
-      this._stat('KỶ LỤC', fmtNum(best), 'amber'),
+      this._stat('BEST', fmtNum(best), 'amber'),
       this._stat('WAVE', String(this.wave), ''),
       this._stat('KILLS', String(this.kills), ''),
       this._stat('LEVEL', String(this.player.level), 'violet'),
-      this._stat('THỜI GIAN', `${mm}:${ss}`, ''),
+      this._stat('TIME', `${mm}:${ss}`, ''),
     ].join('');
 
     this.setState('gameover');

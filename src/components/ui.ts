@@ -1,5 +1,5 @@
 import { attr, esc } from '../lib/dom'
-import { compact, count, dateTime, day, duration, hours, month, time, widthVar } from '../lib/format'
+import { cleanDisplay, compact, count, dateTime, day, duration, hours, month, time, widthVar } from '../lib/format'
 import type { Build, SubagentRecord } from '../data/telemetry'
 import { site } from '../data/registry'
 
@@ -146,11 +146,12 @@ export function cabinet(opts: {
   cycleMs?: number
   pager?: boolean
   wide?: boolean
+  drift?: boolean
 }): string {
   const slides = opts.slides
     .map(
       (slide, index) =>
-        `<img class="frame__img cabinet__slide${index === 0 ? ' is-active' : ''}" data-slide="${index}"
+        `<img class="frame__img cabinet__slide${index === 0 ? ' is-active' : ''}${opts.drift ? ' drift' : ''}" data-slide="${index}"
           src="${attr(slide.src)}" alt="${attr(slide.alt)}" loading="${index === 0 ? 'eager' : 'lazy'}"
           decoding="async" data-caption="${attr(slide.caption)}" data-title="${attr(slide.title)}" data-meta="${attr(slide.meta ?? '')}" />`,
     )
@@ -189,7 +190,7 @@ export function cabinet(opts: {
 
 export function fig(opts: {
   to: number
-  format?: 'compact' | 'int' | 'hours'
+  format?: 'compact' | 'int' | 'hours' | 'work'
   unit?: string
   caption: string
   accent?: boolean
@@ -209,7 +210,7 @@ export function staticFig(value: string, caption: string, accent = false): strin
   </div>`
 }
 
-export function ledger(items: Array<{ to?: number; value?: string; format?: 'compact' | 'int' | 'hours'; caption: string }>): string {
+export function ledger(items: Array<{ to?: number; value?: string; format?: 'compact' | 'int' | 'hours' | 'work'; caption: string }>): string {
   return `<div class="ledger">${items
     .map(
       (item) => `<div class="ledger__item">
@@ -314,7 +315,7 @@ export function rosterRow(subagent: SubagentRecord): string {
   const label = subagent.label ?? 'subagent'
   const name = label.split(' — ')[0] ?? label
   const role = label.includes(' — ') ? label.split(' — ').slice(1).join(' — ') : 'Specialist'
-  return `<div class="roster__row">
+  return `<div class="roster__row reveal">
     <span class="roster__name">${esc(name)}</span>
     <span class="roster__role">${esc(role)}</span>
     <span class="roster__stat">${count(subagent.steps ?? 0)}<span>steps</span></span>
@@ -363,21 +364,6 @@ const KIND_LABEL: Record<string, string> = {
   ship: 'shipped',
 }
 
-function kindIcon(kind: string): string {
-  const paths: Record<string, string> = {
-    plan: '<path d="M3 4h10M3 7.5h10M3 11h6"/>',
-    scaffold: '<path d="M3 3h10v10H3z"/><path d="M3 7h10M7 3v10"/>',
-    implement: '<path d="M5.5 4 2.5 8l3 4M10.5 4l3 4-3 4"/>',
-    art: '<path d="M8 2 2.5 13h11z"/>',
-    test: '<path d="M2.5 8.5 6 12l5.5-7"/>',
-    build: '<path d="M2.5 12h11M3.5 9.5h9M4.5 7h7"/>',
-    qa: '<path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.6"/>',
-    commit: '<circle cx="8" cy="8" r="2.4"/><path d="M8 1.5v4M8 10.5v4"/>',
-    ship: '<path d="M2 11 11 2M11 2H6M11 2v5"/>',
-  }
-  return `<svg class="tl-group__icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="square" aria-hidden="true">${paths[kind] ?? paths.implement}</svg>`
-}
-
 export function milestoneGroups(milestones: Build['milestones']): string {
   const groups = new Map<string, Build['milestones']>()
   for (const milestone of milestones) {
@@ -391,9 +377,9 @@ export function milestoneGroups(milestones: Build['milestones']): string {
   )
   return `<div class="tl-groups">${ordered
     .map(
-      ([kind, items]) => `<div class="tl-group">
+      ([kind, items]) => `<div class="tl-group reveal">
       <div class="tl-group__head">
-        ${kindIcon(kind)}
+        <span class="tl-group__mark" aria-hidden="true"></span>
         <span class="tl-group__kind">${esc(KIND_LABEL[kind] ?? kind)}</span>
         <span class="tl-group__count">${items.length}</span>
       </div>
@@ -402,7 +388,7 @@ export function milestoneGroups(milestones: Build['milestones']): string {
           .map(
             (item) => `<div class="tl-item${kind === 'commit' ? ' tl-item--commit' : ''}">
             <time datetime="${attr(item.at ?? '')}">${esc(time(item.at))}</time>
-            <p>${esc(item.label ?? '')}</p>
+            <p>${esc(cleanDisplay(item.label ?? ''))}</p>
           </div>`,
           )
           .join('')}
@@ -425,7 +411,7 @@ export function promptBlock(opts: {
   lang: string
 }): string {
   const long = opts.text.length > 620
-  return `<article class="prompt">
+  return `<article class="prompt reveal">
     <div class="prompt__meta">
       <time datetime="${attr(opts.at ?? '')}">${esc(dateTime(opts.at))}</time>
       <span class="prompt__tag">${count(opts.chars)} characters</span>
@@ -441,7 +427,7 @@ export function promptBlock(opts: {
    ------------------------------------------------------------------ */
 
 export function quoteBlock(opts: { at?: string; text: string; label?: string }): string {
-  return `<blockquote class="quote">
+  return `<blockquote class="quote reveal">
     <p class="quote__text">${esc(opts.text)}</p>
     <footer class="quote__meta">
       <span>${esc(opts.label ?? 'agent reasoning')}</span>

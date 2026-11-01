@@ -1,5 +1,5 @@
 import { attr, esc } from '../lib/dom'
-import { compact, count, dateTime, hours, duration } from '../lib/format'
+import { compact, count, dateTime, duration, workTime } from '../lib/format'
 import {
   aggregate,
   builds,
@@ -32,7 +32,7 @@ export interface PageView {
 function accentStyle(slug: string): string {
   const game = gameBySlug(slug)
   if (!game) return ''
-  const accentInk = slug === 'blade-and-mount' ? '#efe9df' : '#0b0b0c'
+  const accentInk = '#0b0b0c'
   return ` style="--accent:${attr(game.accent)};--accent-ink:${accentInk};--accent-deep:${attr(game.accent2)}"`
 }
 
@@ -48,7 +48,7 @@ function heroSlides(): Slide[] {
     alt: build.media.heroAlt,
     title: build.title,
     caption: build.oneLiner,
-    meta: `${build.genre} · ${build.prompts.length} ${build.prompts.length === 1 ? 'prompt' : 'prompts'} · ${hours(build.activeMs)} agent-hours`,
+    meta: `${build.genre} · ${build.prompts.length} ${build.prompts.length === 1 ? 'prompt' : 'prompts'} · ${workTime(build.activeMs)} of agent work`,
   }))
 }
 
@@ -57,8 +57,8 @@ function hero(): string {
     <div class="hero__text">
       <h1 class="hero__title" id="hero-title">Three games.<br />No hands.</h1>
       <p class="hero__lede reveal">
-        A person typed <strong>${count(aggregate.prompts)} prompts</strong>. An AI agent typed everything else:
-        every system, every sprite, every line of CSS. Play the games, then read the receipts.
+        A person typed <strong>${count(aggregate.prompts)} prompts</strong>. An AI agent wrote the rest:
+        three games, every system in them, the tests and the fixes. Play them, then read the receipts.
       </p>
       <div class="actions reveal">
         <a class="btn" href="#shelf">Play the games</a>
@@ -79,13 +79,12 @@ function ledgerSection(): string {
   return `<section class="wrap section section--tight" aria-labelledby="ledger-title">
     <div class="story-section__head">
       <h2 class="story-section__title" id="ledger-title">What it took</h2>
-      <span class="story-section__note">all three builds, subagents included</span>
     </div>
     <div class="reveal">
       ${ledger([
         { to: aggregate.prompts, format: 'int', caption: 'prompts typed by a human' },
-        { to: aggregate.agentTurns, format: 'int', caption: 'agent turns, lead and subagents' },
-        { to: aggregate.activeMs, format: 'hours', caption: 'agent-hours of work' },
+        { to: aggregate.totalSteps, format: 'int', caption: 'agent steps, lead and subagents' },
+        { to: aggregate.activeMs, format: 'work', caption: 'agent work (parallel agents summed)' },
         { to: aggregate.totalTokens, format: 'compact', caption: 'tokens processed' },
         { to: aggregate.toolCalls, format: 'int', caption: 'tool calls' },
         { to: aggregate.filesCreated, format: 'int', caption: 'files written (a floor)' },
@@ -141,9 +140,9 @@ function gameRow(slug: string, index: number): string {
       </ul>
       <div class="game-row__specs reveal">
         <div><span class="spec__num">${count(build.prompts.length)}</span><span class="spec__cap">prompts</span></div>
-        <div><span class="spec__num">${esc(hours(build.activeMs))} h</span><span class="spec__cap">agent work</span></div>
+        <div><span class="spec__num">${esc(workTime(build.activeMs))}</span><span class="spec__cap">agent work</span></div>
         <div><span class="spec__num">${esc(compact(build.totalTokens))}</span><span class="spec__cap">tokens</span></div>
-        <div><span class="spec__num">${count(build.agentTurns)}</span><span class="spec__cap">agent turns</span></div>
+        <div><span class="spec__num">${count(build.totalSteps)}</span><span class="spec__cap">agent steps</span></div>
       </div>
       <div class="actions reveal">
         ${playButton(play ?? '', 'Play ' + build.title)}
@@ -165,9 +164,9 @@ function engineSection(): string {
         <h2 class="story-section__title" id="engine-title">The engine room</h2>
         <div class="prose reveal">
           <p>
-            Nobody opened an editor. DeepSeek Harness is an agent runtime: it hands a model tools — a
-            shell, a file system, a real browser, a shared task board — and the model works the way a
-            small studio would.
+            The human never opened an editor. DeepSeek Harness is an agent runtime: it hands a model
+            tools — a shell, a file system, a real browser, a shared task board — and the model works the
+            way a small studio would.
           </p>
           <p>
             For the two larger games a lead agent split the work and spawned specialists: an arena
@@ -176,10 +175,10 @@ function engineSection(): string {
           </p>
           <p>
             The part that decides quality is not the writing. It is the looking: open the game in a real
-            browser, take a screenshot, read it, decide what is wrong, repair it. Across these three
-            builds that loop ran ${count(aggregate.toolCalls)} times, and
-            ${count(aggregate.tools.find((tool) => tool.name === 'read_image')?.count ?? 0)} of those calls
-            were the agent looking at its own screenshots.
+            browser, take a screenshot, read it, decide what is wrong, repair it. Across these three builds
+            the agents made ${count(aggregate.toolCalls)} tool calls, and
+            ${count(aggregate.tools.find((tool) => tool.name === 'read_image')?.count ?? 0)} of them were
+            the agent looking at its own screenshots.
           </p>
         </div>
       </div>
@@ -232,7 +231,7 @@ function engineSection(): string {
 }
 
 function honestClose(): string {
-  const latest = allPrompts[allPrompts.length - 1]
+  const latest = [...allPrompts].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()).at(-1)
   return `<section class="wrap section section--tight" aria-labelledby="close-title">
     <div class="split-2">
       <div class="reveal">
@@ -241,15 +240,15 @@ function honestClose(): string {
       <div class="prose reveal">
         <p>
           Because the interesting part of vibe coding is not the output. It is the cost, the dead ends and
-          the loop. ${count(aggregate.prompts)} human prompts produced ${count(aggregate.filesCreated)}+ files and
-          three playable games — but also ${esc(compact(aggregate.cacheReadTokens))} tokens of re-read context,
-          ${count(aggregate.toolCalls)} tool calls and hours of the agent disagreeing with itself.
+          the loop. ${count(aggregate.prompts)} human prompts produced ${count(aggregate.filesCreated)}+ files
+          and three playable games — but also ${esc(compact(aggregate.cacheReadTokens))} tokens of re-read
+          context, ${count(aggregate.toolCalls)} tool calls and hours of the agent disagreeing with itself.
         </p>
         <p>
-          Every prompt on this site is the human's actual words, translated where they were typed in
-          Vietnamese${latest ? `; the last one was “${esc((promptEn(latest)).slice(0, 48))}”` : ''}. The
-          reasoning excerpts are the agent's own, unedited. The numbers are sums over session logs, and the
-          caveats are on <a href="/about">the about page</a>.
+          Every prompt on this site is the human's actual words, translated into English where they were
+          typed in Vietnamese${latest ? `; the last one moved the finished game into this repository` : ''}.
+          The reasoning excerpts are the agent's own, unedited. The numbers are sums over session logs, and
+          the caveats are on <a href="/about">the about page</a>.
         </p>
         <p class="meta" style="margin-top:1.5rem">
           Telemetry generated ${esc(dateTime(generatedAt))} (UTC+7) · ${count(aggregate.prompts)} prompts ·
@@ -262,7 +261,7 @@ function honestClose(): string {
 
 export function view(): PageView {
   return {
-    title: 'Game Board — three browser games, zero hand-written lines',
+    title: 'Game Board — three browser games, written by an AI agent',
     description: site.tagline,
     html: `${hero()}${ledgerSection()}${shelfSection()}${engineSection()}${honestClose()}`,
   }

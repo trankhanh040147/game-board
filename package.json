@@ -3,11 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Game Board — three browser games built entirely by prompting an AI agent, and the receipts that prove it.",
+  "description": "Game Board \u2014 three browser games built entirely by prompting an AI agent, and the receipts that prove it.",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5199",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/inject-font-preload.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 5200",
     "shots": "node shots/board/capture.mjs"
   },

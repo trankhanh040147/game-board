@@ -4,8 +4,9 @@ import {
   count,
   date,
   dateTime,
+  cleanDisplay,
   duration,
-  hours,
+  workTime,
   readablePrompt,
   firstSentences,
   passedCount,
@@ -33,7 +34,7 @@ import type { PageView } from './home'
 function accentStyle(slug: string): string {
   const game = gameBySlug(slug)
   if (!game) return ''
-  const accentInk = slug === 'blade-and-mount' ? '#efe9df' : '#0b0b0c'
+  const accentInk = '#0b0b0c'
   return ` style="--accent:${attr(game.accent)};--accent-ink:${accentInk};--accent-deep:${attr(game.accent2)}"`
 }
 
@@ -59,10 +60,6 @@ function slidesFor(slug: string): Slide[] {
 function exhibitHead(build: NonNullable<ReturnType<typeof buildBySlug>>): string {
   const game = gameBySlug(build.slug)
   return `<section class="wrap exhibit-head"${accentStyle(build.slug)} aria-labelledby="exhibit-title">
-    <div class="exhibit-head__top">
-      <a class="exhibit-head__back" href="/making-of">← All receipts</a>
-      <span class="meta">${esc(build.repoPath)}</span>
-    </div>
     <h1 class="exhibit-head__title" id="exhibit-title">${esc(build.title)}</h1>
     <p class="exhibit-head__sub">${esc(game?.subtitle ?? '')} — ${esc(game?.genre ?? '')}</p>
     <dl class="exhibit-head__meta">
@@ -76,7 +73,7 @@ function exhibitHead(build: NonNullable<ReturnType<typeof buildBySlug>>): string
       </div>
       <div class="meta-cell">
         <dt>agent work</dt>
-        <dd>${esc(hours(build.activeMs))} h</dd>
+        <dd>${esc(workTime(build.activeMs))}</dd>
       </div>
       <div class="meta-cell">
         <dt>model</dt>
@@ -84,13 +81,17 @@ function exhibitHead(build: NonNullable<ReturnType<typeof buildBySlug>>): string
       </div>
       <div class="meta-cell">
         <dt>team</dt>
-        <dd>${count(build.teamSize)} specialist${build.teamSize === 1 ? '' : 's'}</dd>
+        <dd>${build.teamSize === 0 ? 'solo build' : `${count(build.teamSize)} specialist${build.teamSize === 1 ? '' : 's'}`}</dd>
       </div>
       <div class="meta-cell">
         <dt>prompts</dt>
         <dd>${count(build.prompts.length)}</dd>
       </div>
     </dl>
+    <div class="exhibit-head__foot">
+      <a class="exhibit-head__back" href="/making-of">← All receipts</a>
+      <span class="meta">${esc(build.repoPath)}</span>
+    </div>
   </section>`
 }
 
@@ -101,7 +102,7 @@ function promptsSection(build: NonNullable<ReturnType<typeof buildBySlug>>): str
       ${
         build.prompts.length === 1
           ? 'One message. Everything the game became — the waves, the bosses, the upgrades, the README — descends from this paragraph and whatever the agent decided it implied.'
-          : `The whole human contribution to this build, in order. ${build.prompts.some((prompt) => prompt.translated) ? 'Vietnamese originals translated into English by the extraction script; the wording is untouched.' : 'Typed in English.'}`
+          : `The whole human contribution to this build, in order. ${build.prompts.some((prompt) => prompt.translated) ? 'Vietnamese originals, translated into English for publication; the verbatim originals are preserved in the extracted data.' : 'Typed in English.'}`
       }
     </p>
     ${build.prompts
@@ -109,7 +110,7 @@ function promptsSection(build: NonNullable<ReturnType<typeof buildBySlug>>): str
         promptBlock({
           index,
           at: prompt.at,
-          text: readablePrompt(promptEn(prompt)),
+          text: cleanDisplay(readablePrompt(promptEn(prompt))),
           chars: prompt.chars ?? promptEn(prompt).length,
           translated: Boolean(prompt.translated),
           lang: prompt.lang ?? 'en',
@@ -132,7 +133,7 @@ function thinkingSection(build: NonNullable<ReturnType<typeof buildBySlug>>): st
       .map((excerpt, index) =>
         quoteBlock({
           at: excerpt.at,
-          text: excerpt.text ?? '',
+          text: cleanDisplay(excerpt.text ?? ''),
           label: index === 0 ? 'the first read of the brief' : 'reasoning excerpt',
         }),
       )
@@ -161,8 +162,7 @@ function teamSection(build: NonNullable<ReturnType<typeof buildBySlug>>): string
     ${sectionHead('The team', `${count(build.subagents.length)} subagents, ${count(build.subagentSessions)} sessions`)}
     <p class="story-section__intro">
       A lead agent wrote the core and spawned specialists, each owning one directory and one job. The bar
-      below is their share of ${esc(compact(totalTokens))} subagent tokens — the specialist who did the most
-      reading is rarely the one who wrote the most.
+      below is their share of ${esc(compact(totalTokens))} subagent tokens.
     </p>
     <div class="roster reveal">
       ${rosterHead(true)}
@@ -174,7 +174,7 @@ function teamSection(build: NonNullable<ReturnType<typeof buildBySlug>>): string
     ${
       mission
         ? `<div class="reveal" style="margin-top:clamp(2rem,3vw,3rem)">
-      ${quoteBlock({ text: firstSentences(mission, 420), label: 'mission brief sent to the first specialist' })}
+      ${quoteBlock({ text: cleanDisplay(firstSentences(mission, 420)), label: 'mission brief sent to the first specialist' })}
     </div>`
         : ''
     }
@@ -286,7 +286,7 @@ function provenanceSection(build: NonNullable<ReturnType<typeof buildBySlug>>): 
     },
     {
       label: 'clocks',
-      body: `Wall clock ${duration(build.wallMs)} is first prompt to last turn. Agent work ${hours(build.activeMs)} h sums parallel subagents, so it can exceed the window. The session-family span including the 1 Nov bookkeeping pass is ${duration(build.raw.spanMs ?? build.wallMs)}.`,
+      body: `Wall clock ${duration(build.wallMs)} is first prompt to last turn. Agent work (${workTime(build.activeMs)}) sums parallel subagents, so it can exceed the window. The session-family span including the 1 Nov bookkeeping pass is ${duration(build.raw.spanMs ?? build.wallMs)}.`,
     },
     {
       label: 'tokens',
@@ -295,7 +295,7 @@ function provenanceSection(build: NonNullable<ReturnType<typeof buildBySlug>>): 
     {
       label: 'prompts',
       body: build.prompts.some((prompt) => prompt.translated)
-        ? 'Human messages only. Vietnamese originals are kept in the data; the English shown here is a translation by scripts/extract-sessions.mjs, with pasted media URLs removed for readability.'
+        ? 'Human messages only. The verbatim Vietnamese originals are preserved in the data; the English shown here is a published translation, with pasted media URLs removed for readability.'
         : 'Human messages only, verbatim. Agent-to-agent traffic and harness plumbing are excluded.',
     },
     {
@@ -304,7 +304,7 @@ function provenanceSection(build: NonNullable<ReturnType<typeof buildBySlug>>): 
     },
     {
       label: 'secrets',
-      body: `${summary.redactions?.total ? `${count(summary.redactions.total)} strings were redacted from the extracted text.` : 'The extractor found no credentials or personal data in these transcripts, so nothing was redacted.'} Session ids are the only internal identifiers published.`,
+      body: `${summary.redactions?.total ? `${count(summary.redactions.total)} strings were redacted from the extracted text.` : 'The extractor found no credentials or personal data in these transcripts, so nothing was redacted.'} Home-directory paths in the transcripts are shortened to …/folder before display; git short hashes and repository paths are the only other internal identifiers shown.`,
     },
   ]
   return `<section class="story-section" aria-labelledby="provenance-title">
@@ -319,8 +319,8 @@ function provenanceSection(build: NonNullable<ReturnType<typeof buildBySlug>>): 
         ${items.map((item) => `<div class="provenance__item"><b>${esc(item.label)}</b>${esc(item.body)}</div>`).join('')}
       </div>
       <p class="meta" style="margin-top:1.75rem">
-        Cross-check: three builds, ${count(aggregate.prompts)} prompts, ${count(aggregate.agentTurns)} agent
-        turns, ${esc(compact(aggregate.totalTokens))} tokens in total. Method and caveats on
+        Cross-check: three builds, ${count(aggregate.prompts)} prompts, ${count(aggregate.totalSteps)} agent
+        steps, ${esc(compact(aggregate.totalTokens))} tokens in total. Method and caveats on
         <a href="/about">the about page</a>.
       </p>
     </div>
@@ -349,17 +349,17 @@ export function view(params: Record<string, string>): PageView {
 
   return {
     title: `${build.title} — how it was made · Game Board`,
-    description: `The making of ${build.title}: ${count(build.prompts.length)} prompts, ${count(build.agentTurns)} agent turns, ${compact(build.totalTokens)} tokens, ${count(build.subagents.length)} specialist agents, and the screenshots that prove it.`,
+    description: `The making of ${build.title}: ${count(build.prompts.length)} ${build.prompts.length === 1 ? 'prompt' : 'prompts'}, ${count(build.totalSteps)} agent steps, ${compact(build.totalTokens)} tokens, ${build.teamSize === 0 ? 'a single agent with no subagents' : `${count(build.teamSize)} specialist agents`}, and the screenshots that prove it.`,
     gameSlug: slug,
     html: `${exhibitHead(build)}
     <div class="wrap">
       <div class="section section--tight" style="padding-bottom:0">
         ${ledger([
           { to: build.prompts.length, format: 'int', caption: 'human prompts' },
-          { to: build.leadSteps, format: 'int', caption: 'lead agent turns' },
-          { to: build.subagentSteps, format: 'int', caption: 'subagent turns' },
+          { to: build.leadSteps, format: 'int', caption: 'lead steps' },
+          { to: build.subagentSteps, format: 'int', caption: 'subagent steps' },
           { to: build.totalTokens, format: 'compact', caption: 'tokens processed' },
-          { to: build.activeMs, format: 'hours', caption: 'agent-hours of work' },
+          { to: build.activeMs, format: 'work', caption: 'agent work' },
           { to: build.filesCreated, format: 'int', caption: 'files created' },
         ])}
       </div>
@@ -367,10 +367,10 @@ export function view(params: Record<string, string>): PageView {
     <div class="wrap exhibit-body">
       <aside class="exhibit-aside" aria-label="The specimen">
         <div class="exhibit-aside__inner" data-shot-cabinet>
-          ${cabinet({ slides: slides, id: 'exhibit', cycleMs: 0, pager: false })}
+          ${cabinet({ slides: slides, id: 'exhibit', cycleMs: 0, pager: false, drift: true })}
           <div class="exhibit-aside__play">
             ${playButton(play, 'Play ' + build.title)}
-            <span class="exhibit-aside__note">${esc(game?.genre ?? '')}<br />${esc(hours(build.activeMs))} h of agent work · ${count(build.filesCreated)} files</span>
+            <span class="exhibit-aside__note">${esc(game?.genre ?? '')}<br />${esc(workTime(build.activeMs))} of agent work · ${count(build.filesCreated)} files</span>
           </div>
         </div>
       </aside>

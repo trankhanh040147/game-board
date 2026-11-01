@@ -36,6 +36,13 @@ export function duration(ms: number | null | undefined): string {
   return `${h} h ${String(m).padStart(2, '0')} m`
 }
 
+/** ms -> "39 m" below an hour, "9.0 h" above it. Used everywhere agent work is shown. */
+export function workTime(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return '—'
+  if (ms < 3_600_000) return duration(ms)
+  return `${hours(ms)} h`
+}
+
 /** ms -> "23.6" (for the big counter) */
 export function hours(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms <= 0) return '0'
@@ -125,6 +132,29 @@ export function passedCount(label: string): number | null {
   const m2 = label.match(/(\d+)\s*\/\s*\d+\s*(?:tests|checks)/i)
   if (m2 && m2[1]) return Number(m2[1])
   return null
+}
+
+/** A public exhibit does not need anyone's home directory: …/default-workspace/game. */
+export function shortenPaths(text: string): string {
+  return text.replace(/\/Users\/[^\s"'`<>()[\]]+/g, (match) => {
+    const parts = match.split('/').filter(Boolean)
+    const tail = parts.slice(-2).join('/')
+    return tail ? `…/${tail}` : '…'
+  })
+}
+
+/** Emoji and dingbats out of transcript text: the type does the talking. */
+export function stripEmoji(text: string): string {
+  return text
+    .replace(/[\u2600-\u27BF\u2B00-\u2BFF\uFE0F\uFE0E]/g, '')
+    .replace(/[\u{1F300}-\u{1FAFF}\u{1F000}-\u{1F2FF}]/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
+/** Everything a public page shows from a transcript passes through here. */
+export function cleanDisplay(text: string): string {
+  return stripEmoji(shortenPaths(text))
 }
 
 const VIETNAMESE = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủũứừửữựỳỵỷỹ]/i

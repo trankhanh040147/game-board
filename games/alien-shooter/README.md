@@ -62,8 +62,8 @@ No build step, no `npm install`.
 | | |
 |---|---|
 | ![Title](screenshots/01-title.png) | ![Combat](screenshots/02-combat.png) |
-| ![Boss](screenshots/03-boss.png) | ![Level up](screenshots/04-levelup.png) |
-| ![Mobile](screenshots/05-mobile.png) | ![Game over](screenshots/06-gameover.png) |
+| ![Level up](screenshots/04-levelup.png) | ![Mobile](screenshots/05-mobile.png) |
+| ![Game over](screenshots/06-gameover.png) | |
 
 ## Project structure
 

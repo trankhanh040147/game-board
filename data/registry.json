@@ -40,7 +40,7 @@
           },
           {
             "src": "/media/first-hearth/almanac.webp",
-            "alt": "The year almanac summarising a season of history"
+            "alt": "The opening moves checklist and a creed decision over a young settlement"
           },
           {
             "src": "/media/first-hearth/onboarding.webp",
@@ -124,15 +124,15 @@
         "gallery": [
           {
             "src": "/media/alien-shooter/title.webp",
-            "alt": "Title screen"
-          },
-          {
-            "src": "/media/alien-shooter/boss.webp",
-            "alt": "A boss telegraphing a radial attack"
+            "alt": "Title screen: NEON ARENA // SURVIVAL PROTOCOL"
           },
           {
             "src": "/media/alien-shooter/levelup.webp",
             "alt": "Choosing one of three upgrades on level up"
+          },
+          {
+            "src": "/media/alien-shooter/gameover.webp",
+            "alt": "Signal lost: score, best, wave, kills, level and run time"
           }
         ]
       },
