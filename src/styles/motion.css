@@ -1,0 +1,50 @@
+/* Motion is layered on top of the finished page. Nothing that carries content
+   depends on it: reduced motion shows the page as it was composed. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+    transition: opacity 700ms var(--ease-out), transform 700ms var(--ease-out);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  .reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  .drift {
+    animation: drift 26s var(--ease-in-out) infinite alternate;
+  }
+
+  @keyframes drift {
+    from {
+      transform: scale(1.005);
+    }
+    to {
+      transform: scale(1.035);
+    }
+  }
+}
+
+/* The signature move: a still that changes while you read, like light in a room. */
+.cabinet__slide {
+  transition: opacity var(--t-cross) var(--ease-in-out);
+}
+
+/* Counters get their digits from JS; the transition is on the figure itself. */
+.fig__num[data-counting='true'] {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame__img,
+  .cabinet__slide,
+  .stack__seg,
+  .bar-row__fill,
+  .build-row__fill {
+    transition: none !important;
+  }
+}

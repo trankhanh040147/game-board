@@ -1,0 +1,22 @@
+{
+  "name": "game-board",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Game Board — three browser games built entirely by prompting an AI agent, and the receipts that prove it.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5199",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5200",
+    "shots": "node shots/board/capture.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^7.1.0"
+  }
+}

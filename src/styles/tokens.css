@@ -1,0 +1,75 @@
+/* ------------------------------------------------------------------
+   Tokens — one ground, one ink, one accent per game.
+   ------------------------------------------------------------------ */
+
+:root {
+  /* ground */
+  --paper: #0b0b0c;
+  --paper-raise: #131315;
+  --paper-raise-2: #1b1b1e;
+  --paper-deep: #060607;
+
+  /* ink */
+  --ink: #efe9df;
+  --ink-2: #cdc6b9;
+  --ink-3: #9d9689;
+  --ink-4: #6f6961;
+
+  /* hairlines */
+  --rule: rgba(239, 233, 223, 0.14);
+  --rule-soft: rgba(239, 233, 223, 0.08);
+  --rule-strong: rgba(239, 233, 223, 0.28);
+
+  /* accent, overridden per game */
+  --accent: #efe9df;
+  --accent-ink: #0b0b0c;
+  --accent-deep: #3a352d;
+
+  /* type */
+  --font-serif: 'Newsreader Variable', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --fs-micro: 0.8125rem; /* 13px — mono metadata */
+  --fs-small: 0.9375rem; /* 15px */
+  --fs-body: clamp(1.0625rem, 1.01rem + 0.22vw, 1.1875rem);
+  --fs-lede: clamp(1.1875rem, 1.06rem + 0.55vw, 1.5625rem);
+  --fs-h3: clamp(1.4375rem, 1.12rem + 1.3vw, 2.125rem);
+  --fs-h2: clamp(1.9375rem, 1.28rem + 2.9vw, 3.75rem);
+  --fs-h1: clamp(2.75rem, 1.35rem + 6.1vw, 6.75rem);
+  --fs-h0: clamp(3.25rem, 1.1rem + 9.4vw, 9.5rem);
+  --fs-fig: clamp(2.375rem, 1.55rem + 3.5vw, 4.5rem);
+  --fs-fig-sm: clamp(1.625rem, 1.24rem + 1.7vw, 2.5rem);
+
+  /* rhythm */
+  --edge: clamp(1.125rem, 0.55rem + 2.6vw, 4.5rem);
+  --gap-section: clamp(5.5rem, 8.5vw, 11rem);
+  --gap-block: clamp(2rem, 3.2vw, 3.5rem);
+  --col-gap: clamp(1rem, 1.6vw, 1.75rem);
+  --header-h: 3.75rem;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0.05, 0.36, 1);
+  --t-fast: 140ms;
+  --t-mid: 320ms;
+  --t-slow: 720ms;
+  --t-cross: 1400ms;
+}
+
+body[data-game='first-hearth'] {
+  --accent: #e0a45f;
+  --accent-ink: #0b0b0c;
+  --accent-deep: #8c5a2b;
+}
+
+body[data-game='blade-and-mount'] {
+  --accent: #c8553d;
+  --accent-ink: #efe9df;
+  --accent-deep: #7a2f22;
+}
+
+body[data-game='alien-shooter'] {
+  --accent: #7ce8a4;
+  --accent-ink: #0b0b0c;
+  --accent-deep: #1f6f47;
+}
