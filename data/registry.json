@@ -20,18 +20,32 @@
       "highlights": [
         "112x112 seeded worldgen with rivers, biomes, deposits and 3-5 AI neighbours",
         "Citizens with names, families, skills, morale and private thoughts",
-        "78 unit tests, 62 browser checks, 60 fps at 4x speed with 140+ population"
+        "84 unit tests, 62 browser checks, 60 fps at 4x speed with 140+ population"
       ],
-      "tech": ["TypeScript", "Vite", "Canvas 2D", "Vitest"],
+      "tech": [
+        "TypeScript",
+        "Vite",
+        "Canvas 2D",
+        "Vitest"
+      ],
       "year": 2026,
       "repoPath": "games/first-hearth",
       "media": {
         "hero": "/media/first-hearth/hero.webp",
         "heroAlt": "A walled town at year four: fields, workshops and temples on an isometric map",
         "gallery": [
-          { "src": "/media/first-hearth/codex.webp", "alt": "The Codex panel: discoveries across six branches" },
-          { "src": "/media/first-hearth/almanac.webp", "alt": "The year almanac summarising a season of history" },
-          { "src": "/media/first-hearth/onboarding.webp", "alt": "The first-run spotlight tour" }
+          {
+            "src": "/media/first-hearth/codex.webp",
+            "alt": "The Codex panel: discoveries across six branches"
+          },
+          {
+            "src": "/media/first-hearth/almanac.webp",
+            "alt": "The year almanac summarising a season of history"
+          },
+          {
+            "src": "/media/first-hearth/onboarding.webp",
+            "alt": "The first-run spotlight tour"
+          }
         ]
       },
       "playUrl": "",
@@ -50,18 +64,32 @@
       "highlights": [
         "Four-directional attack and guard system with reach, speed and armour penetration",
         "Head, torso and leg hit zones; speed bonus from stepping into a strike",
-        "Runtime-generated arena, crowd, props, music and retargeted KayKit animations"
+        "112 unit tests; runtime-generated arena, crowd, props and retargeted KayKit animations"
       ],
-      "tech": ["TypeScript", "Vite", "Three.js", "WebGL2"],
+      "tech": [
+        "TypeScript",
+        "Vite",
+        "Three.js",
+        "WebGL2"
+      ],
       "year": 2026,
       "repoPath": "games/blade-and-mount",
       "media": {
         "hero": "/media/blade-and-mount/hero.webp",
         "heroAlt": "The tournament board with four houses advancing to the lists",
         "gallery": [
-          { "src": "/media/blade-and-mount/menu.webp", "alt": "The main menu behind a gate at dusk" },
-          { "src": "/media/blade-and-mount/hud.webp", "alt": "In-bout HUD with opponents beaten and remaining" },
-          { "src": "/media/blade-and-mount/loadout.webp", "alt": "The armoury: choose your arms before a bout" }
+          {
+            "src": "/media/blade-and-mount/menu.webp",
+            "alt": "The main menu behind a gate at dusk"
+          },
+          {
+            "src": "/media/blade-and-mount/hud.webp",
+            "alt": "In-bout HUD with opponents beaten and remaining"
+          },
+          {
+            "src": "/media/blade-and-mount/loadout.webp",
+            "alt": "The armoury: choose your arms before a bout"
+          }
         ]
       },
       "playUrl": "",
@@ -82,16 +110,30 @@
         "16 upgrades across stats and rare drops, plus XP magnet and dash i-frames",
         "Zero dependencies, zero build: plain HTML, CSS and Canvas 2D"
       ],
-      "tech": ["Vanilla JS", "Canvas 2D", "Web Audio", "No build step"],
+      "tech": [
+        "Vanilla JS",
+        "Canvas 2D",
+        "Web Audio",
+        "No build step"
+      ],
       "year": 2026,
       "repoPath": "games/alien-shooter",
       "media": {
         "hero": "/media/alien-shooter/hero.webp",
         "heroAlt": "Combat in the neon arena with alien waves converging",
         "gallery": [
-          { "src": "/media/alien-shooter/title.webp", "alt": "Title screen" },
-          { "src": "/media/alien-shooter/boss.webp", "alt": "A boss telegraphing a radial attack" },
-          { "src": "/media/alien-shooter/levelup.webp", "alt": "Choosing one of three upgrades on level up" }
+          {
+            "src": "/media/alien-shooter/title.webp",
+            "alt": "Title screen"
+          },
+          {
+            "src": "/media/alien-shooter/boss.webp",
+            "alt": "A boss telegraphing a radial attack"
+          },
+          {
+            "src": "/media/alien-shooter/levelup.webp",
+            "alt": "Choosing one of three upgrades on level up"
+          }
         ]
       },
       "playUrl": "",
