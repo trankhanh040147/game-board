@@ -583,8 +583,13 @@ await screenshot(ob, 'qa-tour-step1-1600x900');
 // Tour card vs First Steps dock: measure overlap (known LOW visual issue if > 0).
 const tourOverlap = await ob.evaluate(() => {
   const card = document.querySelector('.fh-tour-card')?.getBoundingClientRect();
-  const rows = Array.from(document.querySelectorAll('.fh-firststeps [data-step]')).map((el) => el.getBoundingClientRect());
-  if (!card || !rows.length) return null;
+  const fsRoot = document.querySelector('.fh-firststeps');
+  if (!card || !fsRoot) return null;
+  const style = getComputedStyle(fsRoot);
+  const dockHidden =
+    style.display === 'none' || style.visibility === 'hidden' || Number.parseFloat(style.opacity || '1') < 0.05 || fsRoot.hidden;
+  if (dockHidden) return { card: null, dock: null, rows: 0, overlapPx2: 0, dockHidden: true };
+  const rows = Array.from(fsRoot.querySelectorAll('[data-step]')).map((el) => el.getBoundingClientRect());
   const area = (a, b) =>
     Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
   let maxOverlap = 0;
@@ -603,7 +608,11 @@ if (tourOverlap && tourOverlap.overlapPx2 > 0) {
     `tour card overlaps the First Steps checklist (${tourOverlap.overlapPx2}px² over ${tourOverlap.rows} rows) — LOW visual; hide the dock or reposition the card during the tour`,
   );
 }
-check('onboarding: tour card vs First Steps dock measured', !!tourOverlap, JSON.stringify(tourOverlap));
+check(
+  'onboarding: First Steps dock hidden during the tour (no card overlap)',
+  !!tourOverlap && tourOverlap.overlapPx2 === 0,
+  JSON.stringify(tourOverlap),
+);
 
 const stepInfo = [];
 for (let i = 0; i < 8; i++) {
@@ -661,6 +670,39 @@ check('onboarding: Help -> Replay the tour works', !!replayBtn && !!t3?.visible 
 await screenshot(ob, 'qa-tour-replay-1600x900');
 await ob.evaluate(() => document.querySelector('.fh-tour-card [data-act="skip"]')?.click());
 await wait(600);
+
+// Returning player with an existing save but no tour key: the tour must still start.
+const returning = await ob.evaluate(() => {
+  const g = window.__game;
+  g.advanceDays(6);
+  // A pending decision would make the tour wait for quiet: save a clean state.
+  for (let i = 0; i < 6 && g.state.events.pending.length; i++) g.resolveDecision(g.state.events.pending[0].id, '__none');
+  const saved = g.save();
+  localStorage.removeItem('fh-tour-v1');
+  return { saved, tick: g.state.tick, pending: g.state.events.pending.length };
+});
+await ob.reload({ waitUntil: 'domcontentloaded' });
+await ob.waitForFunction('window.__FIRST_HEARTH__ && window.__FIRST_HEARTH__.ready === true', { timeout: 45000 });
+let t4 = null;
+for (let attempt = 0; attempt < 12; attempt++) {
+  await wait(600);
+  // Clear a decision modal if one fired on load so the tour's quiet-wait can resolve.
+  await ob.evaluate(() => {
+    const modal = Array.from(document.querySelectorAll('.fh-modal-backdrop')).find((m) => m.getBoundingClientRect().width > 200);
+    const btn = modal?.querySelector('[data-choice="__none"], [data-choice]:not(.is-disabled), [data-modal-close]');
+    if (btn instanceof HTMLElement) btn.click();
+  });
+  t4 = await tourState(ob);
+  if (t4?.visible) break;
+}
+check(
+  'onboarding: returning player (existing save, no tour key) still gets the tour',
+  !!returning.saved && returning.tick > 1 && !!t4?.visible && t4.paused,
+  `saved=${returning.saved} tick=${returning.tick} pendingAtSave=${returning.pending} tour=${JSON.stringify(t4)}`,
+);
+await screenshot(ob, 'qa-tour-returning-player-1600x900');
+await ob.evaluate(() => document.querySelector('.fh-tour-card [data-act="skip"]')?.click());
+await wait(800);
 
 // First Steps checklist: present, and updates when a step is completed.
 const fsBefore = await ob.evaluate(() => {
