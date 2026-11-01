@@ -23,73 +23,73 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
    ========================================================================= */
 const UPGRADES = [
   {
-    id: 'damage', icon: '✦', name: 'OVERCHARGE', desc: '+25% sát thương mỗi viên đạn.', max: 9, weight: 11,
+    id: 'damage', icon: '✦', name: 'OVERCHARGE', desc: '+25% damage per bullet.', max: 9, weight: 11,
     apply: (p) => { p.stats.damage *= 1.25; },
   },
   {
-    id: 'rate', icon: '⚡', name: 'RAPID FIRE', desc: '+18% tốc độ bắn.', max: 9, weight: 11,
+    id: 'rate', icon: '⚡', name: 'RAPID FIRE', desc: '+18% fire rate.', max: 9, weight: 11,
     apply: (p) => { p.stats.fireRate *= 1.18; },
   },
   {
-    id: 'multi', icon: '✳', name: 'MULTI-SHOT', desc: '+1 tia đạn mỗi lần bắn.', max: 4, weight: 6, rare: true,
+    id: 'multi', icon: '✳', name: 'MULTI-SHOT', desc: '+1 projectile per shot.', max: 4, weight: 6, rare: true,
     apply: (p) => { p.stats.multishot += 1; },
   },
   {
-    id: 'pierce', icon: '➶', name: 'PIERCING ROUNDS', desc: 'Đạn xuyên qua +1 mục tiêu.', max: 3, weight: 5, rare: true,
+    id: 'pierce', icon: '➶', name: 'PIERCING ROUNDS', desc: 'Bullets pierce +1 target.', max: 3, weight: 5, rare: true,
     apply: (p) => { p.stats.pierce += 1; },
   },
   {
-    id: 'speed', icon: '»', name: 'THRUSTERS', desc: '+10% tốc độ di chuyển.', max: 6, weight: 8,
+    id: 'speed', icon: '»', name: 'THRUSTERS', desc: '+10% movement speed.', max: 6, weight: 8,
     apply: (p) => { p.stats.speed *= 1.1; },
   },
   {
-    id: 'vitality', icon: '❤', name: 'BIO-ARMOR', desc: '+25 máu tối đa và hồi ngay 25 máu.', max: 6, weight: 8,
+    id: 'vitality', icon: '❤', name: 'BIO-ARMOR', desc: '+25 max health and heal 25 now.', max: 6, weight: 8,
     apply: (p) => { p.stats.maxHp += 25; p.hp = Math.min(p.stats.maxHp, p.hp + 25); },
   },
   {
-    id: 'crit', icon: '◎', name: 'PRECISION', desc: '+10% tỉ lệ chí mạng.', max: 5, weight: 7,
+    id: 'crit', icon: '◎', name: 'PRECISION', desc: '+10% crit chance.', max: 5, weight: 7,
     apply: (p) => { p.stats.crit = Math.min(0.95, p.stats.crit + 0.1); },
   },
   {
-    id: 'critdmg', icon: '✸', name: 'CRIT AMPLIFIER', desc: '+50% sát thương chí mạng.', max: 4, weight: 5, rare: true,
+    id: 'critdmg', icon: '✸', name: 'CRIT AMPLIFIER', desc: '+50% crit damage.', max: 4, weight: 5, rare: true,
     apply: (p) => { p.stats.critMult += 0.5; },
   },
   {
-    id: 'regen', icon: '✚', name: 'NANO-REPAIR', desc: 'Hồi +1.2 máu mỗi giây.', max: 5, weight: 6,
+    id: 'regen', icon: '✚', name: 'NANO-REPAIR', desc: 'Regenerate +1.2 health per second.', max: 5, weight: 6,
     apply: (p) => { p.stats.regen += 1.2; },
   },
   {
-    id: 'magnet', icon: '◉', name: 'GRAVITY FIELD', desc: '+70% bán kính hút XP, +15% XP nhận được.', max: 4, weight: 5,
+    id: 'magnet', icon: '◉', name: 'GRAVITY FIELD', desc: '+70% XP pickup radius, +15% XP gained.', max: 4, weight: 5,
     apply: (p) => { p.stats.magnet *= 1.7; p.stats.xpGain += 0.15; },
   },
   {
-    id: 'dash', icon: '⇥', name: 'PHASE DRIVE', desc: '-20% hồi chiêu lướt.', max: 4, weight: 6,
+    id: 'dash', icon: '⇥', name: 'PHASE DRIVE', desc: '-20% dash cooldown.', max: 4, weight: 6,
     apply: (p) => { p.stats.dashCd *= 0.8; },
   },
   {
-    id: 'bulletsize', icon: '●', name: 'HEAVY SLUGS', desc: '+25% kích thước đạn.', max: 4, weight: 6,
+    id: 'bulletsize', icon: '●', name: 'HEAVY SLUGS', desc: '+25% bullet size.', max: 4, weight: 6,
     apply: (p) => { p.stats.bulletSize *= 1.25; },
   },
   {
-    id: 'explosive', icon: '✹', name: 'PLASMA WARHEADS', desc: 'Đạn phát nổ khi trúng mục tiêu.', max: 3, weight: 5, rare: true,
+    id: 'explosive', icon: '✹', name: 'PLASMA WARHEADS', desc: 'Bullets explode on impact.', max: 3, weight: 5, rare: true,
     apply: (p) => { p.stats.explosive += 1; },
   },
   {
-    id: 'shockwave', icon: '◈', name: 'NOVA DASH', desc: 'Lướt tạo sóng xung kích gây sát thương.', max: 1, weight: 4, rare: true,
+    id: 'shockwave', icon: '◈', name: 'NOVA DASH', desc: 'Dash emits a damaging shockwave.', max: 1, weight: 4, rare: true,
     apply: (p) => { p.stats.shockwave = true; },
   },
   {
-    id: 'drone', icon: '⬢', name: 'COMBAT DRONE', desc: 'Triệu hồi drone tự động bắn kẻ địch.', max: 3, weight: 4, rare: true,
+    id: 'drone', icon: '⬢', name: 'COMBAT DRONE', desc: 'Summon a drone that fires automatically.', max: 3, weight: 4, rare: true,
     apply: (p) => { p.stats.drones += 1; },
   },
   {
-    id: 'velocity', icon: '↗', name: 'RAIL ACCELERATOR', desc: '+20% tốc độ bay của đạn.', max: 4, weight: 6,
+    id: 'velocity', icon: '↗', name: 'RAIL ACCELERATOR', desc: '+20% bullet velocity.', max: 4, weight: 6,
     apply: (p) => { p.stats.bulletSpeed *= 1.2; },
   },
 ];
 
 const REPAIR_CARD = {
-  id: 'repair', icon: '✚', name: 'EMERGENCY REPAIR', desc: 'Hồi ngay 45 máu.', max: 999, weight: 1,
+  id: 'repair', icon: '✚', name: 'EMERGENCY REPAIR', desc: 'Restore 45 health instantly.', max: 999, weight: 1,
   apply: (p) => { p.hp = Math.min(p.stats.maxHp, p.hp + 45); },
 };
 
@@ -404,7 +404,7 @@ class Game {
       if (n >= 4) pool.push({ t: 'brute', w: 3 + Math.min(3, n * 0.08) });
       for (let i = 0; i < count; i++) this.spawnQueue.push(this._weighted(pool));
       shuffle(this.spawnQueue);
-      this.banner(`WAVE ${n}`, `${count} SINH VẬT ĐANG TỚI`, '');
+      this.banner(`WAVE ${n}`, `${count} HOSTILES INCOMING`, '');
       this.audio.waveStart();
     }
   }
@@ -424,7 +424,7 @@ class Game {
     const bonus = 100 + this.wave * 45;
     this.addScore(bonus);
     if (this.bossJustDied) {
-      this.banner('BOSS HẠ GỤC', `+${bonus} SCORE`, 'danger');
+      this.banner('BOSS DOWN', `+${bonus} SCORE`, 'danger');
       this.bossJustDied = false;
     } else {
       this.banner(`WAVE ${this.wave} CLEAR`, `+${bonus} SCORE`, '');
@@ -852,7 +852,7 @@ class Game {
           pips += `<span class="card-pip${k < taken ? ' on' : ''}"></span>`;
         }
       }
-      const stackTxt = max > 0 ? `CẤP ${taken + 1} / ${max}` : 'HỒI MÁU';
+      const stackTxt = max > 0 ? `LEVEL ${taken + 1} / ${max}` : 'HEAL';
       return `<button class="card${u.rare ? ' rare' : ''}" data-i="${i}" style="animation-delay:${i * 55}ms">
         <span class="card-key">${i + 1}</span>
         <span class="card-icon">${u.icon}</span>

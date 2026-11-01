@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
@@ -21,7 +21,7 @@
         <span class="pill-v" id="hudWave">01</span>
       </div>
       <div class="pill sub">
-        <span class="pill-k">CÒN LẠI</span>
+        <span class="pill-k">LEFT</span>
         <span class="pill-v" id="hudEnemies">0</span>
       </div>
     </div>
@@ -38,16 +38,16 @@
     </div>
 
     <div class="hud-buttons">
-      <button id="btnPause" class="ui-btn" title="Tạm dừng (P)" aria-label="Tạm dừng">❚❚</button>
-      <button id="btnMute" class="ui-btn" title="Bật / tắt tiếng (M)" aria-label="Bật tắt tiếng">🔊</button>
+      <button id="btnPause" class="ui-btn" title="Pause (P)" aria-label="Pause">❚❚</button>
+      <button id="btnMute" class="ui-btn" title="Mute / unmute (M)" aria-label="Mute or unmute">🔊</button>
     </div>
 
     <div class="hud-bottom">
       <div class="bars">
-        <div class="bar xp" title="Kinh nghiệm">
+        <div class="bar xp" title="Experience">
           <div class="bar-fill" id="hudXpFill"></div>
         </div>
-        <div class="bar hp" title="Máu">
+        <div class="bar hp" title="Health">
           <div class="bar-fill" id="hudHpFill"></div>
           <div class="bar-ghost" id="hudHpGhost"></div>
           <div class="bar-txt"><span id="hudHpTxt">100 / 100</span></div>
@@ -76,39 +76,39 @@
       <div class="kicker"><span class="dot"></span> NEON ARENA // SURVIVAL PROTOCOL</div>
       <h1 class="title">ALIEN<span class="title-2">SHOOTER</span></h1>
       <p class="tagline">
-        Thuộc địa XR-7 đã mất liên lạc. Bạn là người cuối cùng còn đứng vững.
-        Sinh vật ngoài hành tinh tràn ra từ các tổ — hãy bắn, lướt, nâng cấp và sống sót qua từng đợt.
+        Colony XR-7 has gone dark. You are the last one still standing.
+        Aliens pour out of the nests — shoot, dash, upgrade and survive wave after wave.
       </p>
 
       <div class="controls">
-        <div class="ctrl desk"><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="ctrl-t">Di chuyển</span></div>
-        <div class="ctrl desk"><span class="keys"><kbd class="wide">CHUỘT</kbd></span><span class="ctrl-t">Ngắm</span></div>
-        <div class="ctrl desk"><span class="keys"><kbd class="wide">GIỮ CHUỘT TRÁI</kbd></span><span class="ctrl-t">Khai hoả</span></div>
-        <div class="ctrl desk"><span class="keys"><kbd class="wide">SPACE</kbd></span><span class="ctrl-t">Lướt né (bất tử ngắn)</span></div>
-        <div class="ctrl desk"><span class="keys"><kbd>P</kbd></span><span class="ctrl-t">Tạm dừng</span></div>
-        <div class="ctrl desk"><span class="keys"><kbd>M</kbd></span><span class="ctrl-t">Bật / tắt tiếng</span></div>
-        <div class="ctrl touch"><span class="keys"><kbd class="wide">NỬA TRÁI</kbd></span><span class="ctrl-t">Di chuyển</span></div>
-        <div class="ctrl touch"><span class="keys"><kbd class="wide">NỬA PHẢI</kbd></span><span class="ctrl-t">Ngắm &amp; tự bắn</span></div>
-        <div class="ctrl touch"><span class="keys"><kbd class="wide">NÚT DASH</kbd></span><span class="ctrl-t">Lướt né</span></div>
-        <div class="ctrl touch"><span class="keys"><kbd class="wide">⏸ / 🔊</kbd></span><span class="ctrl-t">Góc phải trên</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="ctrl-t">Move</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd class="wide">MOUSE</kbd></span><span class="ctrl-t">Aim</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd class="wide">HOLD LEFT MOUSE</kbd></span><span class="ctrl-t">Fire</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd class="wide">SPACE</kbd></span><span class="ctrl-t">Dash (brief invulnerability)</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd>P</kbd></span><span class="ctrl-t">Pause</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd>M</kbd></span><span class="ctrl-t">Mute / unmute</span></div>
+        <div class="ctrl touch"><span class="keys"><kbd class="wide">LEFT HALF</kbd></span><span class="ctrl-t">Move</span></div>
+        <div class="ctrl touch"><span class="keys"><kbd class="wide">RIGHT HALF</kbd></span><span class="ctrl-t">Aim &amp; auto-fire</span></div>
+        <div class="ctrl touch"><span class="keys"><kbd class="wide">DASH BUTTON</kbd></span><span class="ctrl-t">Dash</span></div>
+        <div class="ctrl touch"><span class="keys"><kbd class="wide">⏸ / 🔊</kbd></span><span class="ctrl-t">Top-right corner</span></div>
       </div>
 
-      <button id="btnStart" class="btn btn-primary">BẮT ĐẦU CHIẾN ĐẤU</button>
-      <div class="hint">Trên điện thoại: nửa trái màn hình để di chuyển, nửa phải để ngắm &amp; tự động bắn, nút <b>DASH</b> góc phải để lướt né.</div>
+      <button id="btnStart" class="btn btn-primary">START THE FIGHT</button>
+      <div class="hint">On phones: the left half moves, the right half aims &amp; auto-fires, and the <b>DASH</b> button on the right dodges.</div>
     </div>
   </div>
 
   <!-- ===================== PAUSE ===================== -->
   <div id="pauseScreen" class="overlay">
     <div class="panel slim">
-      <div class="kicker"><span class="dot warn"></span> TẠM DỪNG</div>
-      <h2 class="h2">HỆ THỐNG ĐANG CHỜ</h2>
+      <div class="kicker"><span class="dot warn"></span> PAUSED</div>
+      <h2 class="h2">SYSTEM ON STANDBY</h2>
       <div class="pause-stats" id="pauseStats"></div>
       <div class="btn-row">
-        <button id="btnResume" class="btn btn-primary">TIẾP TỤC</button>
-        <button id="btnQuit" class="btn btn-ghost">VỀ MENU</button>
+        <button id="btnResume" class="btn btn-primary">RESUME</button>
+        <button id="btnQuit" class="btn btn-ghost">BACK TO MENU</button>
       </div>
-      <div class="hint">Nhấn <kbd>P</kbd> hoặc <kbd>ESC</kbd> để tiếp tục</div>
+      <div class="hint">Press <kbd>P</kbd> or <kbd>ESC</kbd> to resume</div>
     </div>
   </div>
 
@@ -116,9 +116,9 @@
   <div id="levelupScreen" class="overlay">
     <div class="panel levelup-panel">
       <div class="kicker"><span class="dot lv"></span> LEVEL UP</div>
-      <h2 class="h2">CẤP <span id="levelupNum">2</span> — CHỌN MỘT NÂNG CẤP</h2>
+      <h2 class="h2">LEVEL <span id="levelupNum">2</span> — CHOOSE AN UPGRADE</h2>
       <div class="cards" id="cards"></div>
-      <div class="hint">Bấm thẻ hoặc nhấn <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></div>
+      <div class="hint">Click a card or press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></div>
     </div>
   </div>
 
@@ -126,13 +126,13 @@
   <div id="gameoverScreen" class="overlay">
     <div class="panel go-panel">
       <div class="kicker danger"><span class="dot danger"></span> SIGNAL LOST</div>
-      <h2 class="h2 go-title">BẠN ĐÃ GỤC NGÃ</h2>
+      <h2 class="h2 go-title">YOU HAVE FALLEN</h2>
       <div class="go-stats" id="goStats"></div>
       <div class="btn-row">
-        <button id="btnRestart" class="btn btn-primary">CHƠI LẠI</button>
-        <button id="btnMenu" class="btn btn-ghost">VỀ MENU</button>
+        <button id="btnRestart" class="btn btn-primary">PLAY AGAIN</button>
+        <button id="btnMenu" class="btn btn-ghost">BACK TO MENU</button>
       </div>
-      <div class="hint">Nhấn <kbd>R</kbd> để chơi lại</div>
+      <div class="hint">Press <kbd>R</kbd> to play again</div>
     </div>
   </div>
 
