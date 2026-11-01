@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#05070f" />
+<title>ALIEN SHOOTER — Neon Arena</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- ===================== HUD ===================== -->
+  <div id="hud" class="hud hidden">
+    <div class="hud-topleft">
+      <div class="pill">
+        <span class="pill-k">WAVE</span>
+        <span class="pill-v" id="hudWave">01</span>
+      </div>
+      <div class="pill sub">
+        <span class="pill-k">CÒN LẠI</span>
+        <span class="pill-v" id="hudEnemies">0</span>
+      </div>
+    </div>
+
+    <div class="hud-topright">
+      <div class="score-box">
+        <span class="score-k">SCORE</span>
+        <span class="score-v" id="hudScore">0</span>
+      </div>
+      <div class="lv-box">
+        <span class="lv-k">LV</span>
+        <span class="lv-v" id="hudLevel">1</span>
+      </div>
+    </div>
+
+    <div class="hud-buttons">
+      <button id="btnPause" class="ui-btn" title="Tạm dừng (P)" aria-label="Tạm dừng">❚❚</button>
+      <button id="btnMute" class="ui-btn" title="Bật / tắt tiếng (M)" aria-label="Bật tắt tiếng">🔊</button>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="bars">
+        <div class="bar xp" title="Kinh nghiệm">
+          <div class="bar-fill" id="hudXpFill"></div>
+        </div>
+        <div class="bar hp" title="Máu">
+          <div class="bar-fill" id="hudHpFill"></div>
+          <div class="bar-ghost" id="hudHpGhost"></div>
+          <div class="bar-txt"><span id="hudHpTxt">100 / 100</span></div>
+        </div>
+      </div>
+
+      <div class="right-cluster">
+        <div class="chips" id="hudChips"></div>
+        <div class="dash">
+          <div class="dash-track"><div class="dash-fill" id="hudDashFill"></div></div>
+          <span class="dash-k">DASH</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== BANNER ===================== -->
+  <div id="banner" class="banner">
+    <div class="banner-main" id="bannerMain"></div>
+    <div class="banner-sub" id="bannerSub"></div>
+  </div>
+
+  <!-- ===================== TITLE ===================== -->
+  <div id="titleScreen" class="overlay show">
+    <div class="panel title-panel">
+      <div class="kicker"><span class="dot"></span> NEON ARENA // SURVIVAL PROTOCOL</div>
+      <h1 class="title">ALIEN<span class="title-2">SHOOTER</span></h1>
+      <p class="tagline">
+        Thuộc địa XR-7 đã mất liên lạc. Bạn là người cuối cùng còn đứng vững.
+        Sinh vật ngoài hành tinh tràn ra từ các tổ — hãy bắn, lướt, nâng cấp và sống sót qua từng đợt.
+      </p>
+
+      <div class="controls">
+        <div class="ctrl desk"><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="ctrl-t">Di chuyển</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd class="wide">CHUỘT</kbd></span><span class="ctrl-t">Ngắm</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd class="wide">GIỮ CHUỘT TRÁI</kbd></span><span class="ctrl-t">Khai hoả</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd class="wide">SPACE</kbd></span><span class="ctrl-t">Lướt né (bất tử ngắn)</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd>P</kbd></span><span class="ctrl-t">Tạm dừng</span></div>
+        <div class="ctrl desk"><span class="keys"><kbd>M</kbd></span><span class="ctrl-t">Bật / tắt tiếng</span></div>
+        <div class="ctrl touch"><span class="keys"><kbd class="wide">NỬA TRÁI</kbd></span><span class="ctrl-t">Di chuyển</span></div>
+        <div class="ctrl touch"><span class="keys"><kbd class="wide">NỬA PHẢI</kbd></span><span class="ctrl-t">Ngắm &amp; tự bắn</span></div>
+        <div class="ctrl touch"><span class="keys"><kbd class="wide">NÚT DASH</kbd></span><span class="ctrl-t">Lướt né</span></div>
+        <div class="ctrl touch"><span class="keys"><kbd class="wide">⏸ / 🔊</kbd></span><span class="ctrl-t">Góc phải trên</span></div>
+      </div>
+
+      <button id="btnStart" class="btn btn-primary">BẮT ĐẦU CHIẾN ĐẤU</button>
+      <div class="hint">Trên điện thoại: nửa trái màn hình để di chuyển, nửa phải để ngắm &amp; tự động bắn, nút <b>DASH</b> góc phải để lướt né.</div>
+    </div>
+  </div>
+
+  <!-- ===================== PAUSE ===================== -->
+  <div id="pauseScreen" class="overlay">
+    <div class="panel slim">
+      <div class="kicker"><span class="dot warn"></span> TẠM DỪNG</div>
+      <h2 class="h2">HỆ THỐNG ĐANG CHỜ</h2>
+      <div class="pause-stats" id="pauseStats"></div>
+      <div class="btn-row">
+        <button id="btnResume" class="btn btn-primary">TIẾP TỤC</button>
+        <button id="btnQuit" class="btn btn-ghost">VỀ MENU</button>
+      </div>
+      <div class="hint">Nhấn <kbd>P</kbd> hoặc <kbd>ESC</kbd> để tiếp tục</div>
+    </div>
+  </div>
+
+  <!-- ===================== LEVEL UP ===================== -->
+  <div id="levelupScreen" class="overlay">
+    <div class="panel levelup-panel">
+      <div class="kicker"><span class="dot lv"></span> LEVEL UP</div>
+      <h2 class="h2">CẤP <span id="levelupNum">2</span> — CHỌN MỘT NÂNG CẤP</h2>
+      <div class="cards" id="cards"></div>
+      <div class="hint">Bấm thẻ hoặc nhấn <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></div>
+    </div>
+  </div>
+
+  <!-- ===================== GAME OVER ===================== -->
+  <div id="gameoverScreen" class="overlay">
+    <div class="panel go-panel">
+      <div class="kicker danger"><span class="dot danger"></span> SIGNAL LOST</div>
+      <h2 class="h2 go-title">BẠN ĐÃ GỤC NGÃ</h2>
+      <div class="go-stats" id="goStats"></div>
+      <div class="btn-row">
+        <button id="btnRestart" class="btn btn-primary">CHƠI LẠI</button>
+        <button id="btnMenu" class="btn btn-ghost">VỀ MENU</button>
+      </div>
+      <div class="hint">Nhấn <kbd>R</kbd> để chơi lại</div>
+    </div>
+  </div>
+
+  <div id="muteBadge" class="mute-badge hidden">🔇 MUTED</div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

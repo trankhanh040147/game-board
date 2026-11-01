@@ -1,6 +1,29 @@
+# dependencies
 node_modules/
-node_modules/.vite/
-.vite/
+games/*/node_modules/
+.pnpm-store/
+.npm-cache/
+games/*/.npm-cache/
+
+# build output
 dist/
+games/*/dist/
+.vite/
+*.tsbuildinfo
+
+# vercel
+.vercel
+.vercel/
+
+# logs / OS
 *.log
 .DS_Store
+Thumbs.db
+
+# local scratch
+tmp/
+scratch/
+*.local
+.env
+.env.*
+!.env.example
