@@ -494,3 +494,12 @@ body.fh-tour-open .fh-era-banner {
     bottom: calc(var(--fh-mini-h) + 16px);
   }
 }
+
+/* While the tour is running, hide the First Steps dock so the tour card never
+   overlaps it (QA round-2 visual note). It returns as soon as the tour closes. */
+body.fh-tour-open .fh-firststeps {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}

@@ -17,6 +17,13 @@ Canvas 2D isometric world and a dense, readable interface on top.
 
 More screenshots: [hero 1920](shots/first-hearth-hero-1920.png) · [the Codex](shots/first-hearth-codex-1920.png) · [1280×800 layout](shots/first-hearth-1280.png)
 
+## Player-feedback fixes (round 2)
+
+- **Lag / "1 FPS" fixed.** Root cause: the fog-of-war rebuilt a blurred 758k-pixel canvas (~392 ms) whenever exploration changed, and any 3 °C weather change rebuilt every baked terrain chunk. Fog is now incremental (soft hole-punching) and terrain invalidation is quantised to season/snow/freezing changes. Measured at Retina 2× with 160+ population: **60 fps, render p95 ~12 ms, no 400 ms hitches** (previously long tasks up to 414 ms every ~0.8 s). Autosave (27 ms serialise) moved to idle time; it also no longer stalls a frame.
+- **Decisions no longer spam or soft-lock.** Decisions now arrive 60/50/42/… game days apart by era (20–30 s of real play at normal speed), at most **one pending** at a time, no serious events in the first month, and chained/scheduled events are handled by your council instead of opening another modal. Every decision also has a **Let it pass** escape, so a choice you cannot afford can never trap the game.
+- **Real onboarding.** The welcome now leads into an 8-step, skippable **spotlight tour** (HUD, build menu, speed, codex, objectives, decisions) and a persistent **First Steps** checklist tracks camp → shelter → well → discovery → farm → five souls → granary. Replay both from Help (?) at any time; the tour now also appears for players loading an existing save who have not seen it.
+- Retina terrain chunks are capped at a sane bake resolution with a DPR-aware memory budget; no more chunk-cache thrash at 2× (0 evictions measured).
+
 ## Status
 
 First Hearth is feature-complete for a v1 release and verified end-to-end:

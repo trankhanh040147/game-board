@@ -514,8 +514,10 @@ export function createUI(app: GameApp): UIController {
       if (destroyed) return;
       welcome.show();
     }, 450);
-  } else if (tour.shouldStart() && app.state.tick <= 1) {
-    // Returning QA/browser profile without the welcome overlay still gets the tour once.
+  } else if (tour.shouldStart()) {
+    // Anyone who has not taken the tour yet gets it once — including returning
+    // players loading an existing save (the original trigger only fired at tick<=1,
+    // so a loaded game never saw the tutorial).
     window.setTimeout(() => {
       if (destroyed) return;
       tour.start();
