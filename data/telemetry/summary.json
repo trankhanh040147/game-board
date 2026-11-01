@@ -1,0 +1,405 @@
+{
+  "generatedAt": "2026-11-01T15:06:01.695+07:00",
+  "sessionsInStore": 49,
+  "sessionsInScope": 18,
+  "sessionsOutOfScope": 31,
+  "families": 3,
+  "totals": {
+    "prompts": 8,
+    "steps": 849,
+    "subagentSessions": 15,
+    "subagentSteps": 2254,
+    "tokens": {
+      "inputTokens": 13733975,
+      "outputTokens": 4602872,
+      "cacheReadTokens": 904585600,
+      "cacheWriteTokens": 0,
+      "totalTokens": 922922447
+    },
+    "durationMs": 76702025,
+    "spanMs": 135015489,
+    "activeMs": 84992770,
+    "leadActiveMs": 28217611,
+    "subagentActiveMs": 56775159,
+    "toolCalls": 3469,
+    "filesCreated": 268,
+    "thinkingChars": 8050168
+  },
+  "toolUsage": {
+    "bash": 2148,
+    "read_image": 478,
+    "write": 227,
+    "send_message": 152,
+    "read": 134,
+    "edit": 77,
+    "job_output": 44,
+    "team_task_update": 37,
+    "team_task_get": 30,
+    "wait_agent": 29,
+    "list_agents": 22,
+    "team_task_create": 18,
+    "spawn_teammate": 15,
+    "job_kill": 14,
+    "team_task_list": 13,
+    "todo_write": 12,
+    "present": 6,
+    "job_list": 4,
+    "web_fetch": 3,
+    "web_search": 2,
+    "create_goal": 1,
+    "get_goal": 1,
+    "update_goal": 1,
+    "working_directory": 1
+  },
+  "models": [
+    "deepseek-v4.1-flash"
+  ],
+  "perGame": [
+    {
+      "slug": "alien-shooter",
+      "title": "Alien Shooter",
+      "aliases": [
+        "Game: IslandShooter",
+        "IslandShooter",
+        "Alien Shooter",
+        "Game Alien Shooter",
+        "Built cho tôi 1 con",
+        "games/alien-shooter"
+      ],
+      "rootSessionId": "session-fc72f1da-e926-4f43-88db-81bdcaa62bef",
+      "sessions": 1,
+      "sessionIds": [
+        "session-fc72f1da-e926-4f43-88db-81bdcaa62bef"
+      ],
+      "prompts": 1,
+      "promptsTranslated": 1,
+      "promptsEnglish": 0,
+      "turns": 1,
+      "steps": 99,
+      "subagentSessions": 0,
+      "subagentSteps": 0,
+      "tokens": 13330027,
+      "durationMs": 2592339,
+      "spanMs": 80303589,
+      "activeMs": 2345014,
+      "leadActiveMs": 2345014,
+      "subagentActiveMs": 0,
+      "filesCreated": 8,
+      "commits": 0,
+      "milestones": 12,
+      "thinkingChars": 234421,
+      "from": "2026-10-31T16:07:18.983+07:00",
+      "to": "2026-10-31T16:50:31.322+07:00"
+    },
+    {
+      "slug": "blade-and-mount",
+      "title": "Blade & Mount",
+      "aliases": [
+        "Game: Blade&Mouse",
+        "Blade&Mouse",
+        "Blade&Mount",
+        "Blade & Mount",
+        "blade-and-mount",
+        "games/blade-and-mount"
+      ],
+      "rootSessionId": "session-34f252c3-0457-41a6-9bf5-fb6a7d2fa2d4",
+      "sessions": 8,
+      "sessionIds": [
+        "session-34f252c3-0457-41a6-9bf5-fb6a7d2fa2d4",
+        "06066dd3-787e-4cae-9f1d-ad9d2d24e2d2",
+        "1386c7ee-86b6-4951-bb9b-ab6d046adcbc",
+        "3cd798bd-7b7f-40fc-8deb-bab9de4c51f1",
+        "4d87746e-257b-44b4-a50b-c4bac6f840f2",
+        "bc5b9452-f92a-4957-ba79-5ef36859821d",
+        "c949e250-d8c2-48db-b745-91b478d61392",
+        "ed588d3d-63e1-465d-bc59-ec8a4856540c"
+      ],
+      "prompts": 4,
+      "promptsTranslated": 4,
+      "promptsEnglish": 0,
+      "turns": 4,
+      "steps": 500,
+      "subagentSessions": 7,
+      "subagentSteps": 1070,
+      "tokens": 497667899,
+      "durationMs": 76702025,
+      "spanMs": 77211251,
+      "activeMs": 50245755,
+      "leadActiveMs": 17605652,
+      "subagentActiveMs": 32640103,
+      "filesCreated": 124,
+      "commits": 5,
+      "milestones": 26,
+      "thinkingChars": 4055338,
+      "from": "2026-10-31T16:58:47.298+07:00",
+      "to": "2026-11-01T14:17:09.323+07:00"
+    },
+    {
+      "slug": "first-hearth",
+      "title": "First Hearth",
+      "aliases": [
+        "Game: First Hearth",
+        "First Hearth",
+        "INFINITE CIVILIZATION",
+        "games/first-hearth"
+      ],
+      "rootSessionId": "session-937b5cbb-4b98-4159-822a-96cf5625ad73",
+      "sessions": 9,
+      "sessionIds": [
+        "session-937b5cbb-4b98-4159-822a-96cf5625ad73",
+        "0075a2bd-7f01-4dda-9e2e-6be48e2ad89a",
+        "545a08b1-d75f-41c1-bb6d-6e1eea03514c",
+        "77c794da-5654-4cf5-b074-c54bfd896da7",
+        "810f9542-37ad-4f99-9038-950d93d3a6a9",
+        "88c972da-4295-48f2-ab3c-b9dee15f8269",
+        "978b3aca-bf8c-4634-94cc-a9b0e00becb5",
+        "bfdad5d0-d436-49a5-80fd-823591d611e0",
+        "e1d497e4-5881-4e50-b184-59d42c963e7c"
+      ],
+      "prompts": 3,
+      "promptsTranslated": 2,
+      "promptsEnglish": 1,
+      "turns": 4,
+      "steps": 250,
+      "subagentSessions": 8,
+      "subagentSteps": 1184,
+      "tokens": 411924521,
+      "durationMs": 55721125,
+      "spanMs": 55896565,
+      "activeMs": 32402001,
+      "leadActiveMs": 8266945,
+      "subagentActiveMs": 24135056,
+      "filesCreated": 136,
+      "commits": 12,
+      "milestones": 28,
+      "thinkingChars": 3760409,
+      "from": "2026-10-31T22:53:56.437+07:00",
+      "to": "2026-11-01T14:22:37.562+07:00"
+    }
+  ],
+  "translations": {
+    "prompts": 8,
+    "translated": 7,
+    "englishOriginals": 1,
+    "vietnameseOriginals": 7,
+    "subagentFirstPrompts": 15,
+    "subagentFirstPromptsEnglish": 15,
+    "missing": [],
+    "policy": "English-only site; verbatim originals stay in prompts[].text / subagents[].firstPrompt, English renderings are prompts[].textEn / subagents[].firstPromptEn."
+  },
+  "redactions": {
+    "total": 0,
+    "byKind": {},
+    "locations": []
+  },
+  "caveats": [
+    "**Alien Shooter has only 1 human prompt.** The log contains exactly one human turn — “Build me an Alien Shooter game.” (38 characters in the original Vietnamese; verbatim original preserved in the JSON). The whole game was built inside that single turn (99 steps, 39 min of model-active time). The \">= 3 prompts\" expectation does not hold for this family; nothing was invented to satisfy it.",
+    "**Slugs and titles follow `data/registry.json`; the DSH session titles keep their original names.** The registry (the site’s identity source of truth) uses `alien-shooter`, `blade-and-mount`, `first-hearth` with titles “Alien Shooter”, “Blade & Mount”, “First Hearth”. The sessions were originally titled `Game: IslandShooter`, `Game: Blade&Mouse` and `Game: First Hearth`, and every Blade & Mount subagent mission calls the project “Blade & Mount”; all original names are preserved in `aliases` in summary.json.",
+    "**Three clocks are published, because wall-clock alone overstates the work.** `spanMs` is the full family span (first event → last event) and includes the 11-01 rename pass: Alien Shooter’s 43-minute build window sits inside a 22 h 18 min span. `durationMs` is the build window (first event → last build activity). `activeMs` is summed model turn time across every agent (agent-hours; subagents run in parallel). Blade & Mount sat idle 16 h 33 min between Lead turns inside its span; First Hearth's turn 1 ended at 00:11 and turn 2 only started at 07:59 the next morning.",
+    "**The 2026-11-01 14:15–14:25 pass is bookkeeping, not building.** The three sessions were renamed to `Game: …` with no agent work attached in Alien Shooter’s case — that is why `spanMs` is far longer than `durationMs` for it. The last Blade & Mount and First Hearth turns at ~14:16–14:22 (“Please stop the server for me.” and “move this conversation into the game-board workspace”, translated) are real human turns and are included.",
+    "**Alien Shooter has no build step and no commits, and the report does not pretend otherwise.** It is plain HTML/CSS/Canvas JS with zero dependencies: the only “build” gate was a syntax check (`node --check`, captured as a `build` milestone) and verification was scripted headless-browser runs (`smoke.mjs`, `verify.mjs`, `final.mjs`, `balance.mjs`) that report `ERRORS: []`, captured as `test`/`qa` milestones. Its session never ran `git init`/`commit`, and the monorepo import carries no game history, so there are zero commit milestones for it.",
+    "**Commit milestones come from version control, not from the session transcript.** Blade & Mount’s five commits are its imported subtree history; First Hearth’s are the pre-monorepo chain (originally `0748e03…e1ce7bf`, rebased by the monorepo import — the current shas are in the data). Each label carries the real commit subject and a 7-character sha, timestamped with the commit’s own author time.",
+    "**First Hearth was moved into this repository during its final turn.** The game was built in `~/Documents/deepseek-harness/default-workspace/first-hearth` and `mv`-ed into `~/src/gh/game-board` at the end, which is why the paths in its milestones look mixed.",
+    "**Token figures include subagent sessions.** Summing only Lead sessions would understate output ~3× for the two multi-agent games; the per-game totals here are family-wide.",
+    "**Prompts are only human `user/message` events.** Agent-to-agent traffic (`agent-message`, `subagent-settled`) and DSH plumbing are deliberately excluded, so “prompts” means what the human actually typed or pasted."
+  ],
+  "excludedSessions": [
+    {
+      "id": "session-58f896a5-8774-4b50-862d-c1c7158ff053",
+      "title": "hello",
+      "createdAt": "2026-10-31T15:59:10.375+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-fc34288c-de54-49be-9cb4-04c0c8287e52",
+      "title": "hello",
+      "createdAt": "2026-10-31T16:01:35.758+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-f46b758e-d5a8-40da-8a7f-c2fc2dc5fe7a",
+      "title": "hjhj",
+      "createdAt": "2026-10-31T16:01:55.211+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-bc803a11-9715-49a3-ae1f-ec42e600c6e3",
+      "title": "hi",
+      "createdAt": "2026-10-31T16:02:49.990+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-7cac45d6-8872-421c-bf30-155f7da08a3a",
+      "title": "hihi",
+      "createdAt": "2026-10-31T16:04:51.275+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-0de9374b-1054-441d-be0f-6c6f66db5191",
+      "title": "Greeting",
+      "createdAt": "2026-10-31T16:05:23.894+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-c5cc7e62-77b4-4999-826f-5ee2e7f3c948",
+      "title": "Seleya: Blogger",
+      "createdAt": "2026-10-31T16:15:07.121+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-d0f3d353-e88f-4f83-9050-67a1965d320c",
+      "title": "Kiểm tra các project Seleya trùng lặp",
+      "createdAt": "2026-10-31T16:35:54.246+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "2dc90fd2-ba4a-45a5-8d60-caa412e7cbcf",
+      "title": "You are helping a UI/UX",
+      "createdAt": "2026-10-31T16:40:01.062+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-381ad30e-be35-4135-9c94-7b907485edd0",
+      "title": "Kiểm tra code chạy localhost",
+      "createdAt": "2026-10-31T17:11:51.542+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-928aabe5-cee6-4455-9e3b-9c0b44362648",
+      "title": "Kiểm tra commit mới nhất local",
+      "createdAt": "2026-10-31T17:15:30.457+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-1952c7c9-25e3-4681-9815-e20b3b1e944c",
+      "title": "Research coding usecase cho Seleya",
+      "createdAt": "2026-10-31T17:23:19.699+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "192fcbd9-9bfb-490b-a52e-9fb2c43b7ea6",
+      "title": "You are `spec-truth`, a teammate",
+      "createdAt": "2026-10-31T18:03:18.799+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "a7c24a21-c14b-4849-ac0f-c61e920970b3",
+      "title": "You are `industry`, a teammate",
+      "createdAt": "2026-10-31T18:03:19.348+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "ba25cc70-d7a5-48a1-b47f-70d9a9b3dcd4",
+      "title": "You are `critic`, a teammate",
+      "createdAt": "2026-10-31T18:03:34.734+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "b57eb188-7b86-4483-8d98-c009ea97df15",
+      "title": "You are `sec-audit`, a teammate",
+      "createdAt": "2026-10-31T18:03:34.898+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "d4383ffe-4584-48ed-b6a5-742764242d8b",
+      "title": "You are `dsh-core`, a teammate",
+      "createdAt": "2026-10-31T19:08:38.599+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "90ff80f0-30cf-4598-8a40-b47033d52d4b",
+      "title": "You are `dsh-public`, a teammate",
+      "createdAt": "2026-10-31T19:08:38.789+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "9030ae6b-1d8d-4927-bacf-87d4596bd2f9",
+      "title": "You are `dsh-fit`, a teammate",
+      "createdAt": "2026-10-31T19:08:51.033+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "2b3ab84a-7033-4aeb-9be4-fc17aec8cfe2",
+      "title": "You are `borrow-harness`, a teammate",
+      "createdAt": "2026-10-31T19:58:38.318+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-cf69f547-0084-4395-8122-2151d5869c29",
+      "title": "Fabric Coding",
+      "createdAt": "2026-10-31T20:59:33.833+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "04ce64f3-822c-4e45-bb9c-4b373638def7",
+      "title": "Bạn là teammate nghiên cứu",
+      "createdAt": "2026-10-31T21:01:17.355+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "c034abc7-daa8-42dd-a40f-b73f5e188858",
+      "title": "Bạn là teammate nghiên cứu",
+      "createdAt": "2026-10-31T21:01:17.777+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "749738a2-9fd9-48fa-8e90-7438b3f4e8d2",
+      "title": "Bạn là teammate nghiên cứu",
+      "createdAt": "2026-10-31T21:01:18.052+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-5018b26c-91fb-4034-9a76-63fe8e3e05d0",
+      "title": "Deploy Seleya lên Cloudflare miễn phí",
+      "createdAt": "2026-10-31T21:10:41.205+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "c6465883-47ad-4aeb-b0e4-ae6d7b2962d9",
+      "title": "Bạn là teammate nghiên cứu",
+      "createdAt": "2026-10-31T21:24:22.933+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "102a962d-1e50-48ff-8686-46ad11d6c496",
+      "title": "Bạn là teammate nghiên cứu",
+      "createdAt": "2026-10-31T21:24:23.119+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-7a69dfd8-9cfa-4d3a-906c-aef7ee8fb0b0",
+      "title": "Make app",
+      "createdAt": "2026-10-31T21:25:06.488+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "session-38d396f5-77a6-48db-ad57-55af0adcb5a4",
+      "title": "Fabric-Harness",
+      "createdAt": "2026-11-01T08:17:20.177+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "48078a14-4fb6-47eb-9d62-71434ca1e227",
+      "title": "Bạn là teammate nghiên cứu",
+      "createdAt": "2026-11-01T08:39:53.777+07:00",
+      "reason": "unrelated session"
+    },
+    {
+      "id": "65e0f316-7846-4bbe-9bf9-24151463ed33",
+      "title": "Bạn là teammate nghiên cứu",
+      "createdAt": "2026-11-01T08:39:54.016+07:00",
+      "reason": "unrelated session"
+    }
+  ],
+  "provenance": {
+    "sessionsDir": "/Users/vulcanlabs/.dsh/sessions/--Users-vulcanlabs-Documents-deepseek-harness-default-workspace--",
+    "decompressor": "zstd -dc",
+    "sessionFormat": "v4 JSONL",
+    "timezone": "Asia/Saigon (UTC+7)",
+    "generatedBy": "scripts/extract-sessions.mjs",
+    "gamesJson": "data/telemetry/games.json",
+    "summaryJson": "data/telemetry/summary.json",
+    "report": "docs/BUILD-HISTORY.md",
+    "extractionMs": 4144
+  }
+}
