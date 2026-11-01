@@ -1,0 +1,11 @@
+# Vercel upload ignore list for the `first-hearth` project.
+# Build needs: index.html, package.json + lockfile, tsconfig.json,
+# vite.config.ts, src/, tests/ (tsconfig includes them), public/.
+# Everything below is evidence, docs or local tooling that never reaches dist/.
+
+shots/
+docs/
+tools/
+README.md
+*.log
+.DS_Store

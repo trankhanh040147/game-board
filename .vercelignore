@@ -1,0 +1,29 @@
+# Vercel upload ignore list — applies to the `game-board` project only
+# (the board is deployed from the repo root). The three games are separate
+# Vercel projects deployed from their own directories, so their sources must
+# never be part of the board's upload.
+#
+# Keep this list narrow: the board build imports data/registry.json and
+# data/telemetry/games.json, so data/ MUST stay. public/, src/, index.html,
+# package.json, tsconfig.json, vite.config.ts and vercel.json are required.
+
+# Games live in their own projects
+games/
+
+# Large binary evidence, not needed by the board build
+shots/
+docs/
+scripts/
+
+# VCS + editor cruft
+.git/
+.github/
+.DS_Store
+*.log
+*.local
+
+# Dependencies and build output are installed/built by Vercel
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
