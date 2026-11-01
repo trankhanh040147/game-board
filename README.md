@@ -16,6 +16,8 @@ tokens, the agent hours, the reasoning, the tests, the dead ends and the fixes.
 three games and their making-of exhibits under one roof. The live URL of every deployment is
 recorded in [`data/deploy.json`](data/deploy.json).
 
+![The Game Board](shots/board/home-1440.png)
+
 ## The point
 
 The games are the product. The **receipts** are the experiment: what does it actually take to
