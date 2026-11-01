@@ -8,6 +8,7 @@
 import '../styles/panels.css';
 import '../styles/modals.css';
 import '../styles/graph.css';
+import '../styles/tour.css';
 import type { GameApp } from '../app';
 import { capitalOf, techAvailable } from '../sim/core';
 import { icon } from './icons';
@@ -26,6 +27,8 @@ import {
   openSettingsModal,
 } from './modals';
 import { PanelHost } from './panels/host';
+import { Tour } from './tour';
+import { FirstSteps } from './first-steps';
 import { createPanels } from './panels';
 import { Tooltip } from './tooltip';
 import { esc, stateOf, type ExpeditionKind, type PanelId, type Services, type SettingsTab } from './util';
@@ -86,6 +89,12 @@ export function createUI(app: GameApp): UIController {
     },
     openSettings(tab: SettingsTab = 'save'): void {
       openSettingsModal(services, modalHost, tab);
+    },
+    startTour(force = false): void {
+      tour.start(force);
+    },
+    showFirstSteps(): void {
+      firstSteps.show();
     },
     openNewGame(): void {
       openNewGameModal(services, modalHost);
@@ -186,8 +195,28 @@ export function createUI(app: GameApp): UIController {
   const gameOver = new GameOverOverlay(services, modalHost);
   const eraBanner = new EraBanner(services);
   shell.appendChild(eraBanner.root);
-  const welcome = new WelcomeOverlay(services);
+  const welcome = new WelcomeOverlay(services, {
+    onBegin: () => {
+      window.setTimeout(() => {
+        if (!destroyed && tour.shouldStart()) tour.start();
+      }, 650);
+    },
+  });
   shell.appendChild(welcome.root);
+
+  // The tour and the first-steps checklist are the two onboarding surfaces.
+  const tour = new Tour(services);
+  shell.appendChild(tour.root);
+  const firstSteps = new FirstSteps(services, (height) => {
+    if (height) {
+      shell.style.setProperty('--fh-firststeps-h', `${Math.round(height)}px`);
+      shell.classList.add('has-firststeps');
+    } else {
+      shell.style.setProperty('--fh-firststeps-h', '0px');
+      shell.classList.remove('has-firststeps');
+    }
+  });
+  shell.appendChild(firstSteps.root);
 
   const targetBanner = document.createElement('div');
   targetBanner.className = 'fh-target-banner';
@@ -321,6 +350,7 @@ export function createUI(app: GameApp): UIController {
   const onKeyDown = (ev: KeyboardEvent): void => {
     if (ev.defaultPrevented) return;
     if (modalHost.isOpen()) return; // modal host owns its keys
+    if (tour.isActive()) return; // tour owns its keys
     if (welcome.isOpen) return;
     if (isTyping()) return;
     const key = ev.key;
@@ -457,6 +487,7 @@ export function createUI(app: GameApp): UIController {
   function refresh(): void {
     if (destroyed) return;
     try {
+      const state = app.state;
       applySettings();
       hud.refresh();
       buildPanel.refresh();
@@ -469,18 +500,26 @@ export function createUI(app: GameApp): UIController {
         gameOver.refresh();
       }
       eraBanner.refresh();
+      firstSteps.refresh();
+      if (tour.isActive() && (state.events.pending.length > 0 || modalHost.isOpen())) tour.abort();
       updateRail();
     } catch (err) {
       console.error('[ui] refresh failed', err);
     }
   }
 
-  // First-run welcome.
+  // First-run welcome, then the tour.
   if (welcome.shouldShow()) {
     window.setTimeout(() => {
       if (destroyed) return;
       welcome.show();
     }, 450);
+  } else if (tour.shouldStart() && app.state.tick <= 1) {
+    // Returning QA/browser profile without the welcome overlay still gets the tour once.
+    window.setTimeout(() => {
+      if (destroyed) return;
+      tour.start();
+    }, 1100);
   }
 
   refresh();
@@ -499,6 +538,8 @@ export function createUI(app: GameApp): UIController {
       notifLog.destroy();
       eraBanner.destroy();
       welcome.destroy();
+      tour.destroy();
+      firstSteps.destroy();
       panelHost.destroy();
       modalHost.destroy();
       tooltipMgr.destroy();

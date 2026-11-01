@@ -123,6 +123,8 @@ export class ObjectivesPanel implements GamePanel {
             }
           </div>
           <div class="fh-tutorial-actions">
+            <button type="button" class="fh-btn is-quiet clickable" data-act="show-firststeps">${icon('objective', 'fh-icon is-tiny')} First steps</button>
+            <button type="button" class="fh-btn is-ghost clickable" data-act="replay-tour">${icon('compass', 'fh-icon is-tiny')} Replay tour</button>
             <button type="button" class="fh-btn is-quiet clickable" data-act="open-codex">${icon('book', 'fh-icon is-tiny')} Discoveries</button>
             <button type="button" class="fh-btn is-quiet clickable" data-act="open-society">${icon('scale', 'fh-icon is-tiny')} Society</button>
             <button type="button" class="fh-btn is-quiet clickable" data-act="open-expeditions">${icon('compass', 'fh-icon is-tiny')} Explore</button>
@@ -141,7 +143,9 @@ export class ObjectivesPanel implements GamePanel {
   }
 
   handleAction(act: string): void {
-    if (act === 'open-codex') this.svc.openPanel('codex');
+    if (act === 'show-firststeps') this.svc.showFirstSteps();
+    else if (act === 'replay-tour') this.svc.startTour(true);
+    else if (act === 'open-codex') this.svc.openPanel('codex');
     else if (act === 'open-society') this.svc.openPanel('society');
     else if (act === 'open-expeditions') this.svc.openPanel('expeditions');
   }

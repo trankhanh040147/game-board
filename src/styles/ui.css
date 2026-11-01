@@ -1430,7 +1430,7 @@
   position: absolute;
   left: calc(var(--fh-rail-w) + 6px);
   top: calc(var(--fh-hud-h) + 7px);
-  bottom: calc(var(--fh-mini-h) + 22px);
+  bottom: calc(var(--fh-mini-h) + 26px + var(--fh-firststeps-h, 0px));
   width: var(--fh-build-w);
   z-index: 15;
   display: flex;

@@ -76,6 +76,7 @@ const SITE_KINDS: SiteKind[] = ['ruin', 'shrine', 'grove', 'spring', 'cave', 'cr
 
 const MAX_ACTORS = 92;
 const FOG_SCALE = 1 / 6;
+const DEFAULT_TERRAIN_BUDGET = 74 * 1024 * 1024;
 const OVERLAY_STEPS = 12;
 
 interface DecoEntry {
@@ -452,8 +453,13 @@ export class WorldRenderer {
     this.cam.update(dt);
     this.stats.zoom = Math.round(this.cam.zoom * 100) / 100;
 
-    const texel = clamp(this.cam.zoom * this.dpr, 0.5, 2.4);
+    // At high DPR, cap the bake resolution ~1.5x instead of full 2x: the
+    // visible chunk set then fits the memory budget without eviction thrash.
+    const highDpr = this.dpr >= 1.5;
+    const texelRaw = clamp(this.cam.zoom * this.dpr, 0.5, 2.4);
+    const texel = highDpr ? Math.min(texelRaw, 1.55) : texelRaw;
     this.terrain.setBucket(pickBucket(texel));
+    this.terrain.setMemoryBudget(highDpr ? 200 * 1024 * 1024 : DEFAULT_TERRAIN_BUDGET);
     this.terrain.setShowGrid(!!this.app.view?.showGrid);
     this.bank.setBuildingScale(Math.round(clamp(this.cam.zoom * this.dpr, 1, 2.6) * 4) / 4);
     this.bank.setSeason(season, weather?.snow ?? 0);

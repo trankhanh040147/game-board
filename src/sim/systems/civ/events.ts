@@ -93,7 +93,7 @@ export interface EffectsOptions {
 const SEVERITY3_MIN_GAP = 50; // days between severity-3 event *starts*
 // Real-time-aware breathing room: the player should get at least ~20-30 real
 // seconds between decisions at normal speed. Early game uses a wider gap.
-const DECISION_GAP_BY_ERA = [45, 38, 32, 28, 24, 22, 20];
+const DECISION_GAP_BY_ERA = [60, 50, 42, 34, 28, 24, 20];
 const COOLDOWN_MULTIPLIER = 2; // an event id never re-fires before 2x its cooldown
 
 const CATEGORY_KIND: Record<EventDef['category'], ChronicleEntry['kind']> = {
@@ -967,10 +967,13 @@ function collectCandidates(ctx: SimContext): ScoredEvent[] {
     // Open questions need breathing room: never stack decision events.
     if ((def.choices?.length ?? 0) > 0) {
       if (s.events.pending.length > 0) continue; // one open question at a time
-      const gap = DECISION_GAP_BY_ERA[Math.min(era, DECISION_GAP_BY_ERA.length - 1)] ?? 30;
-      if (ctx.tick - lastDecision < gap) continue;
+      if (ctx.tick - lastDecision < decisionGap(era)) continue;
     }
     if (def.requiresFlag && (s.flags[def.requiresFlag] ?? 0) !== 0) continue;
+    // A gentle opening: no questions in the first ten days, no serious event
+    // before the player has had a month to find their feet.
+    if (ctx.tick < 10 && (def.choices?.length ?? 0) > 0) continue;
+    if (def.severity >= 2 && ctx.tick < 30) continue;
     if (s.events.scheduled.some((e) => e.eventId === id)) continue;
     if (s.events.pending.some((p) => p.eventId === id)) continue;
     // Fairness: a fatal event must be telegraphed.
@@ -992,6 +995,11 @@ function weightedChoice(rng: () => number, items: ScoredEvent[]): EventDef | nul
     if (roll <= 0) return it.def;
   }
   return items[items.length - 1]?.def ?? null;
+}
+
+/** Days between decision-bearing events; early game is deliberately slower. */
+function decisionGap(era: number): number {
+  return DECISION_GAP_BY_ERA[Math.min(era, DECISION_GAP_BY_ERA.length - 1)] ?? 30;
 }
 
 function scheduleTelegraphed(ctx: SimContext, def: EventDef): void {
@@ -1037,7 +1045,32 @@ export function fireEvent(ctx: SimContext, def: EventDef, telegraphed = false): 
   const choices = (def.choices ?? []).filter((ch) => !ch.requires || conditionOk(ctx, ch.requires));
   const decisionCap = capitalOf(s);
   const anyAffordable = choices.length === 0 || choices.some((ch) => !ch.cost || !decisionCap || canAfford(decisionCap, ch.cost));
-  if (choices.length > 0 && !anyAffordable) {
+  const lastDecisionTick = s.flags['event:last_decision'] ?? -9999;
+  const deferToCouncil =
+    choices.length > 0 &&
+    (ctx.tick < 10 ||
+      (def.severity >= 2 && ctx.tick < 30) ||
+      ctx.tick - lastDecisionTick < Math.max(24, Math.round(decisionGap(s.research.era) * 0.6)));
+  if (choices.length > 0 && deferToCouncil && anyAffordable) {
+    // Chained or scheduled events can arrive close together; rather than
+    // interrupt the player again, the council takes the cautious first choice.
+    const fallback = choices.find((ch) => !ch.cost || !decisionCap || canAfford(decisionCap, ch.cost)) ?? choices[0];
+    if (fallback) {
+      applyDecisionChoice(s, ctx.c, ctx.rules, {
+        id: s.events.nextDecisionId++,
+        eventId: def.id,
+        title: def.title,
+        text: def.text,
+        choices,
+        createdTick: ctx.tick,
+        severity: def.severity,
+        category: def.category,
+        icon: def.icon || 'bell',
+        causes: def.causeHints ?? [],
+      }, fallback.id);
+      ctx.notify(`${def.title}: your council acted in your stead.`, 'info', 'crown');
+    }
+  } else if (choices.length > 0 && !anyAffordable) {
     // Nobody can act on this: don't trap the player behind an unresolvable
     // modal. The moment passes and the world moves on.
     s.flags['event:last_decision'] = ctx.tick;

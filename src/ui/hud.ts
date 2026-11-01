@@ -141,6 +141,7 @@ export class HUD {
           <button type="button" class="fh-iconbtn clickable" data-act="open-alerts" aria-label="Warnings and alerts" ${tipText('Warnings, causes and live alerts')}>
             ${icon('info', 'fh-icon')}<span class="fh-badge-dot" data-js="warnbadge" hidden></span>
           </button>
+          <span class="fh-speed-state" data-js="speedstate" ${tipText('Current pace — press Space to pause, 1–4 to change')}>1×</span>
           <div class="fh-speed" role="group" aria-label="Time controls">
             <button type="button" class="fh-speed-btn clickable" data-speed="0" data-js="speed0" aria-label="Pause" ${tipText('Pause (Space)')}>${icon('pause', 'fh-icon is-small')}</button>
             <button type="button" class="fh-speed-btn clickable" data-speed="1" data-js="speed1" aria-label="Speed 1" ${tipText('Speed 1 — a slow, observant pace (1)')}>1</button>
@@ -159,6 +160,9 @@ export class HUD {
           </button>
           <button type="button" class="fh-iconbtn clickable" data-act="open-settings" aria-label="Settings" ${tipText('Settings, accessibility and shortcuts')}>
             ${icon('gear', 'fh-icon')}
+          </button>
+          <button type="button" class="fh-iconbtn clickable" data-act="open-help" aria-label="Help, tour and shortcuts" ${tipText('Help — replay the tour, shortcuts and first steps (?)')}>
+            ${icon('help', 'fh-icon')}
           </button>
         </div>
       </div>
@@ -447,6 +451,21 @@ export class HUD {
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-pressed', String(active));
     }
+    const statePill = this.refs.get('speedstate');
+    if (statePill) {
+      const label = paused ? 'PAUSED' : `${Math.max(1, app.speed)}×`;
+      if (statePill.textContent !== label) statePill.textContent = label;
+      statePill.classList.toggle('is-paused', paused);
+      statePill.setAttribute('title', paused ? 'The world is paused — Space to resume' : `Running at speed ${app.speed} — Space to pause`);
+    }
+    const pauseBtn = this.refs.get('speed0');
+    if (pauseBtn) {
+      const iconName = paused ? 'play' : 'pause';
+      if (this.cache.get('speed0icon') !== iconName) {
+        this.cache.set('speed0icon', iconName);
+        pauseBtn.innerHTML = icon(iconName, 'fh-icon is-small');
+      }
+    }
 
     // Alerts + badge
     const pending = s.events.pending.length;
@@ -646,6 +665,9 @@ export class HUD {
         break;
       case 'open-settings':
         this.svc.openSettings('settings');
+        break;
+      case 'open-help':
+        this.svc.openSettings('help');
         break;
       case 'open-decision':
         this.closePopovers();

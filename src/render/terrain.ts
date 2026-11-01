@@ -48,7 +48,7 @@ export interface TerrainDrawOptions {
   onBake?: () => void;
 }
 
-const MAX_CHUNK_BYTES = 74 * 1024 * 1024;
+const DEFAULT_MAX_CHUNK_BYTES = 74 * 1024 * 1024;
 
 export class Terrain {
   private palette: Palette;
@@ -59,6 +59,7 @@ export class Terrain {
   private frame = 0;
   bakeCount = 0;
   drawnChunks = 0;
+  private maxBytes = DEFAULT_MAX_CHUNK_BYTES;
   private pending: { cx: number; cy: number; d: number }[] = [];
   private showGrid = true;
 
@@ -87,6 +88,13 @@ export class Terrain {
 
   setBucket(bucket: number): void {
     this.bucket = bucket;
+  }
+
+  /** Memory budget for baked chunks; scales with device pixel ratio. */
+  setMemoryBudget(bytes: number): void {
+    if (bytes === this.maxBytes) return;
+    this.maxBytes = bytes;
+    this.evict();
   }
 
   setShowGrid(show: boolean): void {
@@ -212,10 +220,10 @@ export class Terrain {
   }
 
   private evict(): void {
-    if (this.bytes <= MAX_CHUNK_BYTES) return;
+    if (this.bytes <= this.maxBytes) return;
     const entries = [...this.chunks.values()].sort((a, b) => a.lastUsed - b.lastUsed);
     for (const ch of entries) {
-      if (this.bytes <= MAX_CHUNK_BYTES) break;
+      if (this.bytes <= this.maxBytes) break;
       this.chunks.delete(ch.key);
       this.bytes -= ch.bytes;
     }

@@ -1,45 +1,55 @@
 # FIRST HEARTH — QA REPORT
 
-**Date:** 2026-10-31 → 2026-11-01 (Asia/Saigon)
-**Environment:** macOS (arm64), Node v26.5.0, Vite 7.1, TypeScript 5.9, vitest 3.2.7, puppeteer-core 24.10 driving system Chrome (headless), deterministic simulation (`GameState.seed`), dev server `http://127.0.0.1:5280`, QA browser runs against a production build served at `http://127.0.0.1:5299` (isolated preview so in-flight HMR edits cannot invalidate a matrix run).
-**Scope:** headless harness (`tools/simrun.ts`), test suite (`tests/**`), deterministic/soak runs, balance matrix, full browser/UI matrix, accessibility/UX notes.
+**Date:** 2026-10-31 → 2026-11-01 (Asia/Saigon) · **Round 2 verification** (renderer/decision/onboarding fixes)
+**Environment:** macOS (arm64), Node v26.5.0, Vite 7.1, TypeScript 5.9, vitest 3.2.7, puppeteer-core 24.10 driving system Chrome (headless; DPR1 and DPR2/Retina simulation), deterministic simulation (`GameState.seed`). Dev server `http://127.0.0.1:5280` (Lead-owned); QA browser matrices run against a production build served from `http://127.0.0.1:5299` (isolated preview so in-flight HMR edits cannot invalidate a run).
+**Scope:** headless sim harness, deterministic/soak runs, economy/decision/onboarding regression tests, renderer & autosave performance profiling, full browser/UI matrix at 1600×900 and 1280×800, accessibility/UX notes.
 
 ---
 
 ## 1. Final verdict
 
-**PASS for internal/demo ship.** The simulation is deterministic (same seed + same action script ⇒ identical state; save→load→continue is byte-identical), runs 400 days headless in ~0.7–1.0 s with zero errors and zero non-finite numbers, and the browser app boots, renders and remains console-error-free across 1600×900 and 1280×800. 78/78 automated tests pass and 43/43 browser checks pass with 0 console/page errors. There are **no P0/blocking bugs**. Balance targets are partially met: era-1 pacing is inside the 40–80-day target band on all 5 seeds, but population-10 arrives late (day 70–79 vs target 25–50), era-2 pacing is variable (day 115–370 vs target 150–250), and late-game food/water pressure produces starvation windows (no extinctions in the final matrix). Recommend shipping with follow-up balance tuning (see §6).
+**PASS for internal/demo ship — no P0/blocking bugs.** Round 2 verified all three reported player-facing fixes (renderer lag, decision overload/lock, onboarding) on a stable production build:
+
+- **Simulation:** deterministic (same seed + same script ⇒ identical state; save→load→continue byte-identical), 400 days headless in ~0.7–1.0 s, 0 errors/NaN, **5/5 seeds survive 400 days with 0 starvation days**.
+- **Tests:** `npx tsc --noEmit` → 0 errors; `npm test` → **84/84 tests (7 files)** in 7.34 s (budget 90 s), including 6 new decision-pacing/anti-deadlock tests.
+- **Browser:** `browser-qa` → **61/61 checks, 0 console errors, 0 page errors** at 1600×900 and 1280×800, including the full 8-step tour, skip/finish persistence, Help-replay, First Steps checklist updates and "Let it pass" modal escape.
+- **Performance:** 60 fps at 4× speed with 140–179 population (DPR1 render p95 1.8–2.6 ms; DPR2 p95 6.5–13.3 ms with panels open; 1 long task >50 ms per 10 s run = warmup). Headless tick 1.1–8.5 ms.
+
+**Two shipping recommendations (MED, not blockers):** (1) defer the ~23–28 ms autosave serialization off-frame — it produces a 30–37 ms tick and 50–80 ms long task every 30 days; (2) DPR2/Retina terrain chunk cache thrashes (2 498 evictions / 2 520 re-bakes per ~8 s, `terrain.draw` avg 9.14 ms vs 0.49 ms at DPR1) — scale the chunk budget by DPR. Balance targets are still partially met: era1 is inside the 40–80-day band on all seeds; pop-10 (day 70–79 vs 25–50) and era-2 pacing (day 108–367 vs 150–250) remain tuning items.
 
 Commands run for this report:
 
 | # | Command | Result |
 |---|---|---|
 | 1 | `npx tsc --noEmit` | **0 errors** |
-| 2 | `npm test` (`vitest run`) | **78/78 tests passed, 6/6 files**, 5.26 s (well under the 90 s budget) |
-| 3 | `npx vite-node tools/simrun.ts -- --seed demo --days 400 --autoplay` | 0 errors, 0 NaN, 400 days in ~0.9 s (2.2 ms/day) |
-| 4 | `node tools/balance.mjs --days 400 --seeds demo,stone,river,harth,longrun-seed --difficulties balanced` | 5/5 seeds, **no extinction**, 1.65–2.41 ms/day (table §5) |
-| 5 | `node tools/browser-qa.mjs --url http://127.0.0.1:5299` | **43/43 checks passed**, 0 console errors, 0 page errors, 21 screenshots |
+| 2 | `npm test` (`vitest run`) | **84/84 tests passed, 7/7 files**, 7.34 s |
+| 3 | `npx vite-node tools/simrun.ts -- --seed demo --days 400 --autoplay` | 0 errors, 0 NaN, ≈0.9 s (2.2 ms/day) |
+| 4 | `node tools/balance.mjs --days 400 --seeds demo,stone,river,harth,longrun-seed --difficulties balanced` | 5/5 seeds, **no extinction**, 0 starvation days, 1.78–2.21 ms/day (§5) |
+| 5 | `node tools/browser-qa.mjs --url http://127.0.0.1:5299` | **61/61 checks passed**, 0 console errors, 0 page errors, 33 screenshots |
+| 6 | `node tools/profile-fps.mjs <dpr> 4 10000 [panels]` | 59.7–60 fps, render p95 1.8–13.3 ms, ≤1 long task/run (§4) |
+| 7 | `node tools/profile-render.mjs 1` / `2` | DPR1 clean; DPR2 chunk thrash (§4) |
+| 8 | `node tools/profile-autosave.mjs 1 4 4000` (and DPR2) | serialize 23.4–27.7 ms; 30–37 ms tick, 50–80 ms long task at autosave (§4) |
+| 9 | `npx vitest run tests/decisions.test.ts` | 6/6 PASS (≤1 pending, gaps ≥20 d, 4 decisions/300 d, `__none` never soft-locks) |
 
 ---
 
 ## 2. Test matrix
 
-### 2.1 Automated simulation tests (`npm test`)
+### 2.1 Automated simulation tests (`npm test` — 84 tests, 7 files, 7.34 s)
 
 | File | Tests | Focus | Result |
 |---|---|---|---|
-| `tests/content.test.ts` | 27 | `buildContent` + `validateContent` zero errors; content quotas (54 res / 93 bld / 85 recipes / 95 tech / 45 events / 18 policies / 13 doctrines / 20 milestones / 20 achievements / 6 megaprojects / 14 sites); cross-refs; no cycles; no duplicate ids; every era except the final offers doctrines; trade-free start buildable | PASS |
-| `tests/determinism.test.ts` | 9 | identical seed+autoplay ⇒ identical 100-day state; idle determinism; seed/difficulty divergence; RNG tuple restored by save; save→load lossless; **load→continue 60+60 d equals continuous 120 d**; double save/load; save JSON has no cache | PASS |
-| `tests/earlygame.test.ts` | 8 | scripted 120-day early game survives, population grows, actions take effect, food economy alive, no NaN, value ranges; idle 60 d; **zero-population** 40 d; tiny 48×48 world 60 d | PASS |
-| `tests/longrun.test.ts` | 8 | 400-day autoplay under budget, no NaN, population sane, food economy not dead, no negative stock, metrics series recorded, structural invariants, snapshot canonicalises | PASS |
-| `tests/economy.test.ts` | 7 | sawmill conversion consumes inputs→planks; gathering extracts from world; storage caps respected; prices in 0.2×–6× band; trade requires market and conserves stock/treasury; every era-0 building placeable; many-citizen cap/NaN | PASS |
-| `tests/regression.test.ts` | 19 | starting stock preserved day 1; overflow is a slow bleed (≤15 %/day); no negative stock; research gated behind `flags.auto_research`; autoTrade does nothing without market; well adds water; growth/era budgets; **bootstrap ladder (woodcutter ≤ day 10–12, wood income ≤ day 15)**; no wood deadlock; **farm progression** (farm ≤ d60, pop>10 ≤ d80, era1 ≤ d100); no permanent resource stall over 200 d; storage invariants; settle-expedition → ready flags → second settlement | PASS |
+| `tests/content.test.ts` | 27 | `buildContent` + `validateContent` zero errors; quotas (54 res / 93 bld / 85 recipes / 95 tech / 45 events / 18 policies / 13 doctrines / 20 milestones / 20 achievements / 6 megaprojects / 14 sites); cross-refs; no cycles/dupes; every era except the final offers doctrines; tech-free start | PASS |
+| `tests/determinism.test.ts` | 9 | identical seed+script ⇒ identical 100-day state; idle determinism; seed/difficulty divergence; RNG tuple restored; save→load lossless; **load→continue 60+60 d == continuous 120 d**; double save/load; save JSON has no cache | PASS |
+| `tests/earlygame.test.ts` | 8 | 120-day scripted early game; population growth; actions take effect; food alive; no NaN; value ranges; idle 60 d; **zero-population** 40 d; tiny 48×48 world | PASS |
+| `tests/longrun.test.ts` | 8 | 400-day autoplay under budget; no NaN; population sane; food economy alive; no negative stock; metrics recorded; structural invariants | PASS |
+| `tests/economy.test.ts` | 7 | sawmill conversion consumes→produces; gathering extracts; storage caps; prices in 0.2×–6× band; market-gated trade conservation; every era-0 building placeable; many-citizen cap/NaN | PASS |
+| `tests/regression.test.ts` | 19 | starting stock day 1; slow overflow bleed ≤15 %/day; no negative stock; research gated by `flags.auto_research`; autoTrade needs market; well adds water; growth/era budgets; bootstrap ladder (woodcutter ≤ d10–12, wood income ≤ d15); no wood deadlock; farm progression (farm ≤ d60, pop>10 ≤ d80, era1 ≤ d100); no permanent stall over 200 d; storage invariants; settle-expedition → ready flags → second settlement | PASS |
+| `tests/decisions.test.ts` | 6 | **≤1 pending at all times**; **player-facing decision gaps ≥20 game days over 300 d** (chained/scheduled events defer to council); 4 decisions/300 d; all-unaffordable decision resolves via `__none`; `applyDecisionChoice('__none')` removes pending + history; unknown choice fails cleanly; resolving never throws | PASS |
 
-Notable guarantees now pinned by tests: *no auto tech completions without the flag*, *no market trade without a market*, *starting resources survive day 1*, *storage overflow is a slow bleed*, *wood/food bootstrap cannot permanently deadlock*, *a settle party's ready flags can always found a second settlement*.
+Notable round-2 guarantees: chained/scheduled decisions can no longer slip past the era-based gap guard; no decision can ever soft-lock the game; "Let it pass" is always available and recorded in history.
 
 ### 2.2 Headless harness (`tools/simrun.ts`)
-
-Primary team verification tool. Usage:
 
 ```bash
 npx vite-node tools/simrun.ts -- --seed demo --days 400 --autoplay --verbose
@@ -48,112 +58,162 @@ npx vite-node tools/simrun.ts -- --seed demo --days 60 --autoplay \
   --assert-no-nan --assert-no-negative-stock --assert-starting-stock
 ```
 
-Features: `--seed/--seeds`, `--days`, `--autoplay`, `--difficulty`, `--until-pop`, `--report-every`, `--out <json>`, `--csv`, `--assert-no-nan`, `--assert-no-negative-stock`, `--assert-starting-stock`, `--hash`, `--verbose/--quiet`, `--max-errors`. Prints day/year/season/pop/foodDays/waterDays/morale/health/treasury/insight/era/techs/buildings/unemployment/homeless/pollution/biodiversity/births/deaths/events/ms-per-day plus a JSON summary (timeline + daily metrics series + milestones + autoplay stats/failure reasons). Exit code 0 = clean. Multi-seed mode prints a comparison table.
-
-`tools/balance.mjs` wraps it into a seeds × difficulties matrix and `tools/browser-qa.mjs` performs the browser matrix below. Both are deterministic and re-runnable.
+Flags: `--seed/--seeds`, `--days`, `--autoplay`, `--difficulty`, `--until-pop`, `--report-every`, `--out <json>`, `--csv`, `--assert-no-nan`, `--assert-no-negative-stock`, `--assert-starting-stock`, `--hash`, `--verbose/--quiet`, `--max-errors`. Reports day/year/season/pop/foodDays/waterDays/morale/health/treasury/insight/era/techs/buildings/unemployment/homeless/pollution/biodiversity/births/deaths/events/ms-per-day plus a JSON summary (timeline, metrics series, milestones, autoplay stats/failure reasons). `tools/balance.mjs` runs the seeds × difficulties matrix; `tools/browser-qa.mjs` the browser matrix; `tools/profile-fps.mjs`, `tools/profile-render.mjs`, `tools/profile-autosave.mjs` the performance probes.
 
 ---
 
 ## 3. Browser / UI matrix
 
-Command: `node tools/browser-qa.mjs --url http://127.0.0.1:5299` (production build, Chrome headless). **43/43 checks passed, 0 console errors, 0 page errors.**
+Command: `node tools/browser-qa.mjs --url http://127.0.0.1:5299` (production build, Chrome headless; fresh page reloads with clean `localStorage` for onboarding). **61/61 checks passed, 0 console errors, 0 page errors.**
 
 | Check | Result |
 |---|---|
-| Boot `__FIRST_HEARTH__.ready`, `window.__game` exposed, canvas rendered, `contentErrors === 0` | PASS |
-| Welcome overlay (`[data-act=begin]`) shows and dismisses | PASS |
-| All 11 rail controls present (`[data-rail]`: build, codex, society, market, people, almanac, diplomacy, expeditions, wonders, objectives, notices) | PASS |
+| Boot `__FIRST_HEARTH__.ready`, `window.__game`, canvas, `contentErrors === 0` | PASS |
+| Welcome overlay (`[data-act=begin]`) shows/dismisses; first-run tour auto-starts and is skippable for static checks | PASS |
+| All 12 rail controls present (`[data-rail]`, incl. help/build/notices) | PASS |
 | 9 panels open via keyboard shortcuts (Discoveries / Society / Market / People / The Long Record / Diplomacy / Expeditions / Wonders / Objectives) | PASS |
-| Rail-click navigation: `[data-rail=codex]`, `[data-rail=market]`, `[data-rail=almanac]` | PASS |
-| Escape closes open panels (with any forced decision modal cleared first) | PASS |
+| Rail-click navigation (`[data-rail=codex|market|almanac]`) | PASS |
+| Escape closes panels | PASS |
 | 8 map overlays render (fertility, forest, water, pollution, beauty, deposits, roads, population) | PASS |
 | Minimap present and sized (296×252) | PASS |
-| Decision modal opens with 2–3 real choices, costs, missing-cost hints, cause hints | PASS |
-| Save → load restores exact tick; export → import JSON round-trip (~1.4 MB) | PASS |
-| localStorage save key written | PASS |
-| 1600×900: no horizontal overflow (scrollWidth 1600 = innerWidth) | PASS |
-| 1280×800: no horizontal/vertical overflow (1280×800) | PASS |
+| Decision modal opens with real choices, costs, missing-cost hints, cause hints | PASS |
+| Save → load restores exact tick; export → import JSON round-trip (~1.4 MB); localStorage key written | PASS |
+| 1600×900: no overflow (scrollWidth 1600 = innerWidth); 1280×800: none horizontal/vertical | PASS |
+| **Onboarding:** fresh storage → welcome → Begin → tour appears and **pauses** the world | PASS |
+| **Onboarding:** 8 distinct steps, counters 1/8→8/8, final CTA "Begin your watch" | PASS |
+| **Onboarding:** finishing persists (`fh-tour-v1=done`); no replay on reload; Skip persists | PASS |
+| **Onboarding:** Help → "Replay the tour" re-opens the tour (paused) | PASS |
+| **Onboarding:** First Steps checklist docked (7 steps) and updates on build (Gather food → done) | PASS |
+| **Onboarding:** decision modal always offers "Let it pass"; clicking it resolves pending → 0 and records `__none` | PASS |
+| Onboarding at 1280×800: tour card fits and is visible | PASS |
 | Console/page errors | **0** |
 
-Screenshots (all in `shots/`): `qa-map-1600x900.png`, `qa-map-1280x800.png`, `qa-panel-<id>-1600x900.png` (9), `qa-panel-{almanac,market}-1280x800.png`, `qa-rail-{codex,market,almanac}-1600x900.png`, `qa-overlay-{fertility,deposits}-1600x900.png`, `qa-decision-modal-1600x900.png`, `qa-4x-100pop-1600x900.png`, `qa-minimap-1600x900.png`, **`final-hero.png`** (developed valley, 1600×900). Machine-readable report: `shots/qa-browser-report.json`.
+Screenshots (all in `shots/`): map 1600/1280, 9 panel shots + 1280 panel shots, rail shots, overlays, minimap, decision modal, 4×/100+ pop, **`final-hero.png`**, and onboarding: `qa-onboarding-welcome-1600x900.png`, `qa-tour-step1-1600x900.png`, `qa-tour-step4-build-1600x900.png`, `qa-tour-step6-codex-1600x900.png`, `qa-tour-step8-decisions-1600x900.png`, `qa-tour-replay-1600x900.png`, `qa-tour-1280x800.png`, `qa-first-steps-1600x900.png`, `qa-first-steps-updated-1600x900.png`, `qa-first-steps-1280x800.png`, `qa-decision-let-it-pass-1600x900.png`. Machine-readable: `shots/qa-browser-report.json` (includes `knownIssues`).
 
 ---
 
 ## 4. Performance
 
+### 4.1 Frame rate — `profile-fps.mjs` (160–179 population, speed 4, 10 s window, dev server)
+
+| Setting | FPS | render p95 | render max | long tasks >50 ms | tick avg/p95 |
+|---|---|---|---|---|---|
+| DPR1, no panels | **60** | 2.6 ms | 45.7 ms | 1 (initial/warmup) | 8.5 / 29 ms* |
+| DPR1, Codex open | **59.7** | 1.8 ms | 49.5 ms | 1 | — |
+| DPR2 (Retina sim), no panels | **60** | 12.1 ms | 43.8 ms | 1 | — |
+| DPR2, Codex open | **59.8** | 6.5 ms | 43.0 ms | 1 | — |
+| DPR2, Market open | **60** | 13.3 ms | 43.0 ms | 1 | — |
+| DPR2, Society open | **60** | 12.0 ms | 42.7 ms | 1 | — |
+
+\* first run's tick average includes the one-off setup tick; steady state ≈1.1–3.2 ms/tick. All runs pass the assertion set: fps ≥ 50, render p95 < 25 ms, ≤2 long tasks >50 ms.
+
+### 4.2 Render phases — `profile-render.mjs`
+
+| Metric | DPR1 | DPR2 |
+|---|---|---|
+| bakes / chunks / evictions (8 s) | 64 / 64 / **0** | **2 520 / 22 / 2 498** |
+| `terrain.bake` avg (max) | 0.39 ms (0.9) | 0.49 ms (4.1) |
+| `terrain.draw` avg (max) | **0.49 ms** (16.1) | **9.14 ms** (18.8) |
+| draw calls (drawChunk + flatChunk) | ~26 880 | ~23 520 |
+| FPS | 60 | 60 |
+
+The requested fog/palette fix is verified at DPR1 (no per-frame fog blur, near-zero bake cost). **New finding:** at DPR2 the chunk budget does not scale with device pixel ratio — chunks are evicted and re-baked continuously (~6 bakes/frame), making `terrain.draw` ~18× more expensive than DPR1. FPS survives in the harness but this is wasted CPU/battery and headroom risk on heavy scenes; scale the chunk budget by DPR (renderer owner).
+
+### 4.3 Autosave hitch — `profile-autosave.mjs` (pop 173, 25 buildings, speed 4, 4 s window)
+
+| Metric | DPR1 | DPR2 |
+|---|---|---|
+| `serializeState` only | **27.7 ms** (1.50 MB JSON) | **23.4 ms** |
+| `save()` (serialize + localStorage) | **28.3 ms** | **29.4 ms** |
+| localStorage `setItem` | 6.0 ms | 8.4 ms |
+| tick max during window | **36.3 ms** (avg 2.8) | **37.6 ms** (avg 3.2) |
+| long tasks at the 30-day boundary | **80 ms** | **54 ms + 50 ms** |
+
+**Confirmed >30 ms hitch.** Autosave runs synchronously inside the tick at each 30-day boundary; it produces a 30–37 ms tick and 50–80 ms long task, at DPR1 and DPR2, and the same 23–28 ms serialization happens on every manual save. Recommendation (Lead): defer/schedule autosave off-frame (idle callback or after-render, skip a render if necessary).
+
+### 4.4 Browser matrix performance
+
 | Measurement | Result |
 |---|---|
-| Headless tick throughput | **2.0–2.4 ms/day** (~420–580 days/s) at mid-game, 400-day run ≈ 0.7–1.0 s |
-| Browser FPS at 4× speed, **140 population** (`window.__game`, cohorts injected + 60 headless ticks) | **60 fps** (rAF-capped), `msPerTick` **2.01 ms** |
-| Browser heap growth over 2000 ticks | **+36–38 MB** (notifications capped at 180; no runaway) |
-| Save size | ~1.40 MB JSON for a mid-game state; export/import round-trip exact |
-| 1280×800 and 1600×900 layout | no overflow/clipping; decision modal centred and fully visible at both sizes |
+| Headless tick throughput | 1.8–2.2 ms/day (~450–580 days/s); 400-day run ≈ 0.7–1.0 s |
+| Browser FPS at 4× speed, 144 population | **60 fps**, `msPerTick` **1.94 ms** |
+| Browser heap growth over 2000 ticks | **+43.6 MB** (notifications capped at 180; no runaway) |
+| Save size | ~1.40 MB JSON; export/import round-trip exact |
+| Layout | no overflow/clipping at 1600×900 or 1280×800; tour card, decision modal and panels fit at both sizes |
 
 ---
 
-## 5. Balance matrix (5 seeds × 400 days, autoplay = competent-player proxy, `balanced`)
+## 5. Balance matrix (5 seeds × 400 days, autoplay proxy, `balanced` — re-run after round-2 fixes)
 
 | seed | era1 | era2 | pop10 | pop100 | pop200 | pop400 | final pop | peak | foodDays min | foodDays avg | waterDays avg | starving days | deaths | events | ms/day |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| demo | 76 | 135 | 76 | 22 | 28 | 41 | 41 | 41 | 0.0 | 7.7 | 3.0 | 93 | 0 | 25 | 2.10 |
-| stone | 73 | 271 | 73 | 20 | 24 | 39 | 39 | 39 | 4.4 | 12.0 | 3.2 | 0 | 0 | 25 | 1.93 |
-| river | 76 | 115 | 76 | 19 | 43 | 56 | 56 | 56 | 0.0 | 8.6 | 2.5 | 12 | 0 | 32 | 2.17 |
-| harth | 79 | 124 | 79 | 18 | 35 | 65 | 65 | 65 | 0.0 | 8.5 | 2.7 | 15 | 0 | 27 | 2.41 |
-| longrun-seed | 70 | 370 | 70 | 17 | 23 | 30 | 30 | 30 | 4.3 | 15.1 | 3.7 | 0 | 0 | 19 | 1.65 |
+| demo | 73 | 152 | 73 | 19 | 26 | 76 | 76 | 76 | 4.1 | 10.6 | 3.4 | 0 | 0 | 13 | 2.14 |
+| stone | 70 | 108 | 70 | 22 | 30 | 60 | 60 | 60 | 4.4 | 10.1 | 3.5 | 0 | 1 | 12 | 1.96 |
+| river | 73 | 355 | 73 | 17 | 22 | 33 | 33 | 33 | 4.3 | 12.6 | 4.3 | 0 | 0 | 12 | 1.87 |
+| harth | 79 | 367 | 79 | 17 | 19 | 33 | 33 | 33 | 3.0 | 16.3 | 4.5 | 0 | 0 | 17 | 1.78 |
+| longrun-seed | 70 | 283 | 70 | 15 | 20 | 45 | 45 | 45 | 4.1 | 12.2 | 4.3 | 0 | 0 | 16 | 2.21 |
 
-**Targets** (task spec): era1 ≈ day 40–80, era2 ≈ day 150–250, pop10 ≈ day 25–50, no starvation deaths, insight income >0/day by day 20.
+**Targets:** era1 ≈ day 40–80, era2 ≈ day 150–250, pop10 ≈ day 25–50, no starvation deaths, insight income >0/day by day 20.
 
-**Findings:**
-- **No extinction on any seed; 0 deaths in all five runs.** No NaN, no errors, no negative stock, no storage-cap violations.
-- **Era 1: on target on all seeds (day 70–79).** Era 2: 115, 124, 135 (early vs the 150–250 band) but 271 and 370 (late) — high variance.
-- **Pop-10 is consistently late (day 70–79 vs 25–50).** Growth is gated by spare beds + one worker per founder; the ladder now reaches lean-to→forager→woodcutter→well→stone→granary→farm, but the settlement takes ~10 weeks to double.
-- **Food pressure:** `foodDays` averages 7.7–15.1 but dips to 0 on 3/5 seeds; starving-days 0–93. No deaths, but the food base is thin at 40–65 population (many huts vs 1 farm / several foragers). The autoplay now scales food buildings with population (1 food building per ~10 people) which removed a real extinction observed at day 386 on `longrun-seed` (pop 86 → 0 in one week with only 1 farm); post-fix that seed ends at pop 30, 0 deaths.
-- **Water pressure:** `waterDays` avg 2.5–3.7 (min 0); cistern buffers cap well output (~9.5 water at pop 1); wells are the main service and pressure grows late-game. No thirst deaths observed, but there is no safety margin.
-- **Insight/events:** first tech day 1 on every seed, 19–32 events per 400 days (~1 per 13–21 days), insight income sufficient for 36–49 techs by day 400. Event cadence is healthy and no repeated-event storms in the final runs.
-- **Difficulties (earlier 15-run matrix):** gentle/harsh shift era timings (era1 67–94, era2 112–238) without extinctions; harsh shows higher starving-days (0–25) and lower peak population — consistent with the intended difficulty curve.
+**Findings (round 2):**
+- **No extinction; 0 starvation days on all 5 seeds**; foodDays never hit 0 (min 3.0–4.4 vs 0.0 on 3/5 seeds before) and waterDays avg rose to 3.4–4.5 — the food/water pressure issues from round 1 are substantially improved.
+- **Era 1 on target on all seeds (day 70–79).** Era 2: 108, 152, 283, 355, 367 — still high variance; 3/5 late. The round-2 decision-cadence change lowered event counts from 19–32 to **12–17 per 400 days**, which likely contributes to slower late-era progression (fewer decision bonuses). Balance note, not a regression in stability.
+- **Pop-10 still late (day 70–79 vs 25–50)** — growth gated by beds + one worker per founder; unchanged by round-2 fixes.
+- **Deaths 0/5 seeds** (stone: 1 death over 400 days), events 12–17, 1.8–2.2 ms/day.
+- Difficulty/timer preamble unchanged: gentle/harsh shift era timings without extinctions.
 
 ---
 
 ## 6. Bugs & issues
 
-### Fixed during the QA cycle (verified by regression tests)
+### Fixed & verified in round 2 (Lead-reported root causes)
 
-| Severity | Issue | Evidence → fix | Status |
+| Severity | Issue | Verification |
+|---|---|---|
+| HIGH | **Renderer lag / ~1 FPS**: fog-of-war rebuilt a ~758 k-px blurred canvas (~392 ms) on every explored-tile change; palette triggered a full terrain rebake on every 3 °C/weather change | `profile-render` DPR1: 0 evictions after warmup, `terrain.bake` avg 0.39 ms, `terrain.draw` avg 0.49 ms; `profile-fps`: 60 fps at 4× with 160+ pop, render p95 1.8–2.6 ms, ≤1 long task/10 s. Target met at DPR1 (residual DPR2 chunk thrash reported below) |
+| HIGH | **Decision overload/lock**: decisions every ~10 game days, up to 3 stacked modals, and all-choices-unaffordable decisions were unresolvable | Era-based gaps (45/38/32/28/24/22/20 d), max 1 pending, chained/scheduled deferral fixed after QA found a `!telegraphed` bypass, `__none` "Let it pass" on every modal. `tests/decisions.test.ts` 6/6; browser: 4 decisions/300 d, gaps ≥20, no soft-lock |
+| MED | **No onboarding**: no guide or checklist for new players | 8-step spotlight tour (pauses world, skippable, persists, Help-replay) + First Steps checklist (7 steps, live completion). Browser onboarding suite 18/18 checks pass; screenshots captured at 1600×900 and 1280×800 |
+
+### Fixed earlier in the QA cycle (still covered by regression tests)
+
+| Severity | Issue | Status |
+|---|---|---|
+| HIGH | Starting stock destroyed on day 1 by storage overflow (55 > 40 cap) | FIXED — cap 180, overflow is a slow bleed (≤15 %/day) |
+| HIGH | `autoTrade` sold starting stone/wood with no market built | FIXED — `hasMarket()` guard |
+| HIGH | Research auto-completed techs without player action/flag | FIXED — gated behind `flags.auto_research === 1` |
+| MED | Well water service effectively worker-scaled / no buffer | FIXED — ~8/day service with cistern buffer; regression test |
+| MED | Save→load→continue diverged (derived settlement fields rounding) | FIXED — determinism suite proves byte-identical continuation |
+| MED | Fibre bootstrap deadlock (only via forager recipe switch) | MITIGATED in autoplay; content UX still fragile (recommend berries recipe yields a little fibre) |
+
+### Genuinely open (round 2)
+
+| Severity | Issue | Owner | Repro / notes |
 |---|---|---|---|
-| HIGH | Starting stock destroyed on day 1: 55 units > 40 storage cap lost ~15 units (wood 24→9.6) | `simrun` day-1 trace | FIXED — cap 60→**180**, overflow is now a **12 %-of-excess-per-day bleed** (`logistics.enforceStorageCap`); `regression: starting economy` passes |
-| HIGH | `autoTrade` sold starting stone/wood before any market existed | day-1 system-delta trace | FIXED — `hasMarket()` guard in `economy.ts`; regression test passes |
-| HIGH | Research auto-completed techs with no player action / no flag | `techs=6` at day 20 idle | FIXED — gated behind `flags.auto_research === 1`; regression test passes; autoplay sets the flag |
-| MED | Well water service effectively worker-scaled / low buffer; water store stalled at ~2 days | `waterDays` stuck near 0 with a completed well | FIXED — service reworked (well now ~8/day, cistern buffer capped `max(40, pop*2+20)`); regression test asserts water added ≥ 60 % of service and `waterDays > 3` |
-| MED | Save→load→continue diverged from a continuous run (RNG/world drift) because `rebuildCache` recomputed `settlement.storageUsed/foodDays/waterDays` at full precision while systems round them | `tests/determinism` divergence at char 60, RNG tuple mismatch | FIXED — determinism suite now proves **byte-identical 60+60 vs 120-day continuation** |
-| MED | Fibre bootstrap deadlock: only early fibre source is switching a foragers' camp to `gather_fiber`; default recipe is berries, so huts/granaries/2nd forager could soft-lock a player | autoplay needed explicit recipe management to escape | MITIGATED in autoplay (recipe switching); **content UX still fragile** — recommend berries recipe yielding a little fibre or `hut` fibre cost 1 |
-
-### Genuinely open issues
-
-| Severity | Issue | Owner | Notes / repro |
-|---|---|---|---|
-| MED | **Population ramp too slow**: pop-10 day 70–79 vs target 25–50 on all seeds | Lead / population tuning | `node tools/balance.mjs --days 400 --seeds demo,stone,river,harth,longrun-seed`; growth gated by beds + 1-founder workforce |
-| MED | **Late-game water pressure**: avg waterDays 2.5–3.7, min 0; no buffer against a dry spell | sim-industry / content | 400-day runs; consider larger cistern buffer or aqueduct priority from era 2 |
-| LOW | **Era-2 pacing variance** (day 115–370 vs 150–250) | Lead / balance | same matrix; 2/5 seeds late |
-| LOW | **Thin food base / starvation windows**: starving-days 0–93, foodDays hits 0 on 3/5 seeds though nobody died in the final matrix | balance / population | tracked by `longrun` + matrix; autoplay food-scaling added, sim-side review of consumption vs yields still worthwhile |
-| LOW | `foodDays`/`waterDays` become absurd values (e.g. 10422) when population hits 0 (`foodDaysOf` divides by population) | Lead (`core.ts`) | cosmetic/metrics only; reproduced in an early extinction run |
+| MED | **Autosave (and manual save) hitch**: serializeState 23.4–27.7 ms + setItem 6.0–8.4 ms ⇒ 30–37 ms tick, **50–80 ms long task every 30 game days** | Lead (app scheduling) | `node tools/profile-autosave.mjs 1 4 4000` (and `2 4 4000`); recommend idle/after-frame scheduling |
+| MED | **DPR2 terrain chunk cache thrash**: 2 498 evictions / 2 520 bakes per ~8 s, 22 chunks cached, `terrain.draw` avg **9.14 ms** (18× DPR1) | renderer owner | `node tools/profile-render.mjs 2` vs `1`; scale chunk budget by DPR |
+| LOW | **Tour card overlaps the First Steps dock**: 7 146 px² over 7 rows at 1600×900; checklist text peeks out below/around the card and is clipped at 1280×800, looking broken | ui | `shots/qa-tour-step1-1600x900.png`, `shots/qa-tour-1280x800.png`; hide the dock or reposition the card during the tour (recorded in `qa-browser-report.json.knownIssues`) |
+| LOW | **Population ramp too slow**: pop-10 day 70–79 vs target 25–50 | Lead / population tuning | `tools/balance.mjs`; growth gated by beds + 1-founder workforce |
+| LOW | **Era-2 pacing variance**: day 108–367 vs target 150–250 (3/5 late); event count fell to 12–17/400 d after the decision-cadence fix | Lead / balance | same matrix |
+| LOW | `foodDays` / `waterDays` show absurd values (e.g. 10 422) when population hits 0 (`foodDaysOf` divides by population) | Lead (`core.ts`) | cosmetic/metrics only |
 | LOW | Rail labels truncated at 1600×900 (`EXPEDIT…`, `OBJECTI…`) | ui | `qa-map-1600x900.png`; cosmetic |
-| INFO | Forced decision modals are not dismissible (no close) — by design; keyboard/panel interaction is blocked while one is open (automation must resolve it first) | ui design | `qa-decision-modal-1600x900.png`; not a bug, but worth a hint in help |
+| INFO | Forced decision modals are not dismissible until answered or "Let it pass" (by design); automated UI must resolve them first | ui design | `qa-decision-modal-1600x900.png` |
 
-No exploits found: no negative stock, no over-cap stock, no free housing/upkeep loops, no infinite loops in 400-day runs, market trades conserve stock/treasury, all era-0 buildings are placeable on a fresh map, no dead mechanics observed in gathering/conversion recipes.
+No exploits found: no negative stock, no over-cap stock, no free housing/upkeep loops, no infinite loops in 400-day runs, market trades conserve stock/treasury, all era-0 buildings placeable on a fresh map, no dead mechanics in gathering/conversion recipes.
 
 ---
 
 ## 7. Accessibility & UX notes
 
-- Welcome overlay uses `role="dialog" aria-modal="true"`; rail buttons expose `aria-label`, `aria-pressed`, tooltips and keyboard shortcuts (`T/S/M/P/C/D/E/W/O`, `B`, `Esc`, `?`); panels receive focus and Escape closes them; decision modal is keyboard-clickable and non-dismissible by design.
-- Settings expose reduced-motion and colourblind options in `DEFAULT_SETTINGS`; effects/particles are render-only.
-- Dark-on-dark contrast in dense tables (market rows, 1280×800) is acceptable but the lowest-contrast text is small; consider a contrast pass on `.fh-faint` in tables.
-- Map is a diorama with fog: at dusk/atmosphere the map can read quite dark behind modals; panels are readable but the hero shot benefits from a paused/clear state.
-- Rail label truncation (above) and missing visible focus rings on some custom buttons are the main polish items.
+- Welcome and tour use `role="dialog"`, `aria-modal="true"`, labelled cards; tour is fully keyboard-controllable (←/→ steps, Enter next, Esc skip, dots as `role="tab"` with labels), pauses the world, and persists across reloads; Help (?) and Objectives both offer "Replay the tour".
+- First Steps checklist is a labelled `aside` with `role="listitem"` rows, done/current/locked states, clickable steps and collapse/dismiss controls; it updates live from game state (verified by building a Forager's Camp in the browser).
+- Rail buttons expose `aria-label`, `aria-pressed`, tooltips and shortcuts (`T/S/M/P/C/D/E/W/O`, `B`, `Esc`, `?`); Escape closes panels. Reduced-motion and colourblind options exist in settings.
+- Dark-on-dark contrast in dense tables (market rows, 1280×800) is acceptable but the lowest-contrast small text could get a contrast pass.
+- Polish items: tour-card vs First Steps overlap (above), rail label truncation, some custom buttons lack a visible focus ring.
 
 ## 8. Known limitations of this QA pass
 
-- Autoplay is a deterministic approximation of a competent player (opening ladder, food/housing scaling, recipe management, decisions/doctrines, roads); it is not a human, so absolute balance numbers are indicative, not exact.
-- Browser checks ran against an isolated production preview (`dist/` on :5299) to avoid HMR races while teammates edited `src/**`; the live dev server on :5280 was smoke-tested separately (same app, 200 OK, zero console errors).
-- Renderer visual quality (art polish, animation feel, fog/aesthetic) is only sanity-checked via screenshots, not judged by QA.
-- The 15-run difficulty matrix was executed on an earlier autoplay revision; the authoritative final numbers are the 5-seed `balanced` table in §5.
+- Autoplay is a deterministic approximation of a competent player; absolute balance numbers are indicative, not exact. It resolves decisions via "Let it pass", so decision-driven bonuses are under-represented in balance runs.
+- Browser/perf matrices were run against an isolated production build (`dist/` on :5299) to avoid HMR races. Profiling on the live dev server while `src/ui` was being edited produced transient `PAGEERROR` entries (HMR partial-module races); the stable-build matrix reports **0 console errors and 0 page errors**.
+- DPR2 was simulated via Chrome `deviceScaleFactor`; real Retina GPU behaviour may differ slightly, though the CPU-side chunk-thrash finding is deterministic and DPR-driven.
+- Renderer/UI aesthetics (art polish, animation feel, fog look) are only sanity-checked through screenshots, not judged by QA.
+- The autosave probe isolates save cost with `decisionPause=false`; real play also pauses on decisions, which can only make the observed hitch shorter, not longer.

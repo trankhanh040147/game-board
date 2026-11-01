@@ -85,7 +85,7 @@ export const LIMITS = {
   influenceStart: 6,
   trainingRate: 0.35,
   jobSwitchPenalty: 0.55,
-  autosaveIntervalDays: 30,
+  autosaveIntervalDays: 45,
   tutorialPopGoal: 12,
 };
 

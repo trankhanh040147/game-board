@@ -49,6 +49,8 @@ export interface Services {
   openNewGame(): void;
   openNotifications(): void;
   focusBuild(category: string | null): void;
+  startTour(force?: boolean): void;
+  showFirstSteps(): void;
   setExpeditionTarget(kind: ExpeditionKind | null): void;
   getExpeditionTarget(): ExpeditionKind | null;
   openDecisionModal(): void;

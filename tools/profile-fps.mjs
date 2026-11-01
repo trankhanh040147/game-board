@@ -1,6 +1,8 @@
 import puppeteer from 'puppeteer-core';
 const dpr = Number(process.argv[2] ?? 2);
 const speed = Number(process.argv[3] ?? 2);
+const durationMs = Number(process.argv[4] ?? 10000);
+const panels = (process.argv[5] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 const width = 1600, height = 900;
 const browser = await puppeteer.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--no-sandbox','--enable-unsafe-swiftshader','--use-angle=metal'] });
 const page = await browser.newPage();
@@ -26,13 +28,18 @@ const setup = await page.evaluate(() => {
   const types=['lean_to','hut','hut','hut','foragers_camp','woodcutter_camp','stone_pit','well','granary','farm','farm','sawmill','smithy','market','carpenter_shop','mill','bakery','temple','school','clinic','well','hut','hut','farm'];
   let n=0;
   for (const t of types) { for (let r=0;r<10;r++){ const x=cap.x+((n%7)-3)+(r%3), y=cap.y+Math.floor(n/7)-2+Math.floor(r/3); if(g.placeBuilding(t,x,y).ok) break; } n++; }
-  for (let k=0;k<20;k++){ g.advanceDays(10); for(let i=0;i<8;i++){const p=s.events.pending; if(!p.length)break; const ch=p[0].choices; g.resolveDecision(p[0].id,ch[ch.length-1]?.id??'');} }
-  for (let i=0;i<40;i++){ const p=s.events.pending; if(!p.length) break; const ch=p[0].choices; const r=g.resolveDecision(p[0].id, ch[ch.length-1]?.id ?? ''); if(!r.ok) { window.__stuck = { title:p[0].title, why:r.message, choices: p[0].choices.map(c=>({id:c.id,cost:!!c.cost,requires:!!c.requires})) }; break; } }
+  for (let k=0;k<20;k++){ g.advanceDays(10); for(let i=0;i<8;i++){const p=s.events.pending; if(!p.length)break; const ch=p[0].choices; const pick=ch.find(c=>!c.cost||Object.keys(c.cost).length===0)??ch[0]; const r=g.resolveDecision(p[0].id,pick?.id??'__none'); if(!r.ok) g.resolveDecision(p[0].id,'__none');} }
+  for (let i=0;i<40;i++){ const p=s.events.pending; if(!p.length) break; const ch=p[0].choices; const pick=ch.find(c=>!c.cost||Object.keys(c.cost).length===0)??ch[0]; const r=g.resolveDecision(p[0].id, pick?.id ?? '__none'); if(!r.ok) { const r2=g.resolveDecision(p[0].id,'__none'); if(!r2.ok) { window.__stuck = { title:p[0].title, why:r2.message }; break; } } }
+  // Mid-game population: inject LOD cohorts (the sim folds large populations
+  // into cohorts), then let systems settle so we profile >=100 population.
+  s.cohorts.push({ id: 900000, settlementId: cap.id, profession: 'laborer', ageBand: 'adult', count: 140, health: 82, morale: 70, education: 30 });
+  for (let i = 0; i < 6; i++) g.advanceDays(1);
+  const totalPop = s.citizens.filter((c) => c.alive).length + s.cohorts.reduce((a, co) => a + co.count, 0);
   window.__pendingBeforeClear = s.events.pending.length;
   s.events.pending = [];
   s.events.warnings = [];
   document.querySelectorAll('.fh-welcome,.fh-modal-backdrop,.fh-modal,.fh-screen').forEach(e=>{ if(e instanceof HTMLElement) e.style.display='none'; });
-  return { tick:s.tick, pop:s.settlements.reduce((a,x)=>a+x.population,0), buildings:s.buildings.length, pending:s.events.pending.length };
+  return { tick:s.tick, pop: totalPop, settlementPop: s.settlements.reduce((a,x)=>a+x.population,0), buildings:s.buildings.length, pending:s.events.pending.length };
 });
 // instrument
 await page.evaluate((sp) => {
@@ -51,7 +58,13 @@ await page.evaluate((sp) => {
   window.__longs = [];
   try { new PerformanceObserver(list => { for (const e of list.getEntries()) window.__longs.push({start:e.startTime, dur:e.duration}); }).observe({entryTypes:['longtask']}); } catch {}
 }, speed);
-await new Promise(r => setTimeout(r, 8000));
+await page.evaluate((ps) => {
+  for (const id of ps) {
+    const btn = document.querySelector(`[data-rail="${id}"]`);
+    if (btn instanceof HTMLElement) btn.click();
+  }
+}, panels);
+await new Promise(r => setTimeout(r, durationMs));
 const result = await page.evaluate(() => {
   const p = window.__prof;
   const stat = (arr) => { const a=[...arr].sort((x,y)=>x-y); const sum=a.reduce((s,v)=>s+v,0); return { n:a.length, avg: +(sum/Math.max(1,a.length)).toFixed(2), p50:+a[Math.floor(a.length*0.5)]?.toFixed(2), p95:+a[Math.floor(a.length*0.95)]?.toFixed(2), max:+a[a.length-1]?.toFixed(2) }; };
@@ -64,7 +77,15 @@ const result = await page.evaluate(() => {
     longTasks: window.__longs.slice(-10), longCount: window.__longs.length,
     debug: g.renderer?.debugStats ?? null };
 });
-console.log(`DPR=${dpr} SPEED=${speed} setupPopulation=${setup.pop} buildings=${setup.buildings}`);
+const longs = result.longTasks ?? [];
+const warm = result.longCount > longs.length ? result.longCount - longs.length : 0;
+const longOver50 = longs.filter((l) => l.dur > 50).length;
+const fpsOk = result.fps >= 50;
+const renderOk = (result.render?.p95 ?? 0) < 25;
+const longOk = longOver50 <= 2;
+console.log(`DPR=${dpr} SPEED=${speed} DURATION_MS=${durationMs} PANELS=${panels.join('+') || 'none'} setupPopulation=${setup.pop} buildings=${setup.buildings}`);
+console.log(`ASSERT fps>=50: ${fpsOk} (${result.fps}); render p95<25ms: ${renderOk} (${result.render?.p95}ms, max ${result.render?.max}ms); longtasks>50ms<=2: ${longOk} (${longOver50}/${result.longCount}, warmupIgnored=${warm}); pending=${result.pending}`);
+console.log(`TICK ms avg=${result.tick?.avg} p95=${result.tick?.p95} | refresh ms avg=${result.refresh?.avg} p95=${result.refresh?.p95}`);
 console.log(JSON.stringify(result, null, 2));
 if (errors.length) console.log('errors', errors.slice(0,5));
 await browser.close();

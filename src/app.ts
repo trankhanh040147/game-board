@@ -50,6 +50,7 @@ export class GameApp {
   private raf = 0;
   private lastUiRefresh = 0;
   private lastAutosaveDay = -1;
+  private autosavePending = false;
   private decisionPause = false;
   private started = false;
   private readonly canvas: HTMLCanvasElement;
@@ -153,6 +154,27 @@ export class GameApp {
     this.postTick();
   }
 
+  /**
+   * Autosaves are ~1.5 MB of JSON to serialise. Doing that inside the tick
+   * blocks the next animation frame (~28 ms), which players feel as a hitch.
+   * Defer it to idle time instead.
+   */
+  private scheduleAutosave(): void {
+    if (this.autosavePending) return;
+    this.autosavePending = true;
+    const run = (): void => {
+      this.autosavePending = false;
+      try {
+        saveToStorage(this.state, AUTOSAVE_KEY);
+      } catch {
+        /* storage full / unavailable */
+      }
+    };
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void }).requestIdleCallback;
+    if (ric) ric(run, { timeout: 4000 });
+    else window.setTimeout(run, 120);
+  }
+
   private postTick(): void {
     const s = this.state;
     // Pause for decisions.
@@ -162,10 +184,10 @@ export class GameApp {
       this.emit('decision');
       this.refreshUI();
     }
-    // Autosave.
+    // Autosave: serialise off the critical path (see scheduleAutosave).
     if (s.settings.autosave && s.tick - this.lastAutosaveDay >= LIMITS.autosaveIntervalDays) {
       this.lastAutosaveDay = s.tick;
-      saveToStorage(s, AUTOSAVE_KEY);
+      this.scheduleAutosave();
     }
     // A settler expedition has reached its destination: found the new settlement.
     const readyX = s.flags['exploration.settleReadyX'];

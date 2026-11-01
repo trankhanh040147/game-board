@@ -234,6 +234,7 @@ export class DecisionModal {
           <span class="fh-decision-meta">
             <span class="fh-eyebrow">${esc(pretty(decision.category))} · ${'◆'.repeat(decision.severity)}${'◇'.repeat(3 - decision.severity)}</span>
             <span class="fh-decision-when">${esc(dateLabel(decision.createdTick))}${total > 1 ? ` · ${total} decisions waiting` : ''}</span>
+            <span class="fh-decision-wait">${icon('hourglass', 'fh-icon is-tiny')} The world waits for your word</span>
           </span>
         </div>
         ${
@@ -523,7 +524,10 @@ export class WelcomeOverlay {
   private open = false;
   private wasPaused = false;
 
-  constructor(private readonly svc: Services) {
+  constructor(
+    private readonly svc: Services,
+    private readonly opts: { onBegin?: () => void } = {},
+  ) {
     this.root = document.createElement('div');
     this.root.className = 'fh-welcome';
     this.root.hidden = true;
@@ -553,6 +557,7 @@ export class WelcomeOverlay {
             <p>Insight buys discoveries. Discoveries open new work. The valley will test you — drought, blight, wolves and neighbours. Read the warnings; answer the decisions.</p>
           </article>
         </div>
+        <p class="fh-welcome-tournote">${icon('compass', 'fh-icon is-tiny')} A short tour will show you the ropes — eight steps, skippable at any time.</p>
         <div class="fh-welcome-keys">
           <span><kbd>Space</kbd> pause</span><span><kbd>1</kbd>–<kbd>4</kbd> speed</span><span><kbd>B</kbd> build</span><span><kbd>T</kbd> codex</span><span><kbd>Esc</kbd> cancel</span><span><kbd>?</kbd> help</span>
         </div>
@@ -604,6 +609,7 @@ export class WelcomeOverlay {
     }, 400);
     if (!this.wasPaused) this.svc.app.resume();
     this.svc.refreshSoon();
+    this.opts.onBegin?.();
   }
 
   get isOpen(): boolean {
@@ -788,6 +794,10 @@ export function openSettingsModal(svc: Services, host: ModalHost, initialTab: Se
             <p class="fh-help-copy">Feed your people. Build shelter, water and storage. Earn insight and discover. Answer decisions with care — the valley remembers. When a warning appears, read its cause before it becomes a crisis.</p>
           </section>
         </div>
+        <div class="fh-help-actions">
+          <button type="button" class="fh-btn is-quiet clickable" data-act="replay-tour">${icon('compass', 'fh-icon is-tiny')} Replay the tour</button>
+          <button type="button" class="fh-btn is-quiet clickable" data-act="show-firststeps">${icon('objective', 'fh-icon is-tiny')} Show first steps</button>
+        </div>
         <div class="fh-help-foot">Every number in this interface has a tooltip. Hover anything you do not understand.</div>
       </div>`;
   };
@@ -870,6 +880,15 @@ export function openSettingsModal(svc: Services, host: ModalHost, initialTab: Se
             tab = 'help';
             modal.querySelectorAll('[data-settings-tab]').forEach((b) => b.classList.toggle('is-active', (b as HTMLElement).dataset.settingsTab === 'help'));
             rerender();
+            break;
+          case 'replay-tour':
+            host.close('settings');
+            svc.startTour(true);
+            break;
+          case 'show-firststeps':
+            host.close('settings');
+            svc.showFirstSteps();
+            svc.toast('First steps restored.', 'info', 'objective');
             break;
           default:
             break;

@@ -145,6 +145,30 @@ async function boot(page, label) {
     if (choice) choice.click();
   });
   await wait(300);
+  // The first-run tour auto-opens; panel/keyboard checks need it out of the way.
+  const tourSkipped = await page.evaluate(() => {
+    const btn = document.querySelector('.fh-tour-card [data-act="skip"], .fh-tour-card [data-act="next"]');
+    if (!btn || !document.querySelector('.fh-tour.is-visible')) return false;
+    const skip = document.querySelector('.fh-tour-card [data-act="skip"]');
+    (skip ?? btn).click();
+    return true;
+  });
+  if (tourSkipped) {
+    check(`${label}: first-run tour skipped for static checks`, true);
+    await wait(700);
+  }
+  await page.evaluate(() => {
+    const g = window.__game;
+    if (g) {
+      g.pause();
+      g.state.events.pending.length = 0;
+    }
+    for (const modal of Array.from(document.querySelectorAll('.fh-modal-backdrop'))) {
+      const btn = modal.querySelector('[data-choice]:not(.is-disabled), [data-modal-close]');
+      if (btn instanceof HTMLElement) btn.click();
+    }
+  });
+  await wait(350);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +200,18 @@ const panels = [
   ['o', 'objectives'],
 ];
 for (const [key, id] of panels) {
+  await page.evaluate(() => {
+    const g = window.__game;
+    if (g) {
+      g.pause();
+      g.state.events.pending.length = 0;
+    }
+    for (const modal of Array.from(document.querySelectorAll('.fh-modal-backdrop'))) {
+      const btn = modal.querySelector('[data-choice]:not(.is-disabled), [data-modal-close]');
+      if (btn instanceof HTMLElement) btn.click();
+    }
+  });
+  await wait(200);
   await page.keyboard.press(key);
   await wait(750);
   const visible = await evalSafe(page, () => {
@@ -495,6 +531,235 @@ await evalSafe(page, async () => {
 }, undefined, 'hero');
 await wait(1200);
 await screenshot(page, 'final-hero');
+
+// ---------------------------------------------------------------------------
+// Onboarding: welcome -> 8-step tour (pause) -> skip/finish persistence ->
+// Help replay -> First Steps checklist -> decision modal "Let it pass".
+// ---------------------------------------------------------------------------
+const ob = await newPage(1600, 900);
+async function obGotoFresh() {
+  await ob.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await ob.waitForFunction('window.__FIRST_HEARTH__ && window.__FIRST_HEARTH__.ready === true', { timeout: 45000 });
+  await ob.evaluate(() => localStorage.clear());
+  await ob.reload({ waitUntil: 'domcontentloaded' });
+  await ob.waitForFunction('window.__FIRST_HEARTH__ && window.__FIRST_HEARTH__.ready === true', { timeout: 45000 });
+  await wait(1800);
+}
+const vis = (page, sel) =>
+  page.evaluate((s) => {
+    const el = document.querySelector(s);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return null;
+    return { w: Math.round(r.width), h: Math.round(r.height) };
+  }, sel);
+const tourState = (page) =>
+  page.evaluate(() => {
+    const root = document.querySelector('.fh-tour');
+    const card = document.querySelector('.fh-tour-card');
+    if (!root || !card || root.hidden) return null;
+    const r = card.getBoundingClientRect();
+    return {
+      visible: r.width > 100,
+      paused: window.__game?.paused === true,
+      step: card.querySelector('.fh-tour-counter')?.textContent?.trim() ?? '',
+      title: card.querySelector('.fh-tour-title, h3, h2')?.textContent?.trim() ?? '',
+      nextLabel: card.querySelector('[data-act="next"]')?.textContent?.trim() ?? '',
+      hasSkip: !!card.querySelector('[data-act="skip"]'),
+    };
+  });
+
+await obGotoFresh();
+const welcomeFresh = await vis(ob, '.fh-welcome');
+check('onboarding: fresh localStorage shows the welcome overlay', !!welcomeFresh, JSON.stringify(welcomeFresh));
+await screenshot(ob, 'qa-onboarding-welcome-1600x900');
+await ob.evaluate(() => document.querySelector('.fh-welcome [data-act="begin"]')?.click());
+await wait(1400);
+const t1 = await tourState(ob);
+check('onboarding: tour starts after Begin and pauses the world', !!t1 && t1.paused && t1.hasSkip, JSON.stringify(t1));
+check('onboarding: tour opens on step 1 / 8', !!t1 && /1\s*\/\s*8/.test(t1.step), t1?.step);
+await screenshot(ob, 'qa-tour-step1-1600x900');
+
+// Tour card vs First Steps dock: measure overlap (known LOW visual issue if > 0).
+const tourOverlap = await ob.evaluate(() => {
+  const card = document.querySelector('.fh-tour-card')?.getBoundingClientRect();
+  const rows = Array.from(document.querySelectorAll('.fh-firststeps [data-step]')).map((el) => el.getBoundingClientRect());
+  if (!card || !rows.length) return null;
+  const area = (a, b) =>
+    Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  let maxOverlap = 0;
+  for (const r of rows) maxOverlap = Math.max(maxOverlap, area(card, r));
+  const root = document.querySelector('.fh-firststeps')?.getBoundingClientRect();
+  return {
+    card: { x: Math.round(card.x), y: Math.round(card.y), w: Math.round(card.width), h: Math.round(card.height) },
+    dock: root ? { x: Math.round(root.x), y: Math.round(root.y), w: Math.round(root.width), h: Math.round(root.height) } : null,
+    rows: rows.length,
+    overlapPx2: Math.round(maxOverlap),
+  };
+});
+if (tourOverlap && tourOverlap.overlapPx2 > 0) {
+  report.knownIssues = report.knownIssues ?? [];
+  report.knownIssues.push(
+    `tour card overlaps the First Steps checklist (${tourOverlap.overlapPx2}px² over ${tourOverlap.rows} rows) — LOW visual; hide the dock or reposition the card during the tour`,
+  );
+}
+check('onboarding: tour card vs First Steps dock measured', !!tourOverlap, JSON.stringify(tourOverlap));
+
+const stepInfo = [];
+for (let i = 0; i < 8; i++) {
+  const st = await tourState(ob);
+  stepInfo.push(st);
+  if (i === 3) await screenshot(ob, 'qa-tour-step4-build-1600x900');
+  if (i === 5) await screenshot(ob, 'qa-tour-step6-codex-1600x900');
+  if (i === 7) await screenshot(ob, 'qa-tour-step8-decisions-1600x900');
+  if (i < 7) {
+    await ob.evaluate(() => document.querySelector('.fh-tour-card [data-act="next"]')?.click());
+    await wait(550);
+  }
+}
+const counters = stepInfo.map((st) => st?.step).filter(Boolean);
+const titles = stepInfo.map((st) => st?.title).filter(Boolean);
+check('onboarding: tour has 8 distinct steps', stepInfo.filter((st) => st?.visible).length === 8 && new Set(titles).size >= 7, `count=${stepInfo.length} counters=${counters.join(',')} titles=${titles.length}`);
+check('onboarding: final step reads 8 / 8 and begins the watch', /8\s*\/\s*8/.test(stepInfo[7]?.step ?? '') && /Begin your watch/i.test(stepInfo[7]?.nextLabel ?? ''), `${stepInfo[7]?.step} "${stepInfo[7]?.nextLabel}"`);
+await ob.evaluate(() => document.querySelector('.fh-tour-card [data-act="next"]')?.click());
+await wait(900);
+const tourDone = await ob.evaluate(() => ({ hidden: document.querySelector('.fh-tour')?.hidden ?? true, key: localStorage.getItem('fh-tour-v1') }));
+check('onboarding: finishing the tour persists (fh-tour-v1=done)', tourDone.hidden && tourDone.key === 'done', JSON.stringify(tourDone));
+
+// Reload: neither welcome nor tour should return for a returning player.
+await ob.reload({ waitUntil: 'domcontentloaded' });
+await ob.waitForFunction('window.__FIRST_HEARTH__ && window.__FIRST_HEARTH__.ready === true', { timeout: 45000 });
+await wait(2600);
+const afterReload = await ob.evaluate(() => ({ tourHidden: document.querySelector('.fh-tour')?.hidden ?? true, welcomeHidden: document.querySelector('.fh-welcome')?.hidden ?? true }));
+check('onboarding: finished tour does not replay on reload', afterReload.tourHidden && afterReload.welcomeHidden, JSON.stringify(afterReload));
+
+// Skip flow: clear only the tour key, reload, skip, assert persistence.
+await ob.evaluate(() => localStorage.removeItem('fh-tour-v1'));
+await ob.reload({ waitUntil: 'domcontentloaded' });
+await ob.waitForFunction('window.__FIRST_HEARTH__ && window.__FIRST_HEARTH__.ready === true', { timeout: 45000 });
+await wait(2200);
+const t2 = await tourState(ob);
+check('onboarding: tour restarts when its key is cleared', !!t2?.visible, JSON.stringify(t2));
+await ob.evaluate(() => document.querySelector('.fh-tour-card [data-act="skip"]')?.click());
+await wait(800);
+const skipped = await ob.evaluate(() => ({ hidden: document.querySelector('.fh-tour')?.hidden ?? true, key: localStorage.getItem('fh-tour-v1') }));
+check('onboarding: Skip the tour persists', skipped.hidden && skipped.key === 'done', JSON.stringify(skipped));
+
+// Help -> Replay the tour.
+await ob.evaluate(() => document.querySelector('[data-rail="help"]')?.click());
+await wait(700);
+const replayBtn = await ob.evaluate(() => {
+  const btn = document.querySelector('[data-act="replay-tour"]');
+  if (!btn) return null;
+  btn.scrollIntoView({ block: 'nearest' });
+  btn.click();
+  return true;
+});
+await wait(900);
+const t3 = await tourState(ob);
+check('onboarding: Help -> Replay the tour works', !!replayBtn && !!t3?.visible && t3.paused, JSON.stringify(t3));
+await screenshot(ob, 'qa-tour-replay-1600x900');
+await ob.evaluate(() => document.querySelector('.fh-tour-card [data-act="skip"]')?.click());
+await wait(600);
+
+// First Steps checklist: present, and updates when a step is completed.
+const fsBefore = await ob.evaluate(() => {
+  const root = document.querySelector('.fh-firststeps');
+  if (!root) return null;
+  const r = root.getBoundingClientRect();
+  const rows = root.querySelectorAll('[data-step]');
+  return { w: Math.round(r.width), rows: rows.length, gatherDone: root.querySelector('[data-step="gather"]')?.classList.contains('is-done') ?? null, hidden: root.hidden };
+});
+check('onboarding: First Steps checklist is docked and has steps', !!fsBefore && fsBefore.rows >= 7 && fsBefore.w > 80 && !fsBefore.hidden, JSON.stringify(fsBefore));
+await screenshot(ob, 'qa-first-steps-1600x900');
+const built = await ob.evaluate(() => {
+  const g = window.__game;
+  const s = g.state, cap = s.settlements[0];
+  for (let r = 1; r <= 9; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (g.canPlaceBuilding('foragers_camp', cap.x + dx, cap.y + dy)?.ok) {
+          const res = g.placeBuilding('foragers_camp', cap.x + dx, cap.y + dy);
+          if (res.ok) return true;
+        }
+      }
+    }
+  }
+  return false;
+});
+await wait(900);
+const fsAfter = await ob.evaluate(() => ({
+  gatherDone: document.querySelector('.fh-firststeps [data-step="gather"]')?.classList.contains('is-done') ?? null,
+  doneRows: document.querySelectorAll('.fh-firststeps [data-step].is-done').length,
+}));
+check('onboarding: First Steps updates as you build (Gather food done)', built && fsAfter.gatherDone === true, `built=${built} ${JSON.stringify(fsAfter)}`);
+await screenshot(ob, 'qa-first-steps-updated-1600x900');
+
+// Decision modal must always offer "Let it pass", even when nothing is affordable.
+const decisionCheck = await ob.evaluate(() => {
+  const g = window.__game;
+  g.pause(); // stop new decisions appearing while we probe the modal
+  g.state.events.pending.length = 0; // ensure the modal shows exactly our fabricated decision
+  const cap = g.state.settlements[0];
+  for (const res of Object.keys(cap.stock)) cap.stock[res] = 0;
+  const ev = Object.values(g.content.events).find((e) => e.choices && e.choices.length > 0 && e.choices.some((c) => c.cost && Object.keys(c.cost).length));
+  const choices = ev.choices.map((c) => ({ ...c, cost: { meat: 9999 } }));
+  const pending = {
+    id: g.state.events.nextDecisionId++,
+    eventId: ev.id,
+    title: ev.title,
+    text: ev.text,
+    choices,
+    createdTick: g.state.tick,
+    severity: ev.severity ?? 2,
+    category: ev.category ?? 'society',
+    icon: ev.icon ?? 'bell',
+    causes: ev.causeHints ?? [],
+  };
+  g.state.events.pending.push(pending);
+  g.emit('decision');
+  g.refreshUI();
+  return { event: ev.id, id: pending.id };
+});
+await wait(900);
+const passBtn = await ob.evaluate(() => {
+  const modal = document.querySelector('.fh-modal-decision');
+  const btn = modal?.querySelector('[data-choice="__none"]');
+  if (!btn) return null;
+  const r = btn.getBoundingClientRect();
+  return { text: btn.textContent?.trim() ?? '', w: Math.round(r.width), disabled: btn.classList.contains('is-disabled') };
+});
+check('onboarding: decision modal always offers "Let it pass"', !!passBtn && /let it pass/i.test(passBtn.text) && passBtn.w > 40, JSON.stringify(passBtn));
+await screenshot(ob, 'qa-decision-let-it-pass-1600x900');
+const passed = await ob.evaluate(() => {
+  document.querySelector('.fh-modal-decision [data-choice="__none"]')?.click();
+  return true;
+});
+await wait(700);
+const afterPass = await ob.evaluate(() => ({
+  pending: window.__game.state.events.pending.length,
+  history: window.__game.state.events.history.slice(-1)[0] ?? null,
+  modalGone: !document.querySelector('.fh-modal-decision') || document.querySelector('.fh-modal-decision')?.getBoundingClientRect().width === 0,
+}));
+check('onboarding: "Let it pass" resolves the decision (no soft-lock)', passed && afterPass.pending === 0 && afterPass.history?.choiceId === '__none', JSON.stringify(afterPass));
+check('onboarding: decision removed from the screen after Let it pass', afterPass.modalGone, JSON.stringify(afterPass));
+
+// 1280x800 tour + first steps.
+const obSmall = await newPage(1280, 800);
+await obSmall.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+await obSmall.waitForFunction('window.__FIRST_HEARTH__ && window.__FIRST_HEARTH__.ready === true', { timeout: 45000 });
+await obSmall.evaluate(() => localStorage.clear());
+await obSmall.reload({ waitUntil: 'domcontentloaded' });
+await obSmall.waitForFunction('window.__FIRST_HEARTH__ && window.__FIRST_HEARTH__.ready === true', { timeout: 45000 });
+await wait(1800);
+await obSmall.evaluate(() => document.querySelector('.fh-welcome [data-act="begin"]')?.click());
+await wait(1300);
+const smallTour = await tourState(obSmall);
+check('onboarding 1280x800: tour card fits and is visible', !!smallTour?.visible, JSON.stringify(smallTour));
+await screenshot(obSmall, 'qa-tour-1280x800');
+await obSmall.evaluate(() => document.querySelector('.fh-tour-card [data-act="skip"]')?.click());
+await wait(700);
+await screenshot(obSmall, 'qa-first-steps-1280x800');
 
 // ---------------------------------------------------------------------------
 // Summary
