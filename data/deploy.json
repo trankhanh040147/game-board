@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-11-01T08:02:33.994Z",
+  "games": {
+    "blade-and-mount": {
+      "url": "https://blade-and-mount.vercel.app",
+      "deployedAt": "2026-11-01T08:00:59Z"
+    },
+    "alien-shooter": {
+      "url": "https://alien-shooter-omega.vercel.app",
+      "deployedAt": "2026-11-01T08:01:16Z"
+    },
+    "first-hearth": {
+      "url": "https://first-hearth.vercel.app",
+      "deployedAt": "2026-11-01T08:02:33Z"
+    }
+  },
+  "board": {}
+}

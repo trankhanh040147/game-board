@@ -101,6 +101,22 @@ build imports `data/registry.json` and `data/telemetry/games.json`; the root
 `.vercelignore` keeps `games/`, `shots/`, `docs/` and `scripts/` out of the
 board upload while keeping `data/` (build input) in.
 
+### 3.1.1 Upload ignore lists (why `tools/` must stay for first-hearth)
+
+Each project also carries a `.vercelignore` that trims the upload without
+touching anything the build reads:
+
+- root: `games/`, `shots/`, `docs/`, `scripts/`, `node_modules/`, `dist/` — the
+  board imports `data/`, so `data/` stays.
+- `games/first-hearth`: `shots/`, `docs/` — **`tools/` must stay uploaded**.
+  `tsconfig.json` includes `tests/`, and `tests/helpers.ts` imports
+  `../tools/autoplay`; dropping `tools/` makes `tsc --noEmit` fail on Vercel with
+  `TS2307: Cannot find module '../tools/autoplay'` even though the local build
+  passes (the files exist locally).
+- `games/blade-and-mount`: `shots/`, `docs/`, `tools/`, `assets-src/` — its tests
+  do not import `tools/`, and the build is verified with those excluded.
+- `games/alien-shooter`: no ignore list needed; the whole folder is the site.
+
 ### 3.2 `first-hearth`
 
 | Setting | Value |
@@ -206,26 +222,40 @@ The file is committed **without** secrets — it only contains public production
 URLs. Existing entries are preserved when a project is skipped or fails, so a
 partial run cannot silently blank out a working URL.
 
+Production aliases after the first deploy:
+
+| Project | Production URL | Note |
+| --- | --- | --- |
+| `first-hearth` | <https://first-hearth.vercel.app> | canonical alias |
+| `blade-and-mount` | <https://blade-and-mount.vercel.app> | canonical alias |
+| `alien-shooter` | <https://alien-shooter-omega.vercel.app> | `alien-shooter.vercel.app` was already taken by another account, so Vercel assigned the `-omega` alias |
+| `game-board` | see `data/deploy.json` | recorded after the board deploy |
+
+`data/deploy.json` is the authoritative list of URLs the board links to; do not
+hard-code them elsewhere. A re-deploy keeps the same production alias.
+
 ## 6. Verifying a deploy
 
 ```bash
-# status codes for all four
-for u in https://game-board.vercel.app https://first-hearth.vercel.app \
-         https://blade-and-mount.vercel.app https://alien-shooter.vercel.app; do
-  printf '%s -> %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' "$u")"
-done
+# status codes for all four (URLs from data/deploy.json — aliases can differ)
+node -e '
+  const j = require("./data/deploy.json");
+  const urls = [j.board?.url, ...Object.values(j.games || {}).map((g) => g.url)].filter(Boolean);
+  console.log(urls.join("\n"));
+' | while read -r u; do printf '%s -> %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' "$u")"; done
 
 # expected document titles
-#   game-board        Game Board — Three games, zero hand-written code (exact title from the site)
+#   game-board        whatever <title> the site ships (script reads it from index.html)
 #   first-hearth      First Hearth — A Living Civilization
 #   blade-and-mount   Blade & Mount — Tournament of the Realm
 #   alien-shooter     ALIEN SHOOTER — Neon Arena
 curl -s https://first-hearth.vercel.app | grep -o '<title>[^<]*</title>'
 
 # board SPA routes (each must return 200 and the board shell)
+BOARD_URL="$(node -e 'console.log(require("./data/deploy.json").board?.url || "")')"
 for p in / /making-of /making-of/first-hearth /making-of/blade-and-mount \
          /making-of/alien-shooter /about; do
-  printf '%s -> %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "https://game-board.vercel.app$p")"
+  printf '%s -> %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "${BOARD_URL%/}$p")"
 done
 
 # re-verify without redeploying
