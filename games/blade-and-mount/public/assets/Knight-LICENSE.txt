@@ -1,0 +1,27 @@
+KayKit Adventurers - Knight
+===========================
+
+Author  : Kay Lousberg (KayKit)
+Source  : https://kaylousberg.itch.io/kaykit-adventurers
+License : CC0 1.0 Universal (Public Domain Dedication)
+          https://creativecommons.org/publicdomain/zero/1.0/
+
+This file documents the licence of the character asset used by Blade & Mount:
+
+    public/assets/knight-anim.json    (derived: retargeted animation data)
+
+The KayKit Adventurers pack is released under CC0 1.0. You may use these
+assets in personal and commercial projects, modify them, and redistribute
+them without attribution. Credit is not required; it is included here as a
+courtesy to the author.
+
+The original downloaded GLB (Knight.glb) is not shipped in this repository; it
+was used offline to bake the animation data. The upstream pack's LICENSE.txt
+was not bundled with the download, so this notice records provenance.
+
+Modifications made by this project
+----------------------------------
+Only the animation data was used. The Knight's meshes, materials, textures and
+skeleton are NOT shipped or loaded at runtime. Animations were sampled offline
+and retargeted onto Blade & Mount's own procedural fighter rig; the resulting
+baked clip data (public/assets/knight-anim.json) is therefore also CC0.

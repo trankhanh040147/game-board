@@ -1,0 +1,27 @@
+{
+  "name": "blade-and-mount-tournament",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A browser-based 3D tournament melee game inspired by Mount & Blade: Warband",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5273",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5274",
+    "test": "vitest run",
+    "shot": "node tools/shot.mjs"
+  },
+  "dependencies": {
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "@fontsource/cinzel": "^5.3.0",
+    "@fontsource/eb-garamond": "^5.3.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "puppeteer-core": "^25.16.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}
