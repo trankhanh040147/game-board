@@ -13,7 +13,7 @@ games/
 # Large binary evidence, not needed by the board build
 shots/
 docs/
-scripts/
+# scripts/ deliberately stays: the build's post-step runs scripts/inject-font-preload.mjs
 
 # VCS + editor cruft
 .git/
