@@ -1,0 +1,287 @@
+{
+ "generatedAt": "2026-11-01T09:23:02.582Z",
+ "base": "https://game-board-pi.vercel.app",
+ "label": "final",
+ "routes": [
+  {
+   "route": "/",
+   "status": 200,
+   "ttLoad": 2885,
+   "ttfb": 133,
+   "dcl": 338,
+   "load": 378,
+   "fcp": 380,
+   "lcp": 380,
+   "cls": 0,
+   "transferTotal": 289583,
+   "decodedTotal": 453860,
+   "resourceCount": 8,
+   "byType": {
+    "script": {
+     "n": 1,
+     "transfer": 56828
+    },
+    "link": {
+     "n": 3,
+     "transfer": 83752
+    },
+    "img": {
+     "n": 3,
+     "transfer": 148002
+    },
+    "other": {
+     "n": 1,
+     "transfer": 1001
+    }
+   },
+   "title": "Game Board — three browser games, written by an AI agent",
+   "innerWidth": 1440,
+   "scrollWidth": 1440,
+   "h1": [
+    "Three games.No hands."
+   ],
+   "errors": [],
+   "bad": []
+  },
+  {
+   "route": "/making-of",
+   "status": 200,
+   "ttLoad": 2744,
+   "ttfb": 109,
+   "dcl": 208,
+   "load": 237,
+   "fcp": 276,
+   "lcp": 424,
+   "cls": 0,
+   "transferTotal": 289583,
+   "decodedTotal": 453860,
+   "resourceCount": 8,
+   "byType": {
+    "script": {
+     "n": 1,
+     "transfer": 56828
+    },
+    "link": {
+     "n": 3,
+     "transfer": 83752
+    },
+    "img": {
+     "n": 3,
+     "transfer": 148002
+    },
+    "other": {
+     "n": 1,
+     "transfer": 1001
+    }
+   },
+   "title": "The receipts — Game Board",
+   "innerWidth": 1440,
+   "scrollWidth": 1440,
+   "h1": [
+    "The receipts."
+   ],
+   "errors": [],
+   "bad": []
+  },
+  {
+   "route": "/making-of/first-hearth",
+   "status": 200,
+   "ttLoad": 2781,
+   "ttfb": 99,
+   "dcl": 200,
+   "load": 272,
+   "fcp": 280,
+   "lcp": 304,
+   "cls": 0,
+   "transferTotal": 356567,
+   "decodedTotal": 520544,
+   "resourceCount": 9,
+   "byType": {
+    "script": {
+     "n": 1,
+     "transfer": 56828
+    },
+    "link": {
+     "n": 3,
+     "transfer": 83752
+    },
+    "img": {
+     "n": 4,
+     "transfer": 214986
+    },
+    "other": {
+     "n": 1,
+     "transfer": 1001
+    }
+   },
+   "title": "First Hearth — how it was made · Game Board",
+   "innerWidth": 1440,
+   "scrollWidth": 1440,
+   "h1": [
+    "First Hearth"
+   ],
+   "errors": [],
+   "bad": []
+  },
+  {
+   "route": "/making-of/blade-and-mount",
+   "status": 200,
+   "ttLoad": 2802,
+   "ttfb": 105,
+   "dcl": 229,
+   "load": 296,
+   "fcp": 264,
+   "lcp": 296,
+   "cls": 0,
+   "transferTotal": 358765,
+   "decodedTotal": 522442,
+   "resourceCount": 10,
+   "byType": {
+    "script": {
+     "n": 1,
+     "transfer": 56828
+    },
+    "link": {
+     "n": 3,
+     "transfer": 83752
+    },
+    "img": {
+     "n": 4,
+     "transfer": 180640
+    },
+    "css": {
+     "n": 1,
+     "transfer": 36544
+    },
+    "other": {
+     "n": 1,
+     "transfer": 1001
+    }
+   },
+   "title": "Blade & Mount — how it was made · Game Board",
+   "innerWidth": 1440,
+   "scrollWidth": 1440,
+   "h1": [
+    "Blade & Mount"
+   ],
+   "errors": [],
+   "bad": []
+  },
+  {
+   "route": "/making-of/alien-shooter",
+   "status": 200,
+   "ttLoad": 2788,
+   "ttfb": 104,
+   "dcl": 235,
+   "load": 279,
+   "fcp": 284,
+   "lcp": 316,
+   "cls": 0,
+   "transferTotal": 233833,
+   "decodedTotal": 397810,
+   "resourceCount": 9,
+   "byType": {
+    "script": {
+     "n": 1,
+     "transfer": 56828
+    },
+    "link": {
+     "n": 3,
+     "transfer": 83752
+    },
+    "img": {
+     "n": 4,
+     "transfer": 92252
+    },
+    "other": {
+     "n": 1,
+     "transfer": 1001
+    }
+   },
+   "title": "Alien Shooter — how it was made · Game Board",
+   "innerWidth": 1440,
+   "scrollWidth": 1440,
+   "h1": [
+    "Alien Shooter"
+   ],
+   "errors": [],
+   "bad": []
+  },
+  {
+   "route": "/about",
+   "status": 200,
+   "ttLoad": 2753,
+   "ttfb": 122,
+   "dcl": 221,
+   "load": 246,
+   "fcp": 276,
+   "lcp": 324,
+   "cls": 0,
+   "transferTotal": 187009,
+   "decodedTotal": 351886,
+   "resourceCount": 6,
+   "byType": {
+    "script": {
+     "n": 1,
+     "transfer": 56828
+    },
+    "link": {
+     "n": 3,
+     "transfer": 83752
+    },
+    "img": {
+     "n": 1,
+     "transfer": 45428
+    },
+    "other": {
+     "n": 1,
+     "transfer": 1001
+    }
+   },
+   "title": "About the board — Game Board",
+   "innerWidth": 1440,
+   "scrollWidth": 1440,
+   "h1": [
+    "About the board."
+   ],
+   "errors": [],
+   "bad": []
+  },
+  {
+   "route": "/nope-404",
+   "status": 200,
+   "ttLoad": 2774,
+   "ttfb": 94,
+   "dcl": 265,
+   "load": 266,
+   "fcp": 288,
+   "lcp": 288,
+   "cls": 0,
+   "transferTotal": 141581,
+   "decodedTotal": 306758,
+   "resourceCount": 5,
+   "byType": {
+    "script": {
+     "n": 1,
+     "transfer": 56828
+    },
+    "link": {
+     "n": 3,
+     "transfer": 83752
+    },
+    "other": {
+     "n": 1,
+     "transfer": 1001
+    }
+   },
+   "title": "Not found — Game Board",
+   "innerWidth": 1440,
+   "scrollWidth": 1440,
+   "h1": [
+    "Off the board."
+   ],
+   "errors": [],
+   "bad": []
+  }
+ ]
+}

@@ -1,0 +1,685 @@
+{
+ "generatedAt": "2026-11-01T09:27:13.716Z",
+ "label": "final",
+ "base": "https://game-board-pi.vercel.app",
+ "checks": [
+  {
+   "game": "alien-shooter",
+   "field": "totalTokens",
+   "expected": "13,330,027",
+   "variants": [
+    "13,330,027",
+    "13.3M",
+    "3 h 42 m",
+    "3.7 h",
+    "3.7",
+    "13330027"
+   ],
+   "matched": "13,330,027",
+   "found": true,
+   "note": "tokens processed"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "inputTokens",
+   "expected": "208,429",
+   "variants": [
+    "208,429",
+    "208.4K",
+    "3 m",
+    "0.1",
+    "208429"
+   ],
+   "matched": "208,429",
+   "found": true,
+   "note": "input"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "outputTokens",
+   "expected": "155,070",
+   "variants": [
+    "155,070",
+    "155.1K",
+    "3 m",
+    "0.0",
+    "155070"
+   ],
+   "matched": "155,070",
+   "found": true,
+   "note": "output"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "cacheReadTokens",
+   "expected": "12,966,528",
+   "variants": [
+    "12,966,528",
+    "13M",
+    "3 h 36 m",
+    "3.6 h",
+    "3.6",
+    "12966528"
+   ],
+   "matched": "12,966,528",
+   "found": true,
+   "note": "cache read"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "prompts count",
+   "expected": "1",
+   "variants": [
+    "1",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "1",
+   "found": true,
+   "note": "human prompt count"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "lead steps",
+   "expected": "99",
+   "variants": [
+    "99",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "99",
+   "found": true,
+   "note": "lead agent steps"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "subagent steps",
+   "expected": "0",
+   "found": null,
+   "note": "subagent steps (zero: display should say solo/none)",
+   "n_a": true
+  },
+  {
+   "game": "alien-shooter",
+   "field": "subagent sessions",
+   "expected": "0",
+   "found": null,
+   "note": "subagents (zero: display should say solo/none)",
+   "n_a": true
+  },
+  {
+   "game": "alien-shooter",
+   "field": "agent work",
+   "expected": "2,345,014",
+   "variants": [
+    "2,345,014",
+    "2.3M",
+    "39 m",
+    "0.7",
+    "2345014"
+   ],
+   "matched": "39 m",
+   "found": true,
+   "note": "agent-hours / work time"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "wall clock",
+   "expected": "2,592,339",
+   "variants": [
+    "2,592,339",
+    "2.6M",
+    "43 m",
+    "0.7",
+    "2592339"
+   ],
+   "matched": "43 m",
+   "found": true,
+   "note": "wall clock"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "files created",
+   "expected": "8",
+   "variants": [
+    "8",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "8",
+   "found": true,
+   "note": "files"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "milestones",
+   "expected": "12",
+   "variants": [
+    "12",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "12",
+   "found": true,
+   "note": "milestones"
+  },
+  {
+   "game": "alien-shooter",
+   "field": "thinking chars",
+   "expected": "234,421",
+   "variants": [
+    "234,421",
+    "234.4K",
+    "4 m",
+    "0.1",
+    "234421"
+   ],
+   "matched": "234.4K",
+   "found": true,
+   "note": "reasoning chars"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "totalTokens",
+   "expected": "497,667,899",
+   "variants": [
+    "497,667,899",
+    "497.7M",
+    "138 h 14 m",
+    "138.2 h",
+    "138.2",
+    "497667899"
+   ],
+   "matched": "497,667,899",
+   "found": true,
+   "note": "tokens processed"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "inputTokens",
+   "expected": "7,493,845",
+   "variants": [
+    "7,493,845",
+    "7.5M",
+    "2 h 05 m",
+    "2.1 h",
+    "2.1",
+    "7493845"
+   ],
+   "matched": "7,493,845",
+   "found": true,
+   "note": "input"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "outputTokens",
+   "expected": "2,205,926",
+   "variants": [
+    "2,205,926",
+    "2.2M",
+    "37 m",
+    "0.6",
+    "2205926"
+   ],
+   "matched": "2,205,926",
+   "found": true,
+   "note": "output"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "cacheReadTokens",
+   "expected": "487,968,128",
+   "variants": [
+    "487,968,128",
+    "488M",
+    "135 h 33 m",
+    "135.5 h",
+    "135.5",
+    "487968128"
+   ],
+   "matched": "487,968,128",
+   "found": true,
+   "note": "cache read"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "prompts count",
+   "expected": "4",
+   "variants": [
+    "4",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "4",
+   "found": true,
+   "note": "human prompt count"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "lead steps",
+   "expected": "500",
+   "variants": [
+    "500",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "500",
+   "found": true,
+   "note": "lead agent steps"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "subagent steps",
+   "expected": "1,070",
+   "variants": [
+    "1,070",
+    "0 m",
+    "0.0",
+    "1070"
+   ],
+   "matched": "1,070",
+   "found": true,
+   "note": "subagent steps"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "subagent sessions",
+   "expected": "7",
+   "variants": [
+    "7",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "7",
+   "found": true,
+   "note": "subagents"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "agent work",
+   "expected": "50,245,755",
+   "variants": [
+    "50,245,755",
+    "50.2M",
+    "13 h 57 m",
+    "14.0 h",
+    "14.0",
+    "50245755"
+   ],
+   "matched": "14.0 h",
+   "found": true,
+   "note": "agent-hours / work time"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "wall clock",
+   "expected": "76,702,025",
+   "variants": [
+    "76,702,025",
+    "76.7M",
+    "21 h 18 m",
+    "21.3 h",
+    "21.3",
+    "76702025"
+   ],
+   "matched": "21 h 18 m",
+   "found": true,
+   "note": "wall clock"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "files created",
+   "expected": "124",
+   "variants": [
+    "124",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "124",
+   "found": true,
+   "note": "files"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "milestones",
+   "expected": "26",
+   "variants": [
+    "26",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "26",
+   "found": true,
+   "note": "milestones"
+  },
+  {
+   "game": "blade-and-mount",
+   "field": "thinking chars",
+   "expected": "4,055,338",
+   "variants": [
+    "4,055,338",
+    "4.1M",
+    "1 h 08 m",
+    "1.1 h",
+    "1.1",
+    "4055338"
+   ],
+   "matched": "4.1M",
+   "found": true,
+   "note": "reasoning chars"
+  },
+  {
+   "game": "first-hearth",
+   "field": "totalTokens",
+   "expected": "411,924,521",
+   "variants": [
+    "411,924,521",
+    "411.9M",
+    "114 h 25 m",
+    "114.4 h",
+    "114.4",
+    "411924521"
+   ],
+   "matched": "411,924,521",
+   "found": true,
+   "note": "tokens processed"
+  },
+  {
+   "game": "first-hearth",
+   "field": "inputTokens",
+   "expected": "6,031,701",
+   "variants": [
+    "6,031,701",
+    "6M",
+    "1 h 41 m",
+    "1.7 h",
+    "1.7",
+    "6031701"
+   ],
+   "matched": "6,031,701",
+   "found": true,
+   "note": "input"
+  },
+  {
+   "game": "first-hearth",
+   "field": "outputTokens",
+   "expected": "2,241,876",
+   "variants": [
+    "2,241,876",
+    "2.2M",
+    "37 m",
+    "0.6",
+    "2241876"
+   ],
+   "matched": "2,241,876",
+   "found": true,
+   "note": "output"
+  },
+  {
+   "game": "first-hearth",
+   "field": "cacheReadTokens",
+   "expected": "403,650,944",
+   "variants": [
+    "403,650,944",
+    "403.7M",
+    "112 h 08 m",
+    "112.1 h",
+    "112.1",
+    "403650944"
+   ],
+   "matched": "403,650,944",
+   "found": true,
+   "note": "cache read"
+  },
+  {
+   "game": "first-hearth",
+   "field": "prompts count",
+   "expected": "3",
+   "variants": [
+    "3",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "3",
+   "found": true,
+   "note": "human prompt count"
+  },
+  {
+   "game": "first-hearth",
+   "field": "lead steps",
+   "expected": "250",
+   "variants": [
+    "250",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "250",
+   "found": true,
+   "note": "lead agent steps"
+  },
+  {
+   "game": "first-hearth",
+   "field": "subagent steps",
+   "expected": "1,184",
+   "variants": [
+    "1,184",
+    "0 m",
+    "0.0",
+    "1184"
+   ],
+   "matched": "1,184",
+   "found": true,
+   "note": "subagent steps"
+  },
+  {
+   "game": "first-hearth",
+   "field": "subagent sessions",
+   "expected": "8",
+   "variants": [
+    "8",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "8",
+   "found": true,
+   "note": "subagents"
+  },
+  {
+   "game": "first-hearth",
+   "field": "agent work",
+   "expected": "32,402,001",
+   "variants": [
+    "32,402,001",
+    "32.4M",
+    "9 h",
+    "9.0 h",
+    "9.0",
+    "32402001"
+   ],
+   "matched": "9.0 h",
+   "found": true,
+   "note": "agent-hours / work time"
+  },
+  {
+   "game": "first-hearth",
+   "field": "wall clock",
+   "expected": "55,721,125",
+   "variants": [
+    "55,721,125",
+    "55.7M",
+    "15 h 29 m",
+    "15.5 h",
+    "15.5",
+    "55721125"
+   ],
+   "matched": "15 h 29 m",
+   "found": true,
+   "note": "wall clock"
+  },
+  {
+   "game": "first-hearth",
+   "field": "files created",
+   "expected": "136",
+   "variants": [
+    "136",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "136",
+   "found": true,
+   "note": "files"
+  },
+  {
+   "game": "first-hearth",
+   "field": "milestones",
+   "expected": "28",
+   "variants": [
+    "28",
+    "0 m",
+    "0.0"
+   ],
+   "matched": "28",
+   "found": true,
+   "note": "milestones"
+  },
+  {
+   "game": "first-hearth",
+   "field": "thinking chars",
+   "expected": "3,760,409",
+   "variants": [
+    "3,760,409",
+    "3.8M",
+    "1 h 03 m",
+    "1.0 h",
+    "1.0",
+    "3760409"
+   ],
+   "matched": "3.8M",
+   "found": true,
+   "note": "reasoning chars"
+  },
+  {
+   "game": "all (making-of)",
+   "field": "agg prompts",
+   "expected": "8",
+   "found": true
+  },
+  {
+   "game": "all (making-of)",
+   "field": "agg agent steps",
+   "expected": "3,103",
+   "found": true
+  },
+  {
+   "game": "all (making-of)",
+   "field": "agg tokens",
+   "expected": "922.9M",
+   "found": true
+  },
+  {
+   "game": "all (making-of)",
+   "field": "agg cache read",
+   "expected": "904.6M",
+   "found": true
+  },
+  {
+   "game": "all (making-of)",
+   "field": "agg output",
+   "expected": "4.6M",
+   "found": true
+  },
+  {
+   "game": "all (making-of)",
+   "field": "agg agent-hours",
+   "expected": "23.6",
+   "found": true
+  }
+ ],
+ "promptChecks": [
+  {
+   "game": "alien-shooter",
+   "at": "2026-10-31T16:11:26.534+07:00",
+   "lang": "vi",
+   "translated": true,
+   "englishShown": true,
+   "probe": "Build me an Alien Shooter game.",
+   "vietnameseLeak": false
+  },
+  {
+   "game": "blade-and-mount",
+   "at": "2026-10-31T17:04:48.745+07:00",
+   "lang": "vi",
+   "translated": true,
+   "englishShown": true,
+   "probe": "Please build me the game Blade And Mount — build a Tournamen",
+   "vietnameseLeak": false
+  },
+  {
+   "game": "blade-and-mount",
+   "at": "2026-10-31T19:53:36.731+07:00",
+   "lang": "vi",
+   "translated": true,
+   "englishShown": true,
+   "probe": "Not good yet — the movement isn't smooth at all, and the str",
+   "vietnameseLeak": false
+  },
+  {
+   "game": "blade-and-mount",
+   "at": "2026-10-31T20:54:43.400+07:00",
+   "lang": "vi",
+   "translated": true,
+   "englishShown": true,
+   "probe": "It's a bit better now, but still not good enough. The moveme",
+   "vietnameseLeak": false
+  },
+  {
+   "game": "blade-and-mount",
+   "at": "2026-11-01T14:16:07.909+07:00",
+   "lang": "vi",
+   "translated": true,
+   "englishShown": true,
+   "probe": "Please stop the server for me.",
+   "vietnameseLeak": false
+  },
+  {
+   "game": "first-hearth",
+   "at": "2026-10-31T22:54:10.952+07:00",
+   "lang": "en",
+   "translated": false,
+   "englishShown": true,
+   "probe": "# PROJECT: INFINITE CIVILIZATION ## An Ambitious, Deep, Livi",
+   "vietnameseLeak": false
+  },
+  {
+   "game": "first-hearth",
+   "at": "2026-11-01T07:59:42.353+07:00",
+   "lang": "vi",
+   "translated": true,
+   "englishShown": true,
+   "probe": "There are quite a lot of problems right now, find and fix th",
+   "vietnameseLeak": false
+  },
+  {
+   "game": "first-hearth",
+   "at": "2026-11-01T14:17:57.153+07:00",
+   "lang": "vi",
+   "translated": true,
+   "englishShown": true,
+   "probe": "move this conversation into the game-board workspace",
+   "vietnameseLeak": false
+  }
+ ],
+ "summary": {
+  "pass": 45,
+  "fail": 0,
+  "promptChecks": 8,
+  "leaks": 0,
+  "englishMissing": 0
+ },
+ "makingOf": {
+  "usesAgentSteps": true,
+  "usesAgentTurns": false,
+  "definitionPresent": true,
+  "snippet": "om their own session logs. Same person, same model, three very different ways to spend a night. 8 human prompts · 3,103 agent steps · 922.9M tokens · 23.6 agent-hours Model deepseek-v4.1-flash · 15 subagent sessions · 37.5 h wall clock (three overlapping windows) First Hearth Blade & Mount Alien Shooter Rank t"
+ }
+}

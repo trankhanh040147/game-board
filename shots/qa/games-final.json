@@ -1,0 +1,68 @@
+{
+ "generatedAt": "2026-11-01T09:21:44.882Z",
+ "games": [
+  {
+   "key": "first-hearth",
+   "clicked": {
+    "text": "OrchardEra II\n            Grafted apple and plum rows in sheltered ground, with beehives at the hedge. Slow to begin, generous for generations.\n            1442\n            Era II",
+    "w": 268
+   },
+   "onboardingBefore": true,
+   "onboardingAfter": true,
+   "bodyBefore": "First Hearth\nERA I\nTHE FIRST HEARTH\nseed raven-moss-913\n1\nSOULS\nYear 1 · Spring 1\n21°C\nMild and bright\nPAUSED\n1\n2\n3\n4\n1\n",
+   "bodyAfter": "First Hearth ERA I THE FIRST HEARTH seed raven-moss-913 1 SOULS Year 1 · Spring 1 21°C Mild and bright PAUSED 1 2 3 4 1 MORALE 64% FOOD 30d ",
+   "afterKeys": "First Hearth ERA I THE FIRST HEARTH seed raven-moss-913 1 SOULS Year 1 · Spring 2 22°C Rain sweeping in from the west 4 ALERTS PAUSED 1 2 3 ",
+   "mobile": {
+    "innerWidth": 390,
+    "scrollWidth": 390
+   },
+   "errors": [],
+   "bad": []
+  },
+  {
+   "key": "alien-shooter",
+   "clicked": "START THE FIGHT",
+   "hud": {
+    "hudExists": true,
+    "hudHidden": false,
+    "text": "WAVE 01 LEFT 8 SCORE 0 LV 1 ❚❚ 🔊 100 / 100 DMG 9 RATE 3.4/s DASH WAVE 1 8 HOSTILES INCOMING NEON ARENA // SURVIVAL PROTOCOL ALIEN SHOOTER Colony XR-7 has gone "
+   },
+   "mobile": {
+    "innerWidth": 390,
+    "scrollWidth": 390,
+    "touch": 9
+   },
+   "errors": [],
+   "bad": []
+  },
+  {
+   "key": "blade-and-mount",
+   "steps": [
+    {
+     "label": "open tournament",
+     "clicked": "I TournamentFour rounds · sixteen names"
+    },
+    {
+     "label": "enter lists",
+     "clicked": "Enter the Lists"
+    },
+    {
+     "label": "confirm loadout",
+     "clicked": "TAKE THE FIELD"
+    }
+   ],
+   "state": {
+    "body": "ROUND I OF IV 4/4 4/4 4/4 4/4 THE LISTS Be among the last two houses standing. 120 DENARS TAB LISTS Hold LMB to choose a direction, release to strike. Hold RMB to guard the matching direction. 1 THE W",
+    "canvas": true
+   },
+   "mobile": {
+    "innerWidth": 390,
+    "scrollWidth": 390,
+    "touchControls": 0,
+    "buttons": 5
+   },
+   "errors": [],
+   "bad": []
+  }
+ ]
+}

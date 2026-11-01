@@ -1,0 +1,39 @@
+{
+ "qa": {
+  "frames": 159,
+  "firstLitFrameMs": 879,
+  "litSeries": [
+   14400,
+   14400,
+   14400,
+   14400,
+   14400,
+   14400,
+   14400,
+   14400
+  ],
+  "firstFrameMs": 878.528,
+  "hitches": [
+   733
+  ]
+ },
+ "interaction": {
+  "clicked": "I TournamentFour rounds · sixteen names",
+  "before": null,
+  "after": "THE TOURNAMENT OF THE REALM THE GRAND MELEE Round I of IV · The Old Lists of Aldermere 1 GRAND MELEE 2 KNIGHTS' PASS 3 DUELLISTS' ROUND 4 CHAMPIONSHIP Be among the last two houses standing. HOUSES OF THE LISTS 16/16 STANDING House Thornwood VERDANT 4 /4 Ulric the Bold 0 Fendrel the Bold 0 Kendrick 0 Jorund of the Marches 0 4/4 STANDING House Corvane YOUR HOUSE 4 /4 The Wanderer 0 Perrin Longsword ",
+  "urlBefore": "https://blade-and-mount.vercel.app/",
+  "urlAfter": "https://blade-and-mount.vercel.app/",
+  "secondClick": "Enter the Lists",
+  "afterSecond": "◤ ◥ ▲ ▼ BLADE & MOUNT · TOURNAMENT OF THE REALM CHOOSE YOUR ARMS Round 1 of 4 — The Grand Melee 01 Sword & Kite Balanced · reliable DMG 24 SPD 1.00 RCH 2.15 The old faithful: quick cuts, a wall of linden board. 02 War Axe Heavy · armour-breaker DMG 32 SPD 0.84 RCH 2.00 Slow, cruel and excellent at splitting mail. 03 War Spear Long · controlling DMG 29 SPD 1.02 RCH 3.15 Keep them at the point of th",
+  "keysOk": true
+ },
+ "errors": [],
+ "menuButtons": [
+  "I TournamentFour rounds · sixteen names",
+  "II Arena MeleeThirty-five foes · one sand",
+  "III ControlsSteel is learned by the hand",
+  "IV SettingsSight, sound and sensibilities",
+  "V CreditsThe hands behind the lists"
+ ],
+ "status": 200
+}

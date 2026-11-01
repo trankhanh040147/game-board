@@ -1,0 +1,407 @@
+{
+ "generatedAt": "2026-11-01T09:21:09.424Z",
+ "games": [
+  {
+   "key": "first-hearth",
+   "url": "https://first-hearth.vercel.app",
+   "viewport": "desktop",
+   "status": 200,
+   "ttLoad": 650,
+   "title": "First Hearth — A Living Civilization",
+   "meta": {
+    "desc": "First Hearth — a living-world civilization simulation. One wanderer, an unexplored valley, and a civilization to raise from embers.",
+    "viewport": "width=device-width, initial-scale=1.0",
+    "favicon": "./favicon.svg",
+    "lang": "en",
+    "h1": [
+     "First Hearth"
+    ],
+    "canvas": true,
+    "overflow": false,
+    "innerWidth": 1440,
+    "scrollWidth": 1440,
+    "bodyText": "First Hearth ERA I THE FIRST HEARTH seed stone-harvest-914 1 SOULS Year 1 · Spring 1 17°C Mild and bright PAUSED 1 2 3 4 1 MORALE 64% FOOD 30d WATER 0d TREASURY 0 INSIGHT 14 INFLUENCE 6 CULTURE 0 18 · · · 14 42 · · · BUILD B CODEX T 9 SOCIETY S 1 MARKET M PEOPLE P ALMANAC C DIPLOMACY D EXPEDITIONS E"
+   },
+   "perf": {
+    "ttfb": 112,
+    "domContentLoaded": 499,
+    "load": 645,
+    "fcp": 212,
+    "paints": [
+     {
+      "name": "first-paint",
+      "at": 212
+     },
+     {
+      "name": "first-contentful-paint",
+      "at": 212
+     }
+    ],
+    "transferTotal": 425855,
+    "decodedTotal": 1122112,
+    "jsTransfer": 273136,
+    "resources": 9,
+    "byType": {
+     "script": {
+      "n": 1,
+      "transfer": 273136,
+      "decoded": 864063
+     },
+     "link": {
+      "n": 1,
+      "transfer": 25630,
+      "decoded": 133060
+     },
+     "css": {
+      "n": 6,
+      "transfer": 126396,
+      "decoded": 124596
+     },
+     "other": {
+      "n": 1,
+      "transfer": 693,
+      "decoded": 393
+     }
+    }
+   },
+   "errors": [],
+   "warnings": [],
+   "failed": [],
+   "bad": []
+  },
+  {
+   "key": "first-hearth",
+   "url": "https://first-hearth.vercel.app",
+   "viewport": "mobile",
+   "status": 200,
+   "ttLoad": 514,
+   "title": "First Hearth — A Living Civilization",
+   "meta": {
+    "desc": "First Hearth — a living-world civilization simulation. One wanderer, an unexplored valley, and a civilization to raise from embers.",
+    "viewport": "width=device-width, initial-scale=1.0",
+    "favicon": "./favicon.svg",
+    "lang": "en",
+    "h1": [
+     "First Hearth"
+    ],
+    "canvas": true,
+    "overflow": false,
+    "innerWidth": 390,
+    "scrollWidth": 390,
+    "bodyText": "First Hearth ERA I THE FIRST HEARTH 1 Year 1 · Spring 1 12°C 1 2 3 4 1 MORALE 64% FOOD 30d WATER 0d TREASURY 0 INSIGHT 14 18 · · · 14 42 B T 9 S 1 M P C D E W O 1 1 ? RAISE Construction Road Plant Clear ALL HOUSING FOOD GATHERING INDUSTRY ENERGY WATER STORAGE LOGISTICS SCIENCE SOCIETY DEFENCE BEAUTY"
+   },
+   "perf": {
+    "ttfb": 99,
+    "domContentLoaded": 457,
+    "load": 512,
+    "fcp": 212,
+    "paints": [
+     {
+      "name": "first-paint",
+      "at": 212
+     },
+     {
+      "name": "first-contentful-paint",
+      "at": 212
+     }
+    ],
+    "transferTotal": 425855,
+    "decodedTotal": 1122112,
+    "jsTransfer": 273136,
+    "resources": 9,
+    "byType": {
+     "script": {
+      "n": 1,
+      "transfer": 273136,
+      "decoded": 864063
+     },
+     "link": {
+      "n": 1,
+      "transfer": 25630,
+      "decoded": 133060
+     },
+     "css": {
+      "n": 6,
+      "transfer": 126396,
+      "decoded": 124596
+     },
+     "other": {
+      "n": 1,
+      "transfer": 693,
+      "decoded": 393
+     }
+    }
+   },
+   "errors": [],
+   "warnings": [],
+   "failed": [],
+   "bad": []
+  },
+  {
+   "key": "blade-and-mount",
+   "url": "https://blade-and-mount.vercel.app",
+   "viewport": "desktop",
+   "status": 200,
+   "ttLoad": 294,
+   "title": "Blade & Mount — Tournament of the Realm",
+   "meta": {
+    "desc": "A 3D medieval tournament melee game in the browser: four directional strikes, guards, stamina, a betting purse and a crowd that watches — built as a homage to Mount & Blade: Warband.",
+    "viewport": "width=device-width, initial-scale=1.0",
+    "favicon": "./favicon.svg",
+    "lang": "en",
+    "h1": [
+     "BLADE&MOUNT"
+    ],
+    "canvas": true,
+    "overflow": false,
+    "innerWidth": 1440,
+    "scrollWidth": 1440,
+    "bodyText": "THE OLD LISTS OF ALDERMERE BLADE & MOUNT TOURNAMENT OF THE REALM I TOURNAMENT FOUR ROUNDS · SIXTEEN NAMES II ARENA MELEE THIRTY-FIVE FOES · ONE SAND III CONTROLS STEEL IS LEARNED BY THE HAND IV SETTINGS SIGHT, SOUND AND SENSIBILITIES V CREDITS THE HANDS BEHIND THE LISTS The Wanderer SERF·LEVEL 1 120"
+   },
+   "perf": {
+    "ttfb": 99,
+    "domContentLoaded": 291,
+    "load": 291,
+    "fcp": 1032,
+    "paints": [
+     {
+      "name": "first-paint",
+      "at": 164
+     },
+     {
+      "name": "first-contentful-paint",
+      "at": 1032
+     }
+    ],
+    "transferTotal": 622997,
+    "decodedTotal": 1801629,
+    "jsTransfer": 292758,
+    "resources": 12,
+    "byType": {
+     "script": {
+      "n": 1,
+      "transfer": 292758,
+      "decoded": 1035263
+     },
+     "link": {
+      "n": 1,
+      "transfer": 17296,
+      "decoded": 80578
+     },
+     "fetch": {
+      "n": 1,
+      "transfer": 150394,
+      "decoded": 525939
+     },
+     "other": {
+      "n": 1,
+      "transfer": 617,
+      "decoded": 317
+     },
+     "css": {
+      "n": 8,
+      "transfer": 161932,
+      "decoded": 159532
+     }
+    }
+   },
+   "errors": [],
+   "warnings": [
+    "THREE.WebGLShadowMap: PCFSoftShadowMap has been removed. Using PCFShadowMap instead."
+   ],
+   "failed": [],
+   "bad": []
+  },
+  {
+   "key": "blade-and-mount",
+   "url": "https://blade-and-mount.vercel.app",
+   "viewport": "mobile",
+   "status": 200,
+   "ttLoad": 296,
+   "title": "Blade & Mount — Tournament of the Realm",
+   "meta": {
+    "desc": "A 3D medieval tournament melee game in the browser: four directional strikes, guards, stamina, a betting purse and a crowd that watches — built as a homage to Mount & Blade: Warband.",
+    "viewport": "width=device-width, initial-scale=1.0",
+    "favicon": "./favicon.svg",
+    "lang": "en",
+    "h1": [
+     "BLADE&MOUNT"
+    ],
+    "canvas": true,
+    "overflow": false,
+    "innerWidth": 390,
+    "scrollWidth": 390,
+    "bodyText": "THE OLD LISTS OF ALDERMERE BLADE & MOUNT TOURNAMENT OF THE REALM I TOURNAMENT FOUR ROUNDS · SIXTEEN NAMES II ARENA MELEE THIRTY-FIVE FOES · ONE SAND III CONTROLS STEEL IS LEARNED BY THE HAND IV SETTINGS SIGHT, SOUND AND SENSIBILITIES V CREDITS THE HANDS BEHIND THE LISTS The Wanderer SERF·LEVEL 1 120"
+   },
+   "perf": {
+    "ttfb": 102,
+    "domContentLoaded": 293,
+    "load": 293,
+    "fcp": 960,
+    "paints": [
+     {
+      "name": "first-paint",
+      "at": 204
+     },
+     {
+      "name": "first-contentful-paint",
+      "at": 960
+     }
+    ],
+    "transferTotal": 622997,
+    "decodedTotal": 1801629,
+    "jsTransfer": 292758,
+    "resources": 12,
+    "byType": {
+     "script": {
+      "n": 1,
+      "transfer": 292758,
+      "decoded": 1035263
+     },
+     "link": {
+      "n": 1,
+      "transfer": 17296,
+      "decoded": 80578
+     },
+     "fetch": {
+      "n": 1,
+      "transfer": 150394,
+      "decoded": 525939
+     },
+     "other": {
+      "n": 1,
+      "transfer": 617,
+      "decoded": 317
+     },
+     "css": {
+      "n": 8,
+      "transfer": 161932,
+      "decoded": 159532
+     }
+    }
+   },
+   "errors": [],
+   "warnings": [
+    "THREE.WebGLShadowMap: PCFSoftShadowMap has been removed. Using PCFShadowMap instead."
+   ],
+   "failed": [],
+   "bad": []
+  },
+  {
+   "key": "alien-shooter",
+   "url": "https://alien-shooter-omega.vercel.app",
+   "viewport": "desktop",
+   "status": 200,
+   "ttLoad": 206,
+   "title": "ALIEN SHOOTER — Neon Arena",
+   "meta": {
+    "desc": "A top-down neon arena survival shooter. Endless waves, five alien types, sixteen upgrades and a boss every five waves — no dependencies, no build step.",
+    "viewport": "width=device-width, initial-scale=1, viewport-fit=cover",
+    "favicon": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%2305070f'/%3E%3Ccircle%20cx='16'%20cy='13'%20r='6'%20fill='%23ff3d9a'/%3E%3Cellipse%20cx='16'%20cy='14.5'%20rx='3.4'%20ry='1.9'%20fill='%2305070f'/%3E%3Cpath%20d='M10%2024l2-4M22%2024l-2-4M16%2022v4'%20stroke='%2350e3ff'%20stroke-width='2'%20stroke-linecap='round'/%3E%3C/svg%3E",
+    "lang": "en",
+    "h1": [
+     "ALIENSHOOTER"
+    ],
+    "canvas": true,
+    "overflow": false,
+    "innerWidth": 1440,
+    "scrollWidth": 1440,
+    "bodyText": "NEON ARENA // SURVIVAL PROTOCOL ALIEN SHOOTER Colony XR-7 has gone dark. You are the last one still standing. Aliens pour out of the nests — shoot, dash, upgrade and survive wave after wave. W A S D Move MOUSE Aim HOLD LEFT MOUSE Fire SPACE Dash (brief invulnerability) P Pause M Mute / unmute START "
+   },
+   "perf": {
+    "ttfb": 94,
+    "domContentLoaded": 193,
+    "load": 193,
+    "fcp": 216,
+    "paints": [
+     {
+      "name": "first-paint",
+      "at": 216
+     },
+     {
+      "name": "first-contentful-paint",
+      "at": 216
+     }
+    ],
+    "transferTotal": 38413,
+    "decodedTotal": 136049,
+    "jsTransfer": 32620,
+    "resources": 4,
+    "byType": {
+     "link": {
+      "n": 1,
+      "transfer": 5793,
+      "decoded": 20510
+     },
+     "script": {
+      "n": 3,
+      "transfer": 32620,
+      "decoded": 115539
+     }
+    }
+   },
+   "errors": [],
+   "warnings": [],
+   "failed": [],
+   "bad": []
+  },
+  {
+   "key": "alien-shooter",
+   "url": "https://alien-shooter-omega.vercel.app",
+   "viewport": "mobile",
+   "status": 200,
+   "ttLoad": 254,
+   "title": "ALIEN SHOOTER — Neon Arena",
+   "meta": {
+    "desc": "A top-down neon arena survival shooter. Endless waves, five alien types, sixteen upgrades and a boss every five waves — no dependencies, no build step.",
+    "viewport": "width=device-width, initial-scale=1, viewport-fit=cover",
+    "favicon": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%2305070f'/%3E%3Ccircle%20cx='16'%20cy='13'%20r='6'%20fill='%23ff3d9a'/%3E%3Cellipse%20cx='16'%20cy='14.5'%20rx='3.4'%20ry='1.9'%20fill='%2305070f'/%3E%3Cpath%20d='M10%2024l2-4M22%2024l-2-4M16%2022v4'%20stroke='%2350e3ff'%20stroke-width='2'%20stroke-linecap='round'/%3E%3C/svg%3E",
+    "lang": "en",
+    "h1": [
+     "ALIENSHOOTER"
+    ],
+    "canvas": true,
+    "overflow": false,
+    "innerWidth": 390,
+    "scrollWidth": 390,
+    "bodyText": "NEON ARENA // SURVIVAL PROTOCOL ALIEN SHOOTER Colony XR-7 has gone dark. You are the last one still standing. Aliens pour out of the nests — shoot, dash, upgrade and survive wave after wave. LEFT HALF Move RIGHT HALF Aim & auto-fire DASH BUTTON Dash ⏸ / 🔊 Top-right corner START THE FIGHT On phones:"
+   },
+   "perf": {
+    "ttfb": 99,
+    "domContentLoaded": 250,
+    "load": 251,
+    "fcp": 252,
+    "paints": [
+     {
+      "name": "first-paint",
+      "at": 252
+     },
+     {
+      "name": "first-contentful-paint",
+      "at": 252
+     }
+    ],
+    "transferTotal": 38413,
+    "decodedTotal": 136049,
+    "jsTransfer": 32620,
+    "resources": 4,
+    "byType": {
+     "link": {
+      "n": 1,
+      "transfer": 5793,
+      "decoded": 20510
+     },
+     "script": {
+      "n": 3,
+      "transfer": 32620,
+      "decoded": 115539
+     }
+    }
+   },
+   "errors": [],
+   "warnings": [],
+   "failed": [],
+   "bad": []
+  }
+ ]
+}

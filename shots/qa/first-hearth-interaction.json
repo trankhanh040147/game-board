@@ -1,0 +1,23 @@
+{
+ "clicked": "Light the hearth",
+ "before": {
+  "btn": "Light the hearth",
+  "x": 720,
+  "y": 653.09375,
+  "visible": true,
+  "overlay": true,
+  "canvas": true
+ },
+ "after": {
+  "btnStillVisible": false,
+  "body": "First Hearth ERA I THE FIRST HEARTH seed stone-ashen-156 1 SOULS Year 1 · Spring 2 16°C Cloudy with scattered rain 4 ALERTS PAUSED 1 2 3 4 1 MORALE 63% -0.7 /day FOOD 28.3d -1.7 /day WATER 0d TREASURY",
+  "overlayText": false
+ },
+ "afterKeys": "First Hearth ERA I THE FIRST HEARTH seed stone-ashen-156 1 SOULS Year 1 · Spring 2 16°C Cloudy with scattered rain 4 ALERTS PAUSED 1 2 3 4 1 MORALE 63% -0.7 /da",
+ "mobile": {
+  "innerWidth": 390,
+  "scrollWidth": 390
+ },
+ "errors": [],
+ "bad": []
+}

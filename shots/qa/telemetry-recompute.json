@@ -1,0 +1,630 @@
+{
+ "generatedAt": "2026-11-01T08:12:11.509Z",
+ "source": "/Users/vulcanlabs/.dsh/sessions/--Users-vulcanlabs-Documents-deepseek-harness-default-workspace--",
+ "games": [
+  {
+   "slug": "alien-shooter",
+   "sessionIds": 1,
+   "sessionsFound": 1,
+   "recomputedTotals": {
+    "inputTokens": 208429,
+    "outputTokens": 155070,
+    "cacheReadTokens": 12966528,
+    "cacheWriteTokens": 0,
+    "totalTokens": 13330027
+   },
+   "jsonTotals": {
+    "inputTokens": 208429,
+    "outputTokens": 155070,
+    "cacheReadTokens": 12966528,
+    "cacheWriteTokens": 0,
+    "totalTokens": 13330027
+   },
+   "totalsMatch": true,
+   "compare": {
+    "inputTokens": {
+     "raw": 208429,
+     "json": 208429,
+     "match": true
+    },
+    "outputTokens": {
+     "raw": 155070,
+     "json": 155070,
+     "match": true
+    },
+    "cacheReadTokens": {
+     "raw": 12966528,
+     "json": 12966528,
+     "match": true
+    },
+    "cacheWriteTokens": {
+     "raw": 0,
+     "json": 0,
+     "match": true
+    },
+    "totalTokens": {
+     "raw": 13330027,
+     "json": 13330027,
+     "match": true
+    }
+   },
+   "recomputed": {
+    "assistantMessagesAllSessions": 99,
+    "assistantMessagesRoot": 99,
+    "toolCallsAllSessions": 100,
+    "usageEvents": 99,
+    "userMessagesByKind": {
+     "user-approval": 1,
+     "user": 1,
+     "runtime-context": 1,
+     "skill-catalog": 1,
+     "time-context": 4,
+     "tool-jobs": 1
+    },
+    "humanPrompts": 1
+   },
+   "json": {
+    "agentSteps": 99,
+    "subagentSessions": 0,
+    "subagentSteps": 0,
+    "userTurns": 1,
+    "prompts": 1
+   },
+   "rawPrompts": [
+    {
+     "at": 1793437886534,
+     "text": "Built cho tôi 1 con game Ailen Shooter",
+     "len": 38
+    }
+   ],
+   "perSession": [
+    {
+     "id": "session-fc72f1da-e926-4f43-88db-81bdcaa62bef",
+     "events": 718,
+     "assistantMsgs": 99,
+     "toolCalls": 100,
+     "usageEvents": 99,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 208429,
+      "outputTokens": 155070,
+      "cacheReadTokens": 12966528,
+      "cacheWriteTokens": 0,
+      "totalTokens": 13330027
+     }
+    }
+   ],
+   "firstEvent": "2026-10-31T09:07:18.983Z",
+   "lastEvent": "2026-11-01T07:25:42.572Z",
+   "models": [
+    "deepseek-v4.1-flash"
+   ]
+  },
+  {
+   "slug": "blade-and-mount",
+   "sessionIds": 8,
+   "sessionsFound": 8,
+   "recomputedTotals": {
+    "inputTokens": 7493845,
+    "outputTokens": 2205926,
+    "cacheReadTokens": 487968128,
+    "cacheWriteTokens": 0,
+    "totalTokens": 497667899
+   },
+   "jsonTotals": {
+    "inputTokens": 7493845,
+    "outputTokens": 2205926,
+    "cacheReadTokens": 487968128,
+    "cacheWriteTokens": 0,
+    "totalTokens": 497667899
+   },
+   "totalsMatch": true,
+   "compare": {
+    "inputTokens": {
+     "raw": 7493845,
+     "json": 7493845,
+     "match": true
+    },
+    "outputTokens": {
+     "raw": 2205926,
+     "json": 2205926,
+     "match": true
+    },
+    "cacheReadTokens": {
+     "raw": 487968128,
+     "json": 487968128,
+     "match": true
+    },
+    "cacheWriteTokens": {
+     "raw": 0,
+     "json": 0,
+     "match": true
+    },
+    "totalTokens": {
+     "raw": 497667899,
+     "json": 497667899,
+     "match": true
+    }
+   },
+   "recomputed": {
+    "assistantMessagesAllSessions": 1570,
+    "assistantMessagesRoot": 500,
+    "toolCallsAllSessions": 1736,
+    "usageEvents": 1570,
+    "userMessagesByKind": {
+     "user": 11,
+     "runtime-context": 9,
+     "skill-catalog": 8,
+     "time-context": 87,
+     "user-approval": 1,
+     "agent-message": 45,
+     "subagent-settled": 9,
+     "tool-jobs": 16
+    },
+    "humanPrompts": 11
+   },
+   "json": {
+    "agentSteps": 500,
+    "subagentSessions": 7,
+    "subagentSteps": 1070,
+    "userTurns": 4,
+    "prompts": 4
+   },
+   "rawPrompts": [
+    {
+     "at": 1793441088745,
+     "text": "Hãy build cho tôi game Blade And Mount, build chế độ Tournmanent đánh nhau được như thật trong game. Dùng 3D hay engine gì đó tuỳ bạn, đảm bảo chất lượng như game thật. Take as long as you want.\n\nTheo",
+     "len": 6179
+    },
+    {
+     "at": 1793451216731,
+     "text": "Chưa ổn, chuyển động ko mượn mà, và đòn đánh k chạm vào thân -> nhìn như đánh từ xa lỗi game. Di chuyển thì lâu lâu chân k nhấc khỏi mặt đất luôn.",
+     "len": 146
+    },
+    {
+     "at": 1793454883400,
+     "text": "đã ổn hơn 1 chút, nhưng vẫn chưa đủ tốt\nchuyển động rất arkward, tất cả luôn từ di chuyển, né, đến đánh nhau trông rất sượng chứ ko chơn tru mượt mà như những game thế giới -> có thể cần research thêm",
+     "len": 329
+    },
+    {
+     "at": 1793517367909,
+     "text": "hãy stop server giúp tôi",
+     "len": 24
+    },
+    {
+     "at": 1793444042424,
+     "text": "You are audio-engineer on the \"Blade & Mount\" browser game, working in /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/blade-and-mount. You own the entire audio experience.\n\nFIRST: read",
+     "len": 2495
+    },
+    {
+     "at": 1793441644916,
+     "text": "You are ui-audio on the \"Blade & Mount\" browser game, working in /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/blade-and-mount.\n\nFIRST: read docs/DESIGN.md fully (especially sections ",
+     "len": 3314
+    },
+    {
+     "at": 1793455543822,
+     "text": "You are animation-upgrade, a specialist joining the browser game \"Blade & Mount\" in /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/blade-and-mount. The user says movement/dodge/combat ",
+     "len": 3135
+    },
+    {
+     "at": 1793446005444,
+     "text": "You are qa-tester for the browser game \"Blade & Mount\" in /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/blade-and-mount. The game is a Mount & Blade-style 3D arena/tournament game (Th",
+     "len": 2725
+    },
+    {
+     "at": 1793441644775,
+     "text": "You are combat-ai on the \"Blade & Mount\" browser game, working in /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/blade-and-mount.\n\nFIRST: read docs/DESIGN.md (sections 5, 6.2, 6.3, 6.4",
+     "len": 2879
+    },
+    {
+     "at": 1793441628852,
+     "text": "You are character-artist on the \"Blade & Mount\" browser game, working in /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/blade-and-mount.\n\nFIRST: read docs/DESIGN.md fully, then src/cor",
+     "len": 2633
+    },
+    {
+     "at": 1793441628708,
+     "text": "You are arena-artist on the \"Blade & Mount\" browser game, working in /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/blade-and-mount.\n\nFIRST: read docs/DESIGN.md fully, then src/core/ty",
+     "len": 2363
+    }
+   ],
+   "perSession": [
+    {
+     "id": "session-34f252c3-0457-41a6-9bf5-fb6a7d2fa2d4",
+     "events": 4038,
+     "assistantMsgs": 500,
+     "toolCalls": 546,
+     "usageEvents": 500,
+     "userMessages": 4,
+     "totals": {
+      "inputTokens": 3478448,
+      "outputTokens": 486900,
+      "cacheReadTokens": 207238272,
+      "cacheWriteTokens": 0,
+      "totalTokens": 211203620
+     }
+    },
+    {
+     "id": "06066dd3-787e-4cae-9f1d-ad9d2d24e2d2",
+     "events": 866,
+     "assistantMsgs": 109,
+     "toolCalls": 120,
+     "usageEvents": 109,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 236516,
+      "outputTokens": 161190,
+      "cacheReadTokens": 17781120,
+      "cacheWriteTokens": 0,
+      "totalTokens": 18178826
+     }
+    },
+    {
+     "id": "1386c7ee-86b6-4951-bb9b-ab6d046adcbc",
+     "events": 1074,
+     "assistantMsgs": 130,
+     "toolCalls": 172,
+     "usageEvents": 130,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 853111,
+      "outputTokens": 320290,
+      "cacheReadTokens": 37634432,
+      "cacheWriteTokens": 0,
+      "totalTokens": 38807833
+     }
+    },
+    {
+     "id": "3cd798bd-7b7f-40fc-8deb-bab9de4c51f1",
+     "events": 933,
+     "assistantMsgs": 121,
+     "toolCalls": 135,
+     "usageEvents": 121,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 411388,
+      "outputTokens": 150790,
+      "cacheReadTokens": 24749824,
+      "cacheWriteTokens": 0,
+      "totalTokens": 25312002
+     }
+    },
+    {
+     "id": "4d87746e-257b-44b4-a50b-c4bac6f840f2",
+     "events": 1194,
+     "assistantMsgs": 146,
+     "toolCalls": 167,
+     "usageEvents": 146,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 300787,
+      "outputTokens": 134992,
+      "cacheReadTokens": 27245824,
+      "cacheWriteTokens": 0,
+      "totalTokens": 27681603
+     }
+    },
+    {
+     "id": "bc5b9452-f92a-4957-ba79-5ef36859821d",
+     "events": 1162,
+     "assistantMsgs": 147,
+     "toolCalls": 158,
+     "usageEvents": 147,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 307038,
+      "outputTokens": 205566,
+      "cacheReadTokens": 29073152,
+      "cacheWriteTokens": 0,
+      "totalTokens": 29585756
+     }
+    },
+    {
+     "id": "c949e250-d8c2-48db-b745-91b478d61392",
+     "events": 2009,
+     "assistantMsgs": 265,
+     "toolCalls": 270,
+     "usageEvents": 265,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 1071579,
+      "outputTokens": 440077,
+      "cacheReadTokens": 103352704,
+      "cacheWriteTokens": 0,
+      "totalTokens": 104864360
+     }
+    },
+    {
+     "id": "ed588d3d-63e1-465d-bc59-ec8a4856540c",
+     "events": 1153,
+     "assistantMsgs": 152,
+     "toolCalls": 168,
+     "usageEvents": 152,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 834978,
+      "outputTokens": 306121,
+      "cacheReadTokens": 40892800,
+      "cacheWriteTokens": 0,
+      "totalTokens": 42033899
+     }
+    }
+   ],
+   "firstEvent": "2026-10-31T09:58:47.298Z",
+   "lastEvent": "2026-11-01T07:25:38.549Z",
+   "models": [
+    "deepseek-v4.1-flash"
+   ]
+  },
+  {
+   "slug": "first-hearth",
+   "sessionIds": 9,
+   "sessionsFound": 9,
+   "recomputedTotals": {
+    "inputTokens": 6031701,
+    "outputTokens": 2241876,
+    "cacheReadTokens": 403650944,
+    "cacheWriteTokens": 0,
+    "totalTokens": 411924521
+   },
+   "jsonTotals": {
+    "inputTokens": 6031701,
+    "outputTokens": 2241876,
+    "cacheReadTokens": 403650944,
+    "cacheWriteTokens": 0,
+    "totalTokens": 411924521
+   },
+   "totalsMatch": true,
+   "compare": {
+    "inputTokens": {
+     "raw": 6031701,
+     "json": 6031701,
+     "match": true
+    },
+    "outputTokens": {
+     "raw": 2241876,
+     "json": 2241876,
+     "match": true
+    },
+    "cacheReadTokens": {
+     "raw": 403650944,
+     "json": 403650944,
+     "match": true
+    },
+    "cacheWriteTokens": {
+     "raw": 0,
+     "json": 0,
+     "match": true
+    },
+    "totalTokens": {
+     "raw": 411924521,
+     "json": 411924521,
+     "match": true
+    }
+   },
+   "recomputed": {
+    "assistantMessagesAllSessions": 1434,
+    "assistantMessagesRoot": 250,
+    "toolCallsAllSessions": 1633,
+    "usageEvents": 1434,
+    "userMessagesByKind": {
+     "user-approval": 1,
+     "user": 11,
+     "runtime-context": 10,
+     "skill-catalog": 9,
+     "time-context": 61,
+     "agent-message": 107,
+     "subagent-settled": 23,
+     "tool-jobs": 5,
+     "working-directory": 1
+    },
+    "humanPrompts": 11
+   },
+   "json": {
+    "agentSteps": 250,
+    "subagentSessions": 8,
+    "subagentSteps": 1184,
+    "userTurns": 3,
+    "prompts": 3
+   },
+   "rawPrompts": [
+    {
+     "at": 1793462050952,
+     "text": "# PROJECT: INFINITE CIVILIZATION\n## An Ambitious, Deep, Living World Civilization Simulation\n\nYou are not merely a coding assistant. You are an autonomous world-class game development studio with unli",
+     "len": 20246
+    },
+    {
+     "at": 1793494782353,
+     "text": "đang có khá nhiều vấn đề, find and fix root cause: \n- Game đang khá giật lag, cảm giác như đang 1 FPS/s vậy, hoặc glitching gì đó\n- Đang phải ra các decisions liên tục, người chơi chưa kịp làm gì đã p",
+     "len": 291
+    },
+    {
+     "at": 1793517477153,
+     "text": "move conv này vào workspace game-board",
+     "len": 38
+    },
+    {
+     "at": 1793462412200,
+     "text": "You are content-econ, the economy/world content designer on the First Hearth game studio (Team Lead: lead).\n\nWorking directory: /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/first-hea",
+     "len": 4924
+    },
+    {
+     "at": 1793462940509,
+     "text": "You are qa, principal QA/verification engineer on the First Hearth game studio (Team Lead: lead).\n\nWorking directory: /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/first-hearth\nYour s",
+     "len": 3756
+    },
+    {
+     "at": 1793462939863,
+     "text": "You are sim-industry, senior simulation engineer on the First Hearth game studio (Team Lead: lead).\n\nWorking directory: /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/first-hearth\nYour",
+     "len": 5070
+    },
+    {
+     "at": 1793462940218,
+     "text": "You are renderer, principal graphics engineer on the First Hearth game studio (Team Lead: lead).\n\nWorking directory: /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/first-hearth\nYour sh",
+     "len": 3644
+    },
+    {
+     "at": 1793462412358,
+     "text": "You are content-lore, the research/society/narrative designer on the First Hearth game studio (Team Lead: lead).\n\nWorking directory: /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/firs",
+     "len": 4811
+    },
+    {
+     "at": 1793462940368,
+     "text": "You are ui, principal UI/UX engineer on the First Hearth game studio (Team Lead: lead).\n\nWorking directory: /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/first-hearth\nYour shared task",
+     "len": 4152
+    },
+    {
+     "at": 1793462412496,
+     "text": "You are world-sim, the living-world simulation engineer on the First Hearth game studio (Team Lead: lead).\n\nWorking directory: /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/first-hear",
+     "len": 6738
+    },
+    {
+     "at": 1793462940063,
+     "text": "You are sim-society, senior simulation engineer on the First Hearth game studio (Team Lead: lead).\n\nWorking directory: /Users/vulcanlabs/Documents/deepseek-harness/default-workspace/first-hearth\nYour ",
+     "len": 6518
+    }
+   ],
+   "perSession": [
+    {
+     "id": "session-937b5cbb-4b98-4159-822a-96cf5625ad73",
+     "events": 2396,
+     "assistantMsgs": 250,
+     "toolCalls": 345,
+     "usageEvents": 250,
+     "userMessages": 3,
+     "totals": {
+      "inputTokens": 1628334,
+      "outputTokens": 333968,
+      "cacheReadTokens": 84976128,
+      "cacheWriteTokens": 0,
+      "totalTokens": 86938430
+     }
+    },
+    {
+     "id": "0075a2bd-7f01-4dda-9e2e-6be48e2ad89a",
+     "events": 664,
+     "assistantMsgs": 81,
+     "toolCalls": 86,
+     "usageEvents": 81,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 246445,
+      "outputTokens": 185558,
+      "cacheReadTokens": 13661952,
+      "cacheWriteTokens": 0,
+      "totalTokens": 14093955
+     }
+    },
+    {
+     "id": "545a08b1-d75f-41c1-bb6d-6e1eea03514c",
+     "events": 2079,
+     "assistantMsgs": 255,
+     "toolCalls": 285,
+     "usageEvents": 255,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 1085177,
+      "outputTokens": 277977,
+      "cacheReadTokens": 73475840,
+      "cacheWriteTokens": 0,
+      "totalTokens": 74838994
+     }
+    },
+    {
+     "id": "77c794da-5654-4cf5-b074-c54bfd896da7",
+     "events": 1423,
+     "assistantMsgs": 175,
+     "toolCalls": 178,
+     "usageEvents": 175,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 460187,
+      "outputTokens": 246211,
+      "cacheReadTokens": 51710720,
+      "cacheWriteTokens": 0,
+      "totalTokens": 52417118
+     }
+    },
+    {
+     "id": "810f9542-37ad-4f99-9038-950d93d3a6a9",
+     "events": 921,
+     "assistantMsgs": 116,
+     "toolCalls": 130,
+     "usageEvents": 116,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 481809,
+      "outputTokens": 257814,
+      "cacheReadTokens": 30086400,
+      "cacheWriteTokens": 0,
+      "totalTokens": 30826023
+     }
+    },
+    {
+     "id": "88c972da-4295-48f2-ab3c-b9dee15f8269",
+     "events": 478,
+     "assistantMsgs": 59,
+     "toolCalls": 63,
+     "usageEvents": 59,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 210283,
+      "outputTokens": 154329,
+      "cacheReadTokens": 8195968,
+      "cacheWriteTokens": 0,
+      "totalTokens": 8560580
+     }
+    },
+    {
+     "id": "978b3aca-bf8c-4634-94cc-a9b0e00becb5",
+     "events": 1333,
+     "assistantMsgs": 173,
+     "toolCalls": 195,
+     "usageEvents": 173,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 1116820,
+      "outputTokens": 330735,
+      "cacheReadTokens": 56298624,
+      "cacheWriteTokens": 0,
+      "totalTokens": 57746179
+     }
+    },
+    {
+     "id": "bfdad5d0-d436-49a5-80fd-823591d611e0",
+     "events": 1226,
+     "assistantMsgs": 154,
+     "toolCalls": 165,
+     "usageEvents": 154,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 356693,
+      "outputTokens": 231654,
+      "cacheReadTokens": 35711104,
+      "cacheWriteTokens": 0,
+      "totalTokens": 36299451
+     }
+    },
+    {
+     "id": "e1d497e4-5881-4e50-b184-59d42c963e7c",
+     "events": 1385,
+     "assistantMsgs": 171,
+     "toolCalls": 186,
+     "usageEvents": 171,
+     "userMessages": 1,
+     "totals": {
+      "inputTokens": 445953,
+      "outputTokens": 223630,
+      "cacheReadTokens": 49534208,
+      "cacheWriteTokens": 0,
+      "totalTokens": 50203791
+     }
+    }
+   ],
+   "firstEvent": "2026-10-31T15:53:56.437Z",
+   "lastEvent": "2026-11-01T07:25:33.002Z",
+   "models": [
+    "deepseek-v4.1-flash"
+   ]
+  }
+ ]
+}
