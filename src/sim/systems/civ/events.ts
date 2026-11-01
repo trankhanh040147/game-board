@@ -91,7 +91,9 @@ export interface EffectsOptions {
 // fastest way to make a simulation feel like a slot machine, so the director
 // enforces quiet minimums between the big beats.
 const SEVERITY3_MIN_GAP = 50; // days between severity-3 event *starts*
-const DECISION_MIN_GAP = 10; // days between decision-bearing events
+// Real-time-aware breathing room: the player should get at least ~20-30 real
+// seconds between decisions at normal speed. Early game uses a wider gap.
+const DECISION_GAP_BY_ERA = [45, 38, 32, 28, 24, 22, 20];
 const COOLDOWN_MULTIPLIER = 2; // an event id never re-fires before 2x its cooldown
 
 const CATEGORY_KIND: Record<EventDef['category'], ChronicleEntry['kind']> = {
@@ -963,7 +965,11 @@ function collectCandidates(ctx: SimContext): ScoredEvent[] {
     // this (they were announced earlier and are handled by the scheduler).
     if (def.severity >= 3 && ctx.tick - lastSevere < SEVERITY3_MIN_GAP) continue;
     // Open questions need breathing room: never stack decision events.
-    if ((def.choices?.length ?? 0) > 0 && ctx.tick - lastDecision < DECISION_MIN_GAP) continue;
+    if ((def.choices?.length ?? 0) > 0) {
+      if (s.events.pending.length > 0) continue; // one open question at a time
+      const gap = DECISION_GAP_BY_ERA[Math.min(era, DECISION_GAP_BY_ERA.length - 1)] ?? 30;
+      if (ctx.tick - lastDecision < gap) continue;
+    }
     if (def.requiresFlag && (s.flags[def.requiresFlag] ?? 0) !== 0) continue;
     if (s.events.scheduled.some((e) => e.eventId === id)) continue;
     if (s.events.pending.some((p) => p.eventId === id)) continue;
@@ -1029,7 +1035,17 @@ export function fireEvent(ctx: SimContext, def: EventDef, telegraphed = false): 
 
   let decision: PendingDecision | null = null;
   const choices = (def.choices ?? []).filter((ch) => !ch.requires || conditionOk(ctx, ch.requires));
-  if (choices.length > 0) {
+  const decisionCap = capitalOf(s);
+  const anyAffordable = choices.length === 0 || choices.some((ch) => !ch.cost || !decisionCap || canAfford(decisionCap, ch.cost));
+  if (choices.length > 0 && !anyAffordable) {
+    // Nobody can act on this: don't trap the player behind an unresolvable
+    // modal. The moment passes and the world moves on.
+    s.flags['event:last_decision'] = ctx.tick;
+    s.events.history.push({ eventId: id, tick: ctx.tick, choiceId: '__none' });
+    if (s.events.history.length > 300) s.events.history.splice(0, s.events.history.length - 300);
+    s.stats.eventsSurvived++;
+    ctx.notify(`${def.title}: we lacked the means to act. The moment passed.`, 'info', 'hourglass');
+  } else if (choices.length > 0) {
     s.flags['event:last_decision'] = ctx.tick;
     const causes = def.causeHints?.length ? def.causeHints : def.severity >= 2 ? [def.text.slice(0, 120)] : [];
     decision = {
@@ -1139,6 +1155,23 @@ export function applyDecisionChoice(
   choiceId: string,
 ): ActionResult {
   const s = state;
+  if (choiceId === '__none' || choiceId === '') {
+    // "Let it pass": always available so no decision can ever soft-lock the game.
+    const cap0 = capitalOf(s);
+    const idx0 = s.events.pending.findIndex((d) => d.id === decision.id);
+    if (idx0 >= 0) s.events.pending.splice(idx0, 1);
+    s.events.history.push({ eventId: decision.eventId, tick: s.tick, choiceId: '__none' });
+    if (s.events.history.length > 300) s.events.history.splice(0, s.events.history.length - 300);
+    s.stats.eventsSurvived++;
+    if (cap0) {
+      cap0.morale = Math.max(0, cap0.morale - 1.5);
+      s.society.stability = Math.max(0, s.society.stability - 0.6);
+      for (const c of s.citizens) if (c.alive && c.settlementId === cap0.id) c.morale = Math.max(0, c.morale - 2);
+    }
+    pushNotification(s, `${decision.title}: the matter was let pass.`, 'info', 'hourglass');
+    addChronicle(s, `${decision.title} — Let Pass`, 'The question came before the hearth, and the hearth chose silence. Not every matter can be answered with the means at hand.', 'society', 1);
+    return { ok: true, message: 'Let it pass' };
+  }
   const choice = decision.choices.find((ch) => ch.id === choiceId);
   if (!choice) return { ok: false, message: 'No such choice' };
   const cap = capitalOf(s);

@@ -139,12 +139,12 @@ interface Label {
 
 interface FogMask {
   canvas: HTMLCanvasElement;
-  temp: HTMLCanvasElement;
+  /** explored snapshot for incremental reveal (one byte per tile) */
+  revealed: Uint8Array;
   mapX: number;
   mapY: number;
   mapW: number;
   mapH: number;
-  hash: number;
 }
 
 interface RenderStats {
@@ -233,7 +233,7 @@ export class WorldRenderer {
 
   // fog
   private fog: FogMask | null = null;
-  private fogHash = 0;
+  private fogHole: HTMLCanvasElement | null = null;
   private fogTimer = 0;
 
   // input
@@ -426,7 +426,6 @@ export class WorldRenderer {
       this.cam.setWorld(world.width, world.height);
       this.decoDirty = true;
       this.fog = null;
-      this.fogHash = 0;
       this.actors.length = 0;
       this.decoHash = 0;
       this.lastBakedRoadsHash = -1;
@@ -446,7 +445,6 @@ export class WorldRenderer {
       this.terrain.clear();
       this.bank.setSeason(season, weather?.snow ?? 0);
       this.decoDirty = true;
-      this.fog = null;
     }
 
     // -- camera ------------------------------------------------------------
@@ -563,7 +561,6 @@ export class WorldRenderer {
     this.decoHash = 0;
     this.lastBakedRoadsHash = -1;
     this.fog = null;
-    this.fogHash = 0;
     this.actors.length = 0;
     this.critters.length = 0;
     this.buildingKey = '';
@@ -1483,19 +1480,86 @@ export class WorldRenderer {
   private updateFog(state: GameState, world: WorldState, dtMs: number): void {
     this.fogTimer -= dtMs;
     if (this.fog && this.fogTimer > 0) return;
-    this.fogTimer = 220;
+    this.fogTimer = 160;
+    if (!this.fogEnabled) return;
     const explored = world.explored;
-    // cheap rolling hash of the explored mask
-    let hash = 0;
-    for (let i = 0; i < explored.length; i += 3) hash = (Math.imul(hash, 31) + explored[i]) | 0;
-    hash = (hash * 31 + explored.length) | 0;
-    if (this.fog && hash === this.fogHash) return;
-    this.fogHash = hash;
-    this.bakeFog(world);
+    let fog = this.fog;
+    let rebuild = false;
+    if (!fog || fog.revealed.length !== explored.length) rebuild = true;
+    if (!rebuild) {
+      // Cheap change detection: compare the explored snapshot (12k bytes).
+      const snap = fog!.revealed;
+      for (let i = 0; i < explored.length; i++) {
+        if (explored[i] !== snap[i]) { rebuild = true; break; }
+      }
+    }
+    if (rebuild) {
+      this.buildFog(world);
+      fog = this.fog;
+      if (!fog) return;
+    }
+    // Incremental reveal: punch soft holes for tiles explored since last update.
+    const fogMask = fog!;
+    const snap = fogMask.revealed;
+    const brush = this.fogHoleBrush();
+    const fctx = fogMask.canvas.getContext('2d');
+    if (!fctx || !brush) return;
+    const w = world.width;
+    const h = world.height;
+    const s = FOG_SCALE;
+    const hw = HALF_W * s;
+    const hh = HALF_H * s;
+    const ox = -fogMask.mapX * s;
+    const oy = -fogMask.mapY * s;
+    const r = Math.max(9, hw * 3.6);
+    const tiles = world.tiles;
+    let punched = 0;
+    fctx.globalCompositeOperation = 'destination-out';
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        const idx = row + x;
+        if (explored[idx] === snap[idx]) continue;
+        snap[idx] = explored[idx];
+        if (!explored[idx]) continue;
+        const t = tiles[idx];
+        const e = t ? this.palette.heightPx(t) * s : 0;
+        const nx = ox + (x - y) * hw;
+        const ny = oy + (x + y) * hh - e;
+        fctx.drawImage(brush, nx - r, ny - r, r * 2, r * 2);
+        punched++;
+        if (punched > 600) break;
+      }
+      if (punched > 600) break;
+    }
+    fctx.globalCompositeOperation = 'source-over';
     void state;
   }
 
-  private bakeFog(world: WorldState): void {
+  /** Create the soft-edged brush used to carve revealed land out of the fog. */
+  private fogHoleBrush(): HTMLCanvasElement | null {
+    if (this.fogHole) return this.fogHole;
+    const size = 64;
+    const c = makeCanvas(size, size);
+    const ctx = c.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(0.55, 'rgba(0,0,0,1)');
+    g.addColorStop(0.78, 'rgba(0,0,0,0.55)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    this.fogHole = c;
+    return c;
+  }
+
+  /**
+   * Full fog rebuild: a dark vellum wash over the map with soft, feathered
+   * holes over explored tiles. This is O(canvas) with no per-tile path or blur
+   * filter, so it costs a few milliseconds instead of ~400 ms.
+   */
+  private buildFog(world: WorldState): void {
     const w = world.width;
     const h = world.height;
     const mapX = -(h - 1) * HALF_W - HALF_W;
@@ -1504,79 +1568,15 @@ export class WorldRenderer {
     const mapH = (w + h) * HALF_H + 220;
     const cw = Math.max(1, Math.ceil(mapW * FOG_SCALE));
     const ch = Math.max(1, Math.ceil(mapH * FOG_SCALE));
-    if (!this.fog) {
-      this.fog = {
-        canvas: makeCanvas(cw, ch),
-        temp: makeCanvas(cw, ch),
-        mapX,
-        mapY,
-        mapW,
-        mapH,
-        hash: this.fogHash,
-      };
-    }
-    const fog = this.fog;
-    if (fog.canvas.width !== cw || fog.canvas.height !== ch) {
-      fog.canvas.width = cw;
-      fog.canvas.height = ch;
-      fog.temp.width = cw;
-      fog.temp.height = ch;
-    }
-    fog.mapX = mapX;
-    fog.mapY = mapY;
-    fog.mapW = mapW;
-    fog.mapH = mapH;
-    const tctx = fog.temp.getContext('2d');
-    const fctx = fog.canvas.getContext('2d');
-    if (!tctx || !fctx) return;
-    tctx.setTransform(1, 0, 0, 1, 0, 0);
-    tctx.clearRect(0, 0, cw, ch);
-    const s = FOG_SCALE;
-    const ox = -mapX * s;
-    const oy = -mapY * s;
-    const explored = world.explored;
-    const tiles = world.tiles;
-    tctx.beginPath();
-    const hw = HALF_W * s;
-    const hh = HALF_H * s;
-    for (let y = 0; y < h; y++) {
-      const row = y * w;
-      for (let x = 0; x < w; x++) {
-        if (explored[row + x]) continue;
-        const t = tiles[row + x];
-        if (!t) continue;
-        const e = this.palette.heightPx(t) * s;
-        const nx = ox + (x - y) * hw;
-        const ny = oy + (x + y) * hh - e;
-        tctx.moveTo(nx, ny);
-        tctx.lineTo(nx + hw, ny + hh);
-        tctx.lineTo(nx, ny + 2 * hh);
-        tctx.lineTo(nx - hw, ny + hh);
-        tctx.closePath();
-      }
-    }
-    tctx.fillStyle = 'rgba(19,16,12,1)';
-    tctx.fill();
-    // soft cloud edge: a tight feather plus a wide halo
-    fctx.setTransform(1, 0, 0, 1, 0, 0);
-    fctx.clearRect(0, 0, cw, ch);
-    const canFilter = typeof (fctx as CanvasRenderingContext2D & { filter?: string }).filter === 'string';
-    if (canFilter) {
-      fctx.filter = 'blur(4px)';
-      fctx.globalAlpha = 0.97;
-      fctx.drawImage(fog.temp, 0, 0);
-      fctx.filter = 'blur(14px)';
-      fctx.globalAlpha = 0.4;
-      fctx.drawImage(fog.temp, 0, 0);
-      fctx.filter = 'none';
-      fctx.globalAlpha = 1;
-    } else {
-      fctx.drawImage(fog.temp, 0, 0);
-    }
-    // faint warm ink wash inside the fog so it reads as vellum, not void
-    fctx.globalCompositeOperation = 'source-atop';
-    fctx.fillStyle = 'rgba(76,60,38,0.16)';
-    fctx.fillRect(0, 0, cw, ch);
+    const canvas = makeCanvas(cw, ch);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    // vellum wash
+    ctx.fillStyle = 'rgba(17,14,10,0.965)';
+    ctx.fillRect(0, 0, cw, ch);
+    // subtle warm ink + paper grain so the fog reads as material, not void
+    ctx.fillStyle = 'rgba(76,60,38,0.16)';
+    ctx.fillRect(0, 0, cw, ch);
     const paper = makeCanvas(96, 96);
     const pctx = paper.getContext('2d');
     if (pctx) {
@@ -1590,12 +1590,39 @@ export class WorldRenderer {
         pctx.fill();
       }
     }
-    const pat = fctx.createPattern(paper, 'repeat');
+    const pat = ctx.createPattern(paper, 'repeat');
     if (pat) {
-      fctx.fillStyle = pat;
-      fctx.fillRect(0, 0, cw, ch);
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, cw, ch);
     }
-    fctx.globalCompositeOperation = 'source-over';
+    const revealed = new Uint8Array(world.explored.length);
+    revealed.fill(0);
+    const explored = world.explored;
+    const brush = this.fogHoleBrush();
+    const s = FOG_SCALE;
+    const hw = HALF_W * s;
+    const hh = HALF_H * s;
+    const ox = -mapX * s;
+    const oy = -mapY * s;
+    const r = Math.max(9, hw * 3.6);
+    if (brush) {
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let y = 0; y < h; y++) {
+        const row = y * w;
+        for (let x = 0; x < w; x++) {
+          const idx = row + x;
+          if (!explored[idx]) continue;
+          revealed[idx] = 1;
+          const t = world.tiles[idx];
+          const e = t ? this.palette.heightPx(t) * s : 0;
+          const nx = ox + (x - y) * hw;
+          const ny = oy + (x + y) * hh - e;
+          ctx.drawImage(brush, nx - r, ny - r, r * 2, r * 2);
+        }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    this.fog = { canvas, revealed, mapX, mapY, mapW, mapH };
   }
 
   private drawFogLayer(ctx: CanvasRenderingContext2D, world: WorldState): void {

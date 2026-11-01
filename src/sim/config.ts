@@ -60,7 +60,7 @@ export const LIMITS = {
   maxNotifications: 180,
   maxChronicle: 400,
   maxActiveEvents: 6,
-  maxPendingDecisions: 3,
+  maxPendingDecisions: 1,
   maxExpeditions: 4,
   maxTradeRoutes: 24,
   maxNeighbors: 5,

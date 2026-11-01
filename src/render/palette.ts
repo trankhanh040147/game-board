@@ -186,22 +186,33 @@ export class Palette {
   }
 
   /** Update the seasonal / weather-driven colour resolve. Returns true if anything changed. */
+  /**
+   * Update weather inputs. Returns true only when the *terrain palette* actually
+   * needs rebuilding. Rain, storm and small temperature changes are applied to
+   * the ambient/atmosphere inputs every frame without invalidating the baked
+   * terrain (rebuilding all chunks for a 3 °C change was the main source of
+   * frame hitches). Terrain is rebuilt only on season change, a snow-band
+   * change or crossing the freezing line.
+   */
   setConditions(season: SeasonId, snow: number, temperature: number, rainfall: number, storm: number): boolean {
-    const nextSnow = Math.round(clamp01(snow) * 20) / 20;
-    const nextTemp = Math.round(temperature / 3) * 3;
-    const nextRain = Math.round(clamp01(rainfall) * 4) / 4;
-    const nextStorm = Math.round(clamp01(storm) * 4) / 4;
-    if (season === this.season && nextSnow === this.snow && nextTemp === this.temperature && nextRain === this.rainfall && nextStorm === this.storm) {
-      return false;
-    }
+    const nextSnow = Math.round(clamp01(snow) * 10) / 10;
+    const nextTemp = Math.round(temperature);
+    const nextRain = Math.round(clamp01(rainfall) * 8) / 8;
+    const nextStorm = Math.round(clamp01(storm) * 8) / 8;
+    const snowBand = Math.round(clamp01(snow) * 5);
+    const tempSign = temperature < 0 ? -1 : 1;
+    const changed =
+      season !== this.season ||
+      snowBand !== Math.round(clamp01(this.snow) * 5) ||
+      tempSign !== (this.temperature < 0 ? -1 : 1);
     this.season = season;
     this.seasonIndex = SEASON_INDEX[season] ?? 1;
     this.snow = nextSnow;
     this.temperature = nextTemp;
     this.rainfall = nextRain;
     this.storm = nextStorm;
-    this.applySeason();
-    return true;
+    if (changed) this.applySeason();
+    return changed;
   }
 
   private applySeason(): void {

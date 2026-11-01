@@ -251,9 +251,14 @@ export class DecisionModal {
         </div>
       </div>
     `;
-    const footer = choices.length
-      ? `<span class="fh-faint">Your word will be recorded in the chronicle.</span>`
-      : `<button type="button" class="fh-btn is-ember clickable" data-choice="__none" data-decision="${decision.id}">Let it pass</button>`;
+    const anyUsable = choices.some((choice) => {
+      const missing = choice.cost && capital ? Object.entries(choice.cost).filter(([res, amount]) => (capital.stock[res] ?? 0) + 1e-6 < (amount ?? 0)) : [];
+      const reqOk = choice.requires ? evalCondition(choice.requires, s, c, (st, co, metric) => computeMetric(st, co, metric), () => 0.5) : true;
+      return missing.length === 0 && reqOk;
+    });
+    const footer = `
+      <span class="fh-faint">${anyUsable ? 'Your word will be recorded in the chronicle.' : 'No option is within reach right now.'}</span>
+      <button type="button" class="fh-btn is-quiet clickable" data-choice="__none" data-decision="${decision.id}">${icon('hourglass', 'fh-icon is-tiny')} Let it pass</button>`;
     this.host.open({
       id: 'decision',
       title: decision.title,
@@ -273,12 +278,7 @@ export class DecisionModal {
           const id = Number(btn.dataset.decision);
           if (!Number.isFinite(id)) return;
           btn.classList.add('is-busy');
-          if (choiceId === '__none') {
-            // Auto-pass: pick the first choice if any; otherwise the sim clears it.
-            this.svc.app.resolveDecision(id, decision.choices?.[0]?.id ?? '');
-          } else {
-            this.svc.app.resolveDecision(id, choiceId);
-          }
+          this.svc.app.resolveDecision(id, choiceId === '__none' ? '__none' : choiceId);
           this.lastKey = '';
           this.svc.refreshSoon();
           this.refresh();
