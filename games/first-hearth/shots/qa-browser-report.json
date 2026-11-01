@@ -1,0 +1,370 @@
+{
+  "url": "http://127.0.0.1:5299",
+  "generatedAt": "2026-11-01T01:53:11.157Z",
+  "consoleErrors": [],
+  "pageErrors": [],
+  "checks": [
+    {
+      "name": "1600x900: app boots (__FIRST_HEARTH__.ready)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600x900: welcome overlay dismisses",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600x900: first-run tour skipped for static checks",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600x900: window.__game exposed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1600x900: content validation clean in app",
+      "ok": true,
+      "detail": "contentErrors=0"
+    },
+    {
+      "name": "1600x900: canvas rendered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "panel codex: opens",
+      "ok": true,
+      "detail": "1080x791 \"Discoveries\""
+    },
+    {
+      "name": "panel society: opens",
+      "ok": true,
+      "detail": "1080x791 \"Society\""
+    },
+    {
+      "name": "panel market: opens",
+      "ok": true,
+      "detail": "1080x791 \"Market\""
+    },
+    {
+      "name": "panel people: opens",
+      "ok": true,
+      "detail": "1080x791 \"People\""
+    },
+    {
+      "name": "panel almanac: opens",
+      "ok": true,
+      "detail": "1080x791 \"The Long Record\""
+    },
+    {
+      "name": "panel diplomacy: opens",
+      "ok": true,
+      "detail": "1080x791 \"Diplomacy\""
+    },
+    {
+      "name": "panel expeditions: opens",
+      "ok": true,
+      "detail": "1080x791 \"Expeditions\""
+    },
+    {
+      "name": "panel wonders: opens",
+      "ok": true,
+      "detail": "1080x791 \"Wonders\""
+    },
+    {
+      "name": "panel objectives: opens",
+      "ok": true,
+      "detail": "1080x791 \"Objectives\""
+    },
+    {
+      "name": "panel: Escape closes (see known ugly cases in report)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "rail: all panel buttons present",
+      "ok": true,
+      "detail": "found 12 controls"
+    },
+    {
+      "name": "rail codex: click opens its panel",
+      "ok": true,
+      "detail": "1080px \"Discoveries\""
+    },
+    {
+      "name": "rail market: click opens its panel",
+      "ok": true,
+      "detail": "1080px \"Market\""
+    },
+    {
+      "name": "rail almanac: click opens its panel",
+      "ok": true,
+      "detail": "1080px \"The Long Record\""
+    },
+    {
+      "name": "overlay fertility: renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay forest: renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay water: renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay pollution: renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay beauty: renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay deposits: renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay roads: renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay population: renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "minimap: present and sized",
+      "ok": true,
+      "detail": "{\"w\":296,\"h\":252}"
+    },
+    {
+      "name": "decisions modal: opens with choices",
+      "ok": true,
+      "detail": "\"A Stranger at the Fire\" choices=3"
+    },
+    {
+      "name": "save: writes a save",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "load: restores tick position",
+      "ok": true,
+      "detail": "tick 7 -> saved; after 5 ticks 12; reloaded 7"
+    },
+    {
+      "name": "export/import: JSON round-trips",
+      "ok": true,
+      "detail": "json 1396675 chars"
+    },
+    {
+      "name": "save: localStorage entry exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "perf: 100+ population injected",
+      "ok": true,
+      "detail": "pop=144"
+    },
+    {
+      "name": "perf: 4x fps >= 30",
+      "ok": true,
+      "detail": "fps=60 speed=4"
+    },
+    {
+      "name": "perf: headless tick < 25ms",
+      "ok": true,
+      "detail": "0.94ms/tick"
+    },
+    {
+      "name": "memory: 2000 ticks do not blow up (< 80MB growth)",
+      "ok": true,
+      "detail": "5.3MB delta, notifications=180, citizens=0"
+    },
+    {
+      "name": "1600x900: no horizontal overflow",
+      "ok": true,
+      "detail": "scrollW=1600 innerW=1600 bad="
+    },
+    {
+      "name": "1280x800: app boots (__FIRST_HEARTH__.ready)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1280x800: welcome overlay dismisses",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1280x800: no horizontal overflow",
+      "ok": true,
+      "detail": "scrollW=1280 innerW=1280 bad="
+    },
+    {
+      "name": "1280x800: no vertical overflow (shell fits)",
+      "ok": true,
+      "detail": "scrollH=800 innerH=800"
+    },
+    {
+      "name": "onboarding: fresh localStorage shows the welcome overlay",
+      "ok": true,
+      "detail": "{\"w\":1600,\"h\":900}"
+    },
+    {
+      "name": "onboarding: tour starts after Begin and pauses the world",
+      "ok": true,
+      "detail": "{\"visible\":true,\"paused\":true,\"step\":\"1 / 8\",\"title\":\"A fire in an empty valley\",\"nextLabel\":\"Next\",\"hasSkip\":true}"
+    },
+    {
+      "name": "onboarding: tour opens on step 1 / 8",
+      "ok": true,
+      "detail": "1 / 8"
+    },
+    {
+      "name": "onboarding: First Steps dock hidden during the tour (no card overlap)",
+      "ok": true,
+      "detail": "{\"card\":null,\"dock\":null,\"rows\":0,\"overlapPx2\":0,\"dockHidden\":true}"
+    },
+    {
+      "name": "onboarding: tour has 8 distinct steps",
+      "ok": true,
+      "detail": "count=8 counters=1 / 8,2 / 8,3 / 8,4 / 8,5 / 8,6 / 8,7 / 8,8 / 8 titles=8"
+    },
+    {
+      "name": "onboarding: final step reads 8 / 8 and begins the watch",
+      "ok": true,
+      "detail": "8 / 8 \"Begin your watch\""
+    },
+    {
+      "name": "onboarding: finishing the tour persists (fh-tour-v1=done)",
+      "ok": true,
+      "detail": "{\"hidden\":true,\"key\":\"done\"}"
+    },
+    {
+      "name": "onboarding: finished tour does not replay on reload",
+      "ok": true,
+      "detail": "{\"tourHidden\":true,\"welcomeHidden\":true}"
+    },
+    {
+      "name": "onboarding: tour restarts when its key is cleared",
+      "ok": true,
+      "detail": "{\"visible\":true,\"paused\":true,\"step\":\"1 / 8\",\"title\":\"A fire in an empty valley\",\"nextLabel\":\"Next\",\"hasSkip\":true}"
+    },
+    {
+      "name": "onboarding: Skip the tour persists",
+      "ok": true,
+      "detail": "{\"hidden\":true,\"key\":\"done\"}"
+    },
+    {
+      "name": "onboarding: Help -> Replay the tour works",
+      "ok": true,
+      "detail": "{\"visible\":true,\"paused\":true,\"step\":\"1 / 8\",\"title\":\"A fire in an empty valley\",\"nextLabel\":\"Next\",\"hasSkip\":true}"
+    },
+    {
+      "name": "onboarding: returning player (existing save, no tour key) still gets the tour",
+      "ok": true,
+      "detail": "saved=true tick=11 pendingAtSave=0 tour={\"visible\":true,\"paused\":true,\"step\":\"1 / 8\",\"title\":\"A fire in an empty valley\",\"nextLabel\":\"Next\",\"hasSkip\":true}"
+    },
+    {
+      "name": "onboarding: First Steps checklist is docked and has steps",
+      "ok": true,
+      "detail": "{\"w\":296,\"rows\":7,\"gatherDone\":false,\"hidden\":false}"
+    },
+    {
+      "name": "onboarding: First Steps updates as you build (Gather food done)",
+      "ok": true,
+      "detail": "built=true {\"gatherDone\":true,\"doneRows\":1}"
+    },
+    {
+      "name": "onboarding: decision modal always offers \"Let it pass\"",
+      "ok": true,
+      "detail": "{\"text\":\"Let it pass\",\"w\":98,\"disabled\":false}"
+    },
+    {
+      "name": "onboarding: \"Let it pass\" resolves the decision (no soft-lock)",
+      "ok": true,
+      "detail": "{\"pending\":0,\"history\":{\"eventId\":\"wanderer_arrives\",\"tick\":11,\"choiceId\":\"__none\"},\"modalGone\":true}"
+    },
+    {
+      "name": "onboarding: decision removed from the screen after Let it pass",
+      "ok": true,
+      "detail": "{\"pending\":0,\"history\":{\"eventId\":\"wanderer_arrives\",\"tick\":11,\"choiceId\":\"__none\"},\"modalGone\":true}"
+    },
+    {
+      "name": "onboarding 1280x800: tour card fits and is visible",
+      "ok": true,
+      "detail": "{\"visible\":true,\"paused\":true,\"step\":\"1 / 8\",\"title\":\"A fire in an empty valley\",\"nextLabel\":\"Next\",\"hasSkip\":true}"
+    },
+    {
+      "name": "console/page errors == 0",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "shots": [
+    "shots/qa-map-1600x900.png",
+    "shots/qa-panel-codex-1600x900.png",
+    "shots/qa-panel-society-1600x900.png",
+    "shots/qa-panel-market-1600x900.png",
+    "shots/qa-panel-people-1600x900.png",
+    "shots/qa-panel-almanac-1600x900.png",
+    "shots/qa-panel-diplomacy-1600x900.png",
+    "shots/qa-panel-expeditions-1600x900.png",
+    "shots/qa-panel-wonders-1600x900.png",
+    "shots/qa-panel-objectives-1600x900.png",
+    "shots/qa-rail-codex-1600x900.png",
+    "shots/qa-rail-market-1600x900.png",
+    "shots/qa-rail-almanac-1600x900.png",
+    "shots/qa-overlay-fertility-1600x900.png",
+    "shots/qa-overlay-deposits-1600x900.png",
+    "shots/qa-minimap-1600x900.png",
+    "shots/qa-decision-modal-1600x900.png",
+    "shots/qa-4x-100pop-1600x900.png",
+    "shots/qa-map-1280x800.png",
+    "shots/qa-panel-almanac-1280x800.png",
+    "shots/qa-panel-market-1280x800.png",
+    "shots/final-hero.png",
+    "shots/qa-onboarding-welcome-1600x900.png",
+    "shots/qa-tour-step1-1600x900.png",
+    "shots/qa-tour-step4-build-1600x900.png",
+    "shots/qa-tour-step6-codex-1600x900.png",
+    "shots/qa-tour-step8-decisions-1600x900.png",
+    "shots/qa-tour-replay-1600x900.png",
+    "shots/qa-tour-returning-player-1600x900.png",
+    "shots/qa-first-steps-1600x900.png",
+    "shots/qa-first-steps-updated-1600x900.png",
+    "shots/qa-decision-let-it-pass-1600x900.png",
+    "shots/qa-tour-1280x800.png",
+    "shots/qa-first-steps-1280x800.png"
+  ],
+  "perf": {
+    "1600x900": {
+      "pop": 144,
+      "fps": 60,
+      "msPerTick": 0.94,
+      "speed": 4
+    },
+    "heap": {
+      "before": 34450050,
+      "after": 40046487,
+      "deltaMB": 5.3,
+      "notes": 180,
+      "citizens": 0
+    }
+  },
+  "functional": {}
+}

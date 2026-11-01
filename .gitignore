@@ -27,3 +27,20 @@ scratch/
 .env
 .env.*
 !.env.example
+
+# First Hearth development screenshots: keep only the curated, README-referenced set.
+# The rest stay local (they are QA artifacts, not product).
+games/first-hearth/shots/*
+!games/first-hearth/shots/first-hearth-hero-1600.png
+!games/first-hearth/shots/first-hearth-hero-1920.png
+!games/first-hearth/shots/first-hearth-codex-1920.png
+!games/first-hearth/shots/first-hearth-1280.png
+!games/first-hearth/shots/ui-final-codex-1600.png
+!games/first-hearth/shots/final-hero.png
+!games/first-hearth/shots/final-hud.png
+!games/first-hearth/shots/qa-tour-1280x800.png
+!games/first-hearth/shots/qa-browser-report.json
+!games/first-hearth/shots/qa-map-1600x900.png
+!games/first-hearth/shots/qa-first-steps-1600x900.png
+!games/first-hearth/shots/qa-decision-modal-1600x900.png
+!games/first-hearth/shots/qa-panel-codex-1600x900.png
