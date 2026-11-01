@@ -1,63 +1,63 @@
 # ALIEN SHOOTER — Neon Arena
 
-Game bắn súng sinh tồn góc nhìn từ trên xuống (top-down arena shooter), chạy **hoàn toàn trong trình duyệt** — không cần cài đặt, không cần internet, không dùng thư viện ngoài.
+A top-down survival arena shooter that runs **entirely in the browser** — no install, no internet, no third-party libraries.
 
-Bạn là người sống sót cuối cùng ở thuộc địa XR-7. Sinh vật ngoài hành tinh tràn ra từ các tổ theo từng đợt. Bắn, lướt né, nhặt XP, chọn nâng cấp và sống sót càng lâu càng tốt.
+You are the last survivor of colony XR-7. Aliens pour out of the nests in waves. Shoot, dash, collect XP, pick upgrades, and stay alive as long as you can.
 
 ![ALIEN SHOOTER](screenshots/02-combat.png)
 
 ---
 
-## Chạy game
+## Run the game
 
-**Cách 1 — mở trực tiếp:** nhấp đúp vào `index.html` (hoặc kéo thả vào Chrome / Safari / Edge / Firefox).
+**Option 1 — open it directly:** double-click `index.html` (or drag it into Chrome / Safari / Edge / Firefox).
 
-**Cách 2 — chạy qua local server** (nếu trình duyệt chặn file local):
+**Option 2 — serve it locally** (if your browser blocks local files):
 
 ```bash
-cd alien-shooter
+cd games/alien-shooter
 python3 -m http.server 8080
-# mở http://localhost:8080
+# open http://localhost:8080
 ```
 
-Không cần build, không cần `npm install`.
+No build step, no `npm install`.
 
 ---
 
-## Điều khiển
+## Controls
 
-| Desktop | Hành động |
+| Desktop | Action |
 |---|---|
-| `W` `A` `S` `D` / phím mũi tên | Di chuyển |
-| Chuột | Ngắm |
-| Giữ chuột trái | Bắn (tự động theo nhịp) |
-| `Space` | Lướt né — bất tử 0.3s, có hồi chiêu |
-| `P` / `Esc` | Tạm dừng |
-| `M` | Bật / tắt tiếng |
-| `1` `2` `3` | Chọn nâng cấp khi lên cấp |
-| `R` | Chơi lại (ở màn hình thua) |
+| `W` `A` `S` `D` / arrow keys | Move |
+| Mouse | Aim |
+| Hold left mouse button | Fire (auto-cycled) |
+| `Space` | Dash — 0.3 s invulnerability, on a cooldown |
+| `P` / `Esc` | Pause |
+| `M` | Mute / unmute |
+| `1` `2` `3` | Choose an upgrade on level up |
+| `R` | Retry (on the game-over screen) |
 
-**Trên điện thoại / tablet:** nửa trái màn hình là joystick di chuyển, nửa phải là joystick ngắm (giữ là tự bắn), nút **DASH** ở góc phải để lướt. Nút ⏸ / 🔊 ở góc phải trên.
+**On phones / tablets:** the left half of the screen is a movement joystick, the right half is an aim joystick (hold to fire continuously), and the **DASH** button sits in the bottom-right corner. Pause ⏸ and mute 🔊 are in the top-right.
 
 ---
 
 ## Gameplay
 
-- **Đợt (wave) vô hạn**, độ khó tăng dần: nhiều alien hơn, máu dày hơn, nhanh hơn.
-- **5 loại sinh vật:**
-  - 🟢 **Crawler** — bò thẳng tới bạn, yếu nhưng đông.
-  - 🟡 **Skitter** — chạy nhanh, zic-zac, rất khó trúng.
-  - 🟣 **Spitter** — giữ khoảng cách và phun axit (có dấu hiệu tụ năng lượng trước khi bắn).
-  - 🟠 **Brute** — trâu bò, giáp dày, chết sẽ tách ra 2 Crawler.
-  - 💗 **Boss** — mỗi **5 đợt**, có 4 chiêu: bắn vòng tròn, bắn 3 tia nhắm thẳng, gọi đệ, lao thẳng vào bạn.
-- **XP & nâng cấp:** hạ gục alien rơi XP; lên cấp thì chọn 1 trong 3 nâng cấp ngẫu nhiên.
-  Có **16 nâng cấp** chia 2 nhóm: chỉ số (sát thương, tốc độ bắn, multi-shot, xuyên phá, chí mạng, máu, hồi máu, tốc chạy, từ trường hút XP…) và nâng cấp hiếm (đạn nổ, sóng xung kích khi lướt, drone hộ tống).
-- **Điểm số:** hạ gục + thưởng dọn đợt. **Kỷ lục** được lưu vào `localStorage`.
-- **Chiến thuật:** giữ khoảng cách, ưu tiên Spitter, dùng dash để né đạn và xuyên qua đám đông. Nhặt XP để lên cấp — đừng chỉ đứng bắn.
+- **Endless waves**, with difficulty ramping throughout: more aliens, more health, more speed.
+- **5 enemy types:**
+  - 🟢 **Crawler** — crawls straight at you; weak but numerous.
+  - 🟡 **Skitter** — fast, zig-zagging, very hard to hit.
+  - 🟣 **Spitter** — keeps its distance and spits acid (it charges up visibly before firing).
+  - 🟠 **Brute** — tough, thick plating, splits into 2 Crawlers when killed.
+  - 💗 **Boss** — every **5 waves**, with 4 attacks: radial bursts, a triple aimed volley, summoning minions, and a headlong charge at you.
+- **XP & upgrades:** killing aliens drops XP; on level up you pick 1 of 3 random upgrades.
+  There are **16 upgrades** in two groups: stat upgrades (damage, fire rate, multi-shot, piercing, crit, health, regen, move speed, XP magnet…) and rare upgrades (explosive rounds, dash shockwave, escort drone).
+- **Scoring:** kills plus wave-clear bonuses. Your **best run** is stored in `localStorage`.
+- **Tactics:** keep your distance, kill Spitters first, use dash to dodge shots and slip through crowds. Collect XP to level up — don't just stand and shoot.
 
 ---
 
-## Hình ảnh
+## Screenshots
 
 | | |
 |---|---|
@@ -65,31 +65,31 @@ Không cần build, không cần `npm install`.
 | ![Boss](screenshots/03-boss.png) | ![Level up](screenshots/04-levelup.png) |
 | ![Mobile](screenshots/05-mobile.png) | ![Game over](screenshots/06-gameover.png) |
 
-## Cấu trúc dự án
+## Project structure
 
 ```
 alien-shooter/
-├── index.html          # khung UI: title, HUD, pause, level-up, game over
-├── css/style.css       # toàn bộ style neon/glass UI + responsive mobile
+├── index.html          # UI shell: title, HUD, pause, level-up, game over
+├── css/style.css       # all neon/glass UI styling + mobile responsiveness
 └── js/
-    ├── core.js         # math, WebAudio synth engine, input (chuột/phím/touch), camera, FX hạt
-    ├── entities.js     # Player, 5 loại Alien, AI, vẽ vector, va chạm
-    └── game.js         # vòng lặp game, wave director, nâng cấp, render arena, HUD
+    ├── core.js         # math, WebAudio synth engine, input (mouse/keyboard/touch), camera, particle FX
+    ├── entities.js     # Player, the 5 alien types, AI, vector drawing, collision
+    └── game.js         # game loop, wave director, upgrades, arena rendering, HUD
 ```
 
-- **Không dependency, không WASM, không asset ảnh/âm thanh ngoài** — mọi thứ đều là vector Canvas 2D và âm thanh tổng hợp bằng Web Audio API.
-- **Tự hạ chất lượng** nếu máy yếu: bỏ scanline/nebula/bớt hạt khi FPS < 44 (class `lowfx` trên `body`).
-- **Không dùng ES module** để có thể chạy trực tiếp từ `file://`.
+- **No dependencies, no WASM, no external image or audio assets** — everything is Canvas 2D vectors and sound synthesised through the Web Audio API.
+- **Degrades gracefully on weak hardware:** drops scanlines/nebula and thins out particles when FPS < 44 (the `lowfx` class on `body`).
+- **Deliberately no ES modules**, so it can run straight from `file://`.
 
-## Tinh chỉnh cân bằng
+## Balance tuning
 
-Các thông số dễ chỉnh nhất:
+The most useful knobs:
 
-| Muốn đổi gì | Sửa ở |
+| To change | Edit |
 |---|---|
-| Máu / tốc độ / sát thương từng alien, XP rơi ra | `ENEMY_DEFS` trong `js/entities.js` |
-| Chỉ số khởi đầu của người chơi (`damage`, `fireRate`, `maxHp`…) | `Player.reset()` trong `js/entities.js` |
-| Số lượng alien mỗi đợt, nhịp spawn, mốc boss | `startWave()` trong `js/game.js` |
-| Danh sách nâng cấp | `UPGRADES` trong `js/game.js` |
+| Each alien's health / speed / damage, XP dropped | `ENEMY_DEFS` in `js/entities.js` |
+| Player starting stats (`damage`, `fireRate`, `maxHp`…) | `Player.reset()` in `js/entities.js` |
+| Aliens per wave, spawn pacing, boss milestones | `startWave()` in `js/game.js` |
+| The upgrade list | `UPGRADES` in `js/game.js` |
 
-Chúc bạn sống sót lâu hơn tôi. 👾
+Good luck surviving longer than I did. 👾
