@@ -8,12 +8,13 @@ tokens, the agent hours, the reasoning, the tests, the dead ends and the fixes.
 
 | Game | What it is | Play | Making-of |
 | --- | --- | --- | --- |
-| **First Hearth** | A living-world civilisation simulation: one wanderer, an unnamed valley, a hearth | [first-hearth.vercel.app](https://first-hearth.vercel.app) | `/making-of/first-hearth` on the board |
-| **Blade & Mount** | A 3D tournament melee game in the browser, in the spirit of Mount & Blade's arena | [blade-and-mount.vercel.app](https://blade-and-mount.vercel.app) | `/making-of/blade-and-mount` on the board |
-| **Alien Shooter** | A top-down neon arena survival shooter with zero dependencies and no build step | [alien-shooter-omega.vercel.app](https://alien-shooter-omega.vercel.app) | `/making-of/alien-shooter` on the board |
+| **First Hearth** | A living-world civilisation simulation: one wanderer, an unnamed valley, a hearth | [first-hearth.vercel.app](https://first-hearth.vercel.app) | [making-of](https://game-board-pi.vercel.app/making-of/first-hearth) |
+| **Blade & Mount** | A 3D tournament melee game in the browser, in the spirit of Mount & Blade's arena | [blade-and-mount.vercel.app](https://blade-and-mount.vercel.app) | [making-of](https://game-board-pi.vercel.app/making-of/blade-and-mount) |
+| **Alien Shooter** | A top-down neon arena survival shooter with zero dependencies and no build step | [alien-shooter-omega.vercel.app](https://alien-shooter-omega.vercel.app) | [making-of](https://game-board-pi.vercel.app/making-of/alien-shooter) |
 
-The board collects all three games and their making-of exhibits under one roof; the live URLs of
-every deployment are recorded in [`data/deploy.json`](data/deploy.json).
+**The board is live at [game-board-pi.vercel.app](https://game-board-pi.vercel.app)** — it collects all
+three games and their making-of exhibits under one roof. The live URL of every deployment is
+recorded in [`data/deploy.json`](data/deploy.json).
 
 ## The point
 
