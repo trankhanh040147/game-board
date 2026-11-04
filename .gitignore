@@ -1,0 +1,15 @@
+# Dependencies (the project intentionally has none, but keep this ready)
+node_modules/
+
+# Test / tool output
+coverage/
+*.log
+npm-debug.log*
+tools/shots/
+tools/.chrome-profile/
+
+# Editor / OS noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
