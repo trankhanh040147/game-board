@@ -94,13 +94,6 @@ const scratchMatrix2 = mat4();
 
 /* ------------------------------------------------------------- utilities -- */
 
-function hexToCss(rgb) {
-  const r = Math.round(clamp01(rgb[0]) * 255);
-  const g = Math.round(clamp01(rgb[1]) * 255);
-  const b = Math.round(clamp01(rgb[2]) * 255);
-  return `rgb(${r} ${g} ${b})`;
-}
-
 function toast(text, seconds = 2.2) {
   // The HUD canvas owns in-race messages; DOM toasts own the menus. Rendering
   // both would show every message twice.
@@ -464,7 +457,7 @@ function updateCamera(dt) {
       if (app.camera.mode !== 'orbit') {
         const line = app.trackScene.track.startLine;
         app.camera.setMode('orbit');
-        app.camera.setOrbit([line.x, line.y, line.z], 32, 11.5);
+        app.camera.setOrbit([line.x, line.y, line.z], 24, 8.5);
       }
       app.camera.update(dt, null, app.trackScene.track);
     }
@@ -849,8 +842,8 @@ function boot() {
           app.camera.setMode('orbit');
           app.camera.setOrbit(
             [built.track.startLine.x, built.track.startLine.y, built.track.startLine.z],
-            32,
-            11.5,
+            24,
+            8.5,
           );
           app.ui.setLoading(null);
           app.ui.setStatus('Ready. The grid is waiting.');
