@@ -1381,3 +1381,47 @@ dt {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Compact layouts
+   Short or narrow viewports squeeze the garage header into the card columns;
+   these rules keep the header reserved, trim the type and drop the longest
+   blurb lines so the whole flow stays usable down to ~900x600.
+   ------------------------------------------------------------------------ */
+
+@media (max-height: 740px), (max-width: 1080px) {
+  .panel-head {
+    flex: 0 0 auto;
+  }
+
+  .panel-title {
+    font-size: clamp(19px, 3.1vh, 30px);
+    line-height: 1.05;
+  }
+
+  .screen--garage {
+    gap: 8px;
+  }
+
+  .garage-grid {
+    min-height: 0;
+  }
+
+  .col-title {
+    font-size: 11px;
+  }
+}
+
+@media (max-height: 640px) {
+  .card__blurb {
+    display: none;
+  }
+
+  .garage-col::after {
+    font-size: clamp(48px, 6vw, 80px);
+  }
+
+  .title-stats {
+    gap: 18px;
+  }
+}

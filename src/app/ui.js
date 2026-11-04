@@ -242,9 +242,16 @@ export function createUi(options) {
     if (!nodes['best-record']) return;
     if (!Number.isFinite(seconds) || seconds <= 0) {
       nodes['best-record'].textContent = '—';
+      nodes['best-record'].removeAttribute('title');
       return;
     }
-    nodes['best-record'].textContent = `${formatLapTime(seconds)} · ${TRACK_DEFS[trackId]?.name ?? ''}`;
+    // The title screen has a fixed stat column, so keep it to the time and put
+    // the circuit name in the tooltip.
+    nodes['best-record'].textContent = formatLapTime(seconds);
+    nodes['best-record'].setAttribute(
+      'title',
+      `Best lap on ${TRACK_DEFS[trackId]?.name ?? 'this circuit'}`,
+    );
   }
 
   /* -------------------------------------------------------------- results -- */

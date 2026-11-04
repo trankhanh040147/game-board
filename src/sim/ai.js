@@ -42,6 +42,20 @@ const MAX_RUBBER_BAND = 0.08;
 /** Lateral offset range kept inside the drivable road (m). */
 const EDGE_MARGIN = 1.3;
 
+/**
+ * Launch etiquette: for this long after GO every AI holds the lane it starts
+ * in instead of cutting to the racing line, so the grid does not converge into
+ * the player's car in the first seconds of a race.
+ */
+const LAUNCH_HOLD_TIME = 2;
+/** A car this far fore/aft and this far sideways counts as side-by-side. */
+const SIDE_GUARD_ALONG = 6.5;
+const SIDE_GUARD_WIDTH = 2.3;
+/** Steering authority kept when a neighbour is alongside on that side. */
+const SIDE_GUARD_CUT = 0.25;
+/** Nudge applied away from a side-by-side neighbour (normalised steer). */
+const SIDE_GUARD_NUDGE = 0.1;
+
 /** @param {number} value @param {number} fallback */
 function finiteOr(value, fallback) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -135,6 +149,8 @@ export function createAiDriver(options = {}) {
     seed,
     /** Smoothed lateral offset target, metres from the centreline. */
     offset: 0,
+    /** Lane captured at GO, held during the launch (metres from centreline). */
+    launchLane: null,
     /** Smoothed speed target; keeps throttle/brake from sawtoothing. */
     targetSpeed: 0,
     mistakeTimer: 0,
@@ -218,6 +234,13 @@ export function aiInput(ai, car, track, race, dt) {
   /** Grip available from the surface under the car right now (0..1). */
   const surfaceGrip = car.surface === 'grass' ? 0.55 : car.surface === 'kerb' ? 0.85 : 1;
 
+  // Remember the lane this car starts in and hold it during the launch.
+  if (!Number.isFinite(ai.launchLane)) {
+    ai.launchLane = clamp(query.lateral, -drivable, drivable);
+  }
+  const launchHold =
+    !!race && Number.isFinite(race.time) && race.time < LAUNCH_HOLD_TIME;
+
   /* -- racing line -------------------------------------------------------- */
   const lookahead = clamp(12 + speed * 0.35, 10, 46);
   const aheadS = query.s + lookahead * 0.5;
@@ -226,10 +249,17 @@ export function aiInput(ai, car, track, race, dt) {
   const cornerStrength = clamp01(Math.abs(curvatureAhead) * 55);
   // Sign comes from the curvature under the target point so the line does not
   // flip sides every sample; magnitude comes from the worst curvature ahead.
-  const lineTarget = Math.sign(curvatureAtAhead) * halfWidth * 0.34 * cornerStrength;
+  const lineTarget = launchHold
+    ? 0
+    : Math.sign(curvatureAtAhead) * halfWidth * 0.34 * cornerStrength;
 
-  // Avoid the car in front by biasing away from it.
+  // Traffic awareness:
+  // - cars ahead bias the target line away from them,
+  // - cars alongside suppress steering into them (so a launch cannot sideswipe),
+  // - a slower car directly ahead caps our speed so we do not rear-end it.
   let avoid = 0;
+  let sideGuard = 0;
+  let followSpeed = Infinity;
   if (race && Array.isArray(race.cars)) {
     const sinH = Math.sin(car.heading);
     const cosH = Math.cos(car.heading);
@@ -239,20 +269,40 @@ export function aiInput(ai, car, track, race, dt) {
       const dx = other.x - car.x;
       const dz = other.z - car.z;
       const along = dx * sinH + dz * cosH;
-      if (along <= 0.5 || along > AI_TUNING.avoidRadius * 2.2) continue;
       const side = dx * cosH - dz * sinH;
-      if (Math.abs(side) > 2.8) continue;
+      const absAlong = Math.abs(along);
+      const absSide = Math.abs(side);
+
+      if (absAlong < SIDE_GUARD_ALONG && absSide < SIDE_GUARD_WIDTH) {
+        // Side-by-side: away = -1 to the left, +1 to the right.
+        const away = side >= 0 ? -1 : 1;
+        const proximity =
+          (1 - absAlong / SIDE_GUARD_ALONG) * (1 - absSide / SIDE_GUARD_WIDTH);
+        sideGuard += away * (0.35 + 0.65 * proximity);
+      }
+
+      if (along > 1 && along < AI_TUNING.avoidRadius * 1.6 && absSide < 1.5) {
+        const otherSpeed = Math.abs(finiteOr(other.speed, 0));
+        if (speed > otherSpeed + 1.5) {
+          followSpeed = Math.min(followSpeed, otherSpeed + 2);
+        }
+      }
+
+      if (launchHold) continue;
+      if (along <= 0.5 || along > AI_TUNING.avoidRadius * 2.2) continue;
+      if (absSide > 2.8) continue;
       const urgency = 1 - clamp01(along / (AI_TUNING.avoidRadius * 2.2));
       avoid -= Math.sign(side || 1) * 1.8 * urgency;
     }
   }
 
+  const cruiseOffset = ai.laneBias * (halfWidth - 2) + lineTarget + avoid;
   const offsetTarget = clamp(
-    ai.laneBias * (halfWidth - 2) + lineTarget + avoid,
+    launchHold ? ai.launchLane : cruiseOffset,
     -drivable,
     drivable,
   );
-  ai.offset = damp(ai.offset, offsetTarget, AI_TUNING.laneChangeRate * 8, step);
+  ai.offset = damp(ai.offset, offsetTarget, launchHold ? 8 : AI_TUNING.laneChangeRate * 8, step);
 
   /* -- pure pursuit steering --------------------------------------------- */
   const targetPoint = sampleTrack(track, query.s + lookahead);
@@ -276,6 +326,14 @@ export function aiInput(ai, car, track, race, dt) {
   const gripInput = clamp(lateralDemand / usableLat, 0, 1);
   const magnitude = Math.max(Math.abs(kinematicInput), gripInput);
   let steer = (alpha >= 0 ? 1 : -1) * magnitude;
+
+  // Never steer into a car that is alongside: cut steering towards it and add a
+  // small nudge away, so grid launches cannot sideswipe the player.
+  if (sideGuard !== 0) {
+    const guard = clamp(sideGuard, -1, 1);
+    if (steer * guard < 0) steer *= SIDE_GUARD_CUT;
+    steer += guard * SIDE_GUARD_NUDGE;
+  }
 
   // Heading error is also used to scrub speed if the car is pointed wrong.
   const headingError = Math.abs(alpha);
@@ -317,6 +375,7 @@ export function aiInput(ai, car, track, race, dt) {
   // Never smooth past the hard limit for the corner the car is in right now.
   const hardLimit = Math.sqrt(maxLat / Math.max(1e-4, Math.abs(nowCurvature) + 1e-4));
   let targetSpeed = Math.min(smoothed, Math.max(hardLimit * 1.35, planned * 0.6));
+  if (followSpeed < targetSpeed) targetSpeed = followSpeed;
   ai.targetSpeed = targetSpeed;
 
   /* -- mistakes (seeded, deterministic) ----------------------------------- */

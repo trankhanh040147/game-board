@@ -675,17 +675,15 @@ function buildHudState() {
 
   const minimapCars = (race?.cars ?? []).map((car) => ({ x: car.x, z: car.z, isPlayer: car.isPlayer }));
 
-  const goFlash = app.mode !== 'racing' || app.time < app.goFlashUntil;
-  const raceState = goFlash
-    ? 'countdown'
-    : app.mode === 'racing'
-      ? (race?.state ?? 'running')
-      : app.mode;
+  // Hold the countdown frame briefly after GO so the big "GO" flash is visible,
+  // but never let that bleed into the menus (the HUD blanks on title/garage).
+  const goFlash =
+    app.mode === 'racing' && app.goFlashUntil > 0 && app.time < app.goFlashUntil;
+  const raceState =
+    app.mode === 'racing' ? (goFlash ? 'countdown' : (race?.state ?? 'running')) : app.mode;
   const countdown = race?.state === 'countdown'
     ? Math.max(0, Math.ceil(race.countdown ?? 0))
-    : goFlash && app.goFlashUntil > 0
-      ? 0
-      : 0;
+    : 0;
   const delta =
     lastLap !== null && Number.isFinite(lastLap) && Number.isFinite(bestLap) && bestLap > 0
       ? lastLap - bestLap
