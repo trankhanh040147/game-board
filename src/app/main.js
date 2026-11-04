@@ -190,6 +190,7 @@ function buildEntrants(carId) {
 
 function startRace(carId, trackId) {
   if (app.mode === 'loading') return;
+  app.audio?.resume();
   app.mode = 'loading';
   app.trackId = trackId;
   app.ui.setStatus(`BUILDING ${TRACK_DEFS[trackId]?.name ?? 'CIRCUIT'}…`);
@@ -264,6 +265,7 @@ function quitToGarage() {
 }
 
 function enterGarage() {
+  app.audio?.resume();
   app.mode = 'garage';
   app.ui.showGarage();
   app.input.setEnabled(false);
