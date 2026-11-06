@@ -216,6 +216,11 @@ export const builds: Build[] = registryGames
   .map(toBuild)
   .filter((build): build is Build => Boolean(build))
 
+/** Registry games with no session-log telemetry: shown on the shelf, excluded from every total. */
+export const unmeasuredGames: GameEntry[] = registryGames.filter(
+  (game) => !builds.some((build) => build.slug === game.slug),
+)
+
 export function buildBySlug(slug: string | undefined): Build | undefined {
   if (!slug) return undefined
   return builds.find((build) => build.slug === slug)

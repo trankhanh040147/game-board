@@ -12,6 +12,10 @@ tokens, the agent hours, the reasoning, the tests, the dead ends and the fixes.
 | **Blade & Mount** | A 3D tournament melee game in the browser, in the spirit of Mount & Blade's arena | [blade-and-mount.vercel.app](https://blade-and-mount.vercel.app) | [making-of](https://game-board-pi.vercel.app/making-of/blade-and-mount) |
 | **Alien Shooter** | A top-down neon arena survival shooter with zero dependencies and no build step | [alien-shooter-omega.vercel.app](https://alien-shooter-omega.vercel.app) | [making-of](https://game-board-pi.vercel.app/making-of/alien-shooter) |
 
+A fourth game, **[Sunmeadow Isles](https://city-sim-six.vercel.app)** (an isometric 3D city builder made with
+Seleya, Fabric Coding), also sits on the board under "Also on the shelf". Its session was not exported,
+so it has no making-of page and is **not counted** in any number on this page.
+
 **The board is live at [game-board-pi.vercel.app](https://game-board-pi.vercel.app)** — it collects all
 three games and their making-of exhibits under one roof. The live URL of every deployment is
 recorded in [`data/deploy.json`](data/deploy.json).
@@ -77,7 +81,8 @@ heuristics.
 ├── games/
 │   ├── first-hearth/                  TypeScript · Vite · Canvas 2D  (84 tests)
 │   ├── blade-and-mount/               TypeScript · Vite · Three.js   (112 tests)
-│   └── alien-shooter/                 plain HTML/CSS/Canvas, no build step
+│   ├── alien-shooter/                 plain HTML/CSS/Canvas, no build step
+│   └── city-sim/                      TypeScript · Vite · React · Three.js  (Seleya build, no receipts)
 ├── scripts/
 │   ├── extract-sessions.mjs           session logs -> telemetry JSON + BUILD-HISTORY.md
 │   └── deploy.sh                      deploy all four Vercel projects
@@ -107,6 +112,7 @@ The games:
 cd games/first-hearth    && npm install && npm run dev    # http://127.0.0.1:5280
 cd games/blade-and-mount && npm install && npm run dev    # http://127.0.0.1:5273
 cd games/alien-shooter   # open index.html, or: python3 -m http.server 8080
+cd games/city-sim        && pnpm install && pnpm dev
 ```
 
 ## Regenerate the making-of data
@@ -123,7 +129,7 @@ timestamp, and runs a redaction pass over every published string.
 
 ## Deploy
 
-Four independent Vercel projects, all from this monorepo:
+Five independent Vercel projects, all from this monorepo:
 
 | Project | Root directory | Build | Output |
 | --- | --- | --- | --- |
@@ -131,10 +137,11 @@ Four independent Vercel projects, all from this monorepo:
 | `first-hearth` | `games/first-hearth` | `npm run build` | `dist` |
 | `blade-and-mount` | `games/blade-and-mount` | `npm run build` | `dist` |
 | `alien-shooter` | `games/alien-shooter` | staged static copy | `dist` |
+| `city-sim` | `games/city-sim` | `pnpm build` | `dist` |
 
 ```bash
 npx vercel login
-./scripts/deploy.sh            # deploy all four, verify, write data/deploy.json
+./scripts/deploy.sh            # deploy all five, verify, write data/deploy.json
 ```
 
 See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the dashboard-equivalent settings, cache headers,

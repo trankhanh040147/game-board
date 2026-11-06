@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-01T09:16:50.462Z",
+  "generatedAt": "2026-11-06T02:24:42.160Z",
   "games": {
     "blade-and-mount": {
       "url": "https://blade-and-mount.vercel.app",
@@ -12,10 +12,14 @@
     "first-hearth": {
       "url": "https://first-hearth.vercel.app",
       "deployedAt": "2026-11-01T09:09:30Z"
+    },
+    "city-sim": {
+      "url": "https://city-sim-six.vercel.app",
+      "deployedAt": "2026-11-06T02:21:00Z"
     }
   },
   "board": {
     "url": "https://game-board-pi.vercel.app",
-    "deployedAt": "2026-11-01T09:16:48Z"
+    "deployedAt": "2026-11-06T02:24:39Z"
   }
 }
