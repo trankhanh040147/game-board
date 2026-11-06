@@ -12,6 +12,10 @@
     "first-hearth": {
       "url": "https://first-hearth.vercel.app",
       "deployedAt": "2026-11-01T09:09:30Z"
+    },
+    "city-sim": {
+      "url": "https://city-sim-six.vercel.app",
+      "deployedAt": "2026-11-06T02:21:00Z"
     }
   },
   "board": {

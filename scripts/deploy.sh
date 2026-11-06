@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 #
-# scripts/deploy.sh — deploy the Game Board and its three games to Vercel.
+# scripts/deploy.sh — deploy the Game Board and its games to Vercel.
 #
-# Four independent Vercel projects, all built and deployed from this monorepo:
+# Five independent Vercel projects, all built and deployed from this monorepo:
 #
 #   game-board       <- repo root             (the showcase site)
 #   first-hearth     <- games/first-hearth
 #   blade-and-mount  <- games/blade-and-mount
 #   alien-shooter    <- games/alien-shooter
+#   city-sim         <- games/city-sim
 #
-# The script is idempotent: re-running it re-deploys the same four projects to
+# The script is idempotent: re-running it re-deploys the same five projects to
 # production and rewrites data/deploy.json. It never logs in (run
 # `npx vercel login` yourself), never creates a project under another name and
 # never writes secrets.
 #
 # Usage:
 #   npx vercel login             # once, interactively
-#   ./scripts/deploy.sh          # deploy all four + verify + write data/deploy.json
+#   ./scripts/deploy.sh          # deploy all five + verify + write data/deploy.json
 #
 # Flags:
 #   --build         run the local production build for every project first
@@ -51,6 +52,7 @@ PROJECTS=(
   "first-hearth|games/first-hearth|First Hearth — A Living Civilization|game"
   "blade-and-mount|games/blade-and-mount|Blade & Mount — Tournament of the Realm|game"
   "alien-shooter|games/alien-shooter|ALIEN SHOOTER — Neon Arena|game"
+  "city-sim|games/city-sim|Sunmeadow Isles — Miniature 3D City Builder|game"
 )
 
 TMP_FILES=()
@@ -170,6 +172,9 @@ local_build() {
     alien-shooter)
       ( cd "$ROOT/$dir" && rm -rf dist && sh -c 'mkdir -p dist && cp -R index.html css js screenshots dist/' )
       ;;
+    city-sim)
+      ( cd "$ROOT/$dir" && pnpm install --frozen-lockfile && pnpm build )
+      ;;
     *)
       ( cd "$ROOT/$dir" && npm install --no-audit --no-fund --loglevel=error && npm run build )
       ;;
@@ -272,6 +277,7 @@ write_deploy_json() {
   FH_URL="${URL_first_hearth:-}" FH_AT="${AT_first_hearth:-}" \
   BAM_URL="${URL_blade_and_mount:-}" BAM_AT="${AT_blade_and_mount:-}" \
   AS_URL="${URL_alien_shooter:-}" AS_AT="${AT_alien_shooter:-}" \
+  CS_URL="${URL_city_sim:-}" CS_AT="${AT_city_sim:-}" \
   node -e '
     const fs = require("fs");
     const file = process.env.DEPLOY_JSON;
@@ -294,6 +300,7 @@ write_deploy_json() {
     put("first-hearth", process.env.FH_URL, process.env.FH_AT);
     put("blade-and-mount", process.env.BAM_URL, process.env.BAM_AT);
     put("alien-shooter", process.env.AS_URL, process.env.AS_AT);
+    put("city-sim", process.env.CS_URL, process.env.CS_AT);
     fs.writeFileSync(file, JSON.stringify(out, null, 2) + "\n");
     console.log(`  wrote ${file}`);
   '
@@ -330,8 +337,8 @@ if [ "$BUILD_PREFLIGHT" -eq 1 ]; then
 fi
 
 # URLs already recorded (used by --verify-only and as a fallback for the board check).
-URL_game_board=""; URL_first_hearth=""; URL_blade_and_mount=""; URL_alien_shooter=""
-AT_game_board=""; AT_first_hearth=""; AT_blade_and_mount=""; AT_alien_shooter=""
+URL_game_board=""; URL_first_hearth=""; URL_blade_and_mount=""; URL_alien_shooter=""; URL_city_sim=""
+AT_game_board=""; AT_first_hearth=""; AT_blade_and_mount=""; AT_alien_shooter=""; AT_city_sim=""
 
 if [ -f "$DEPLOY_JSON" ]; then
   while IFS=$'\t' read -r slug url; do
@@ -341,6 +348,7 @@ if [ -f "$DEPLOY_JSON" ]; then
       first-hearth)    URL_first_hearth="$url" ;;
       blade-and-mount) URL_blade_and_mount="$url" ;;
       alien-shooter)   URL_alien_shooter="$url" ;;
+      city-sim)        URL_city_sim="$url" ;;
     esac
   done < <(node -e '
     try {
@@ -359,6 +367,7 @@ url_for() {
     first-hearth)    printf '%s' "$URL_first_hearth" ;;
     blade-and-mount) printf '%s' "$URL_blade_and_mount" ;;
     alien-shooter)   printf '%s' "$URL_alien_shooter" ;;
+    city-sim)        printf '%s' "$URL_city_sim" ;;
   esac
 }
 
@@ -368,6 +377,7 @@ set_url() {
     first-hearth)    URL_first_hearth="$2" ;;
     blade-and-mount) URL_blade_and_mount="$2" ;;
     alien-shooter)   URL_alien_shooter="$2" ;;
+    city-sim)        URL_city_sim="$2" ;;
   esac
 }
 
@@ -377,6 +387,7 @@ set_ts() {
     first-hearth)    AT_first_hearth="$2" ;;
     blade-and-mount) AT_blade_and_mount="$2" ;;
     alien-shooter)   AT_alien_shooter="$2" ;;
+    city-sim)        AT_city_sim="$2" ;;
   esac
 }
 

@@ -142,6 +142,44 @@
       "sourceRef": "games/alien-shooter",
       "sortOrder": 3,
       "requirements": "Mouse and keyboard, or touch"
+    },
+    {
+      "slug": "city-sim",
+      "title": "Sunmeadow Isles",
+      "subtitle": "Miniature city builder",
+      "genre": "Isometric city builder",
+      "accent": "#e8956a",
+      "accent2": "#2f6f66",
+      "oneLiner": "Draw a road, zone a few homes, and watch a tiny island start to commute.",
+      "description": "An isometric 3D city builder that runs in a browser tab. Lay roads, zone homes, shops and workplaces, then watch citizens, cars and traffic jams appear on a day-and-night island. Built with Seleya, Fabric Coding, from a single sentence.",
+      "highlights": [
+        "Drag to lay roads, then zone homes, shops, industry and rooftop gardens",
+        "Live traffic: cars on the roads, jam alerts and an average trip time",
+        "Five milestone goals, zone demand meters and a Green Roofs score"
+      ],
+      "tech": [
+        "React",
+        "Three.js",
+        "Tailwind",
+        "Vite",
+        "TypeScript"
+      ],
+      "year": 2026,
+      "repoPath": "games/city-sim",
+      "media": {
+        "hero": "/media/city-sim/hero.webp",
+        "heroAlt": "Day view of a small island city: two rows of homes with rooftop gardens and a block of offices along one road, beside the City Pulse panel showing a traffic jam and a Green City bonus",
+        "gallery": [
+          {
+            "src": "/media/city-sim/welcome.webp",
+            "alt": "The opening screen: an empty island, the milestone goals and the welcome tips"
+          }
+        ]
+      },
+      "playUrl": "",
+      "sourceRef": "games/city-sim",
+      "sortOrder": 4,
+      "requirements": "Mouse and keyboard: drag to build, number keys pick tools, right-drag pans, scroll zooms"
     }
   ]
 }

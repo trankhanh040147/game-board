@@ -8,8 +8,9 @@ import {
   MODEL_LABEL,
   promptEn,
   allPrompts,
+  unmeasuredGames,
 } from '../data/telemetry'
-import { gameBySlug, site } from '../data/registry'
+import { gameBySlug, site, type GameEntry } from '../data/registry'
 import { deployUrl } from '../data/deploy'
 import {
   bars,
@@ -110,6 +111,52 @@ function shelfSection(): string {
       ${builds.map((build, index) => gameRow(build.slug, index)).join('')}
     </div>
   </section>`
+}
+
+function unmeasuredSection(): string {
+  if (unmeasuredGames.length === 0) return ''
+  return `<section class="wrap section" id="more" aria-labelledby="more-title">
+    <div class="story-section__head">
+      <h2 class="story-section__title" id="more-title">Also on the shelf</h2>
+      <span class="story-section__note">built elsewhere, so no receipts and not counted in any total above</span>
+    </div>
+    <div class="shelf">
+      ${unmeasuredGames.map(unmeasuredRow).join('')}
+    </div>
+  </section>`
+}
+
+function unmeasuredRow(game: GameEntry): string {
+  const play = deployUrl(game.slug) || game.playUrl
+  return `<article class="game-row"${accentStyle(game.slug)} aria-labelledby="game-${attr(game.slug)}">
+    <div class="game-row__media reveal">
+      ${frame({
+        src: game.media.hero,
+        alt: game.media.heroAlt,
+        title: game.title,
+        caption: game.genre,
+        loading: 'lazy',
+      })}
+    </div>
+    <div class="game-row__body">
+      <div class="game-row__spine reveal" aria-hidden="true"></div>
+      <h3 class="game-row__title reveal" id="game-${attr(game.slug)}">${esc(game.title)}</h3>
+      <p class="game-row__meta reveal">
+        <span>${esc(game.genre)}</span><span class="sep">/</span>
+        <span>${game.tech.map((tech) => esc(tech)).join(' · ')}</span>
+      </p>
+      <p class="game-row__line reveal">${esc(game.oneLiner)}</p>
+      <ul class="game-row__highlights reveal">
+        ${game.highlights.slice(0, 3).map((highlight) => `<li>${esc(highlight)}</li>`).join('')}
+      </ul>
+      <div class="actions reveal">
+        ${playButton(play, 'Play ' + game.title)}
+        <a class="link-arrow" href="${attr(site.repoUrl)}/tree/main/${attr(game.repoPath)}" target="_blank" rel="noopener">Source <span class="link-arrow__arrow" aria-hidden="true">↗</span></a>
+      </div>
+      <p class="game-row__req meta">Built with Seleya, Fabric Coding, from one prompt. Its session was not exported, so there are no prompt, token or time figures for it.</p>
+      ${game.requirements ? `<p class="game-row__req meta">${esc(game.requirements)}</p>` : ''}
+    </div>
+  </article>`
 }
 
 function gameRow(slug: string, index: number): string {
@@ -264,6 +311,6 @@ export function view(): PageView {
   return {
     title: 'Game Board — three browser games, written by an AI agent',
     description: site.tagline,
-    html: `${hero()}${ledgerSection()}${shelfSection()}${engineSection()}${honestClose()}`,
+    html: `${hero()}${ledgerSection()}${shelfSection()}${unmeasuredSection()}${engineSection()}${honestClose()}`,
   }
 }
