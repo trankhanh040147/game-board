@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --diorama-cream: #fcf8f0;
+    --diorama-sand: #efe4ce;
+    --diorama-ink: #2c303a;
+    --diorama-terracotta: #e07a5f;
+    --diorama-teal: #2a9d8f;
+    --diorama-ochre: #e9c46a;
+    --diorama-garden: #40916c;
+    font-family: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  html,
+  body,
+  #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #f3ead7;
+    color: #2c303a;
+    font-family: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Custom subtle scrollbars for compact sheets */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(44, 48, 58, 0.28);
+  border-radius: 9999px;
+}
+
+@keyframes banner-pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.94);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes confetti-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 6px) scale(0.4) rotate(0deg);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--tx, 18px), var(--ty, -22px)) scale(1.05) rotate(var(--rot, 140deg));
+  }
+}
+
+@keyframes sparkle-pulse {
+  0%,
+  100% {
+    transform: scale(0.82) rotate(0deg);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.18) rotate(15deg);
+    opacity: 1;
+  }
+}
+
+@keyframes congestion-bar-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.22);
+  }
+}
+
+.animate-banner-pop {
+  animation: banner-pop-in 0.36s cubic-bezier(0.22, 1.25, 0.36, 1) forwards;
+}
+
+.animate-confetti-piece {
+  animation: confetti-float 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.animate-sparkle {
+  animation: sparkle-pulse 1.4s ease-in-out infinite;
+}
+
+.animate-congestion-pulse {
+  animation: congestion-bar-pulse 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-banner-pop,
+  .animate-confetti-piece,
+  .animate-sparkle,
+  .animate-congestion-pulse {
+    animation: none !important;
+  }
+}
