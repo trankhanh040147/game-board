@@ -31,7 +31,8 @@ export interface TileSnapshot {
 export interface PlacementUndo {
   label: string;
   tool: ToolKind;
-  previousMoney: number;
+  /** Money the placement actually spent; undo refunds only this, so income earned since is kept. */
+  cost: number;
   tiles: TileSnapshot[];
 }
 
@@ -105,7 +106,7 @@ export function restorePlacementUndo(state: GameState, undo: PlacementUndo): boo
       target.load = snap.load ?? 0;
     }
   }
-  state.money = undo.previousMoney;
+  state.money += undo.cost;
   return true;
 }
 

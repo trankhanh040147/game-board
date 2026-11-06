@@ -483,7 +483,7 @@ export default function App() {
   // Undo tracking
   const activeStrokeRef = useRef<{
     tool: ToolKind;
-    previousMoney: number;
+    cost: number;
     tilesMap: Map<string, TileSnapshot>;
   } | null>(null);
   const lastUndoRef = useRef<PlacementUndo | null>(null);
@@ -686,7 +686,7 @@ export default function App() {
   const handleUndoLastPlacement = () => {
     const undo = lastUndoRef.current;
     if (!undo) return;
-    const refund = Math.max(0, undo.previousMoney - stateRef.current.money);
+    const refund = Math.max(0, undo.cost);
     const restored = restorePlacementUndo(stateRef.current, undo);
     if (restored) {
       lastUndoRef.current = null;
@@ -727,6 +727,16 @@ export default function App() {
     const snap = prevTile ? captureTileSnapshot(prevTile) : null;
     const prevMoney = s.money;
 
+    const unlocked = deriveUnlockedTools(s, economyRef.current.population);
+    if (!unlocked.has("garden")) {
+      const reqPop = UNLOCK_POP_REQUIREMENTS.garden ?? 100;
+      showToast(
+        `Rooftop gardens unlock at ${reqPop} pop (currently ${economyRef.current.population} pop)`,
+        "warning",
+      );
+      return;
+    }
+
     const res = placeGarden(s, gx, gy);
     if (!res.ok && res.reason) {
       showToast(res.reason, "warning");
@@ -737,7 +747,7 @@ export default function App() {
         const undoRecord: PlacementUndo = {
           label: "Rooftop Garden",
           tool: "garden",
-          previousMoney: prevMoney,
+          cost: prevMoney - s.money,
           tiles: [snap],
         };
         lastUndoRef.current = undoRecord;
@@ -799,7 +809,7 @@ export default function App() {
         }
         activeStrokeRef.current = {
           tool: toolRef.current,
-          previousMoney: stateRef.current.money,
+          cost: 0,
           tilesMap: new Map<string, TileSnapshot>(),
         };
       },
@@ -824,7 +834,7 @@ export default function App() {
         if (!activeStrokeRef.current) {
           activeStrokeRef.current = {
             tool: toolRef.current,
-            previousMoney: stateRef.current.money,
+            cost: 0,
             tilesMap: new Map<string, TileSnapshot>(),
           };
         }
@@ -839,9 +849,11 @@ export default function App() {
               ? captureTileSnapshot(existingTile)
               : null;
 
+          const moneyBefore = stateRef.current.money;
           const res = applyToolAt(stateRef.current, t.x, t.y, toolRef.current);
           if (res.changed) {
             anyChanged = true;
+            stroke.cost += moneyBefore - stateRef.current.money;
             if (preSnap) {
               stroke.tilesMap.set(key, preSnap);
             }
@@ -868,7 +880,7 @@ export default function App() {
                 ? `${stroke.tilesMap.size} ${toolDef?.shortLabel ?? stroke.tool} tiles`
                 : `${toolDef?.label ?? stroke.tool}`,
             tool: stroke.tool,
-            previousMoney: stroke.previousMoney,
+            cost: stroke.cost,
             tiles: Array.from(stroke.tilesMap.values()),
           };
           lastUndoRef.current = undoData;
