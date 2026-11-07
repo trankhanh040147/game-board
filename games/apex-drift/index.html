@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#04060c" />
+    <meta
+      name="description"
+      content="Apex Drift — a zero-dependency WebGL2 arcade street racer. Three cars, two night circuits, five rivals, no downloads."
+    />
+    <title>Apex Drift // WebGL2 Street Racer</title>
+    <link rel="stylesheet" href="./style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2304070d'/%3E%3Cpath d='M6 24 13 8h4l-4.5 11H20l2-5h4l-4 10z' fill='%232fd6c8'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <main class="app" id="app">
+      <div class="viewport">
+        <canvas
+          id="view"
+          class="view"
+          width="1280"
+          height="720"
+          aria-label="Apex Drift race view"
+        ></canvas>
+        <canvas id="hud" class="hud" width="1280" height="720" aria-hidden="true"></canvas>
+        <div class="fx fx--vignette" aria-hidden="true"></div>
+        <div class="fx fx--speedlines" aria-hidden="true"></div>
+        <div class="fx fx--flash" aria-hidden="true"></div>
+      </div>
+
+      <section id="screen-title" class="screen screen--title" aria-label="Title screen">
+        <div class="title-lockup">
+          <p class="eyebrow"><span class="dot" aria-hidden="true"></span>ILLEGAL STREET RACING · 3 LAPS · 5 RIVALS</p>
+          <h1 class="logo">APEX<span class="logo__slash" aria-hidden="true">//</span>DRIFT</h1>
+          <p class="tagline">A WebGL2 arcade racer built with zero dependencies. Two circuits, three machines, one clean line.</p>
+          <button id="enter-garage" class="btn btn--primary" type="button">
+            ENTER THE GARAGE <span class="key">ENTER</span>
+          </button>
+          <dl class="title-stats">
+            <div><dt>CIRCUITS</dt><dd>02</dd></div>
+            <div><dt>MACHINES</dt><dd>03</dd></div>
+            <div><dt>RIVALS</dt><dd>05</dd></div>
+            <div><dt>BEST LAP</dt><dd id="best-record">—</dd></div>
+          </dl>
+          <p class="controls-hint">
+            <span><b>W / ↑</b> throttle</span>
+            <span><b>S / ↓</b> brake</span>
+            <span><b>A D / ← →</b> steer</span>
+            <span><b>SPACE</b> handbrake</span>
+            <span><b>SHIFT</b> nitro</span>
+            <span><b>C</b> camera</span>
+            <span><b>P / ESC</b> pause</span>
+            <span><b>M</b> mute</span>
+          </p>
+        </div>
+      </section>
+
+      <section id="screen-garage" class="screen screen--garage is-hidden" aria-label="Garage">
+        <header class="panel-head">
+          <div>
+            <p class="eyebrow">GARAGE // BUILD 0.1</p>
+            <h2 class="panel-title">PICK YOUR WEAPON</h2>
+          </div>
+          <p class="panel-note">Arrow keys or click to select · ENTER to race</p>
+        </header>
+
+        <div class="garage-grid">
+          <div class="garage-col">
+            <h3 class="col-title"><span class="col-index">01</span> CAR</h3>
+            <div id="car-list" class="card-list"></div>
+          </div>
+          <div class="garage-col">
+            <h3 class="col-title"><span class="col-index">02</span> CIRCUIT</h3>
+            <div id="track-list" class="card-list"></div>
+          </div>
+          <div class="garage-col garage-col--side">
+            <h3 class="col-title"><span class="col-index">03</span> SETUP</h3>
+            <label class="option" for="quality-select">
+              <span class="option__label">RENDER QUALITY</span>
+              <select id="quality-select" class="select">
+                <option value="low">LOW</option>
+                <option value="medium" selected>MEDIUM</option>
+                <option value="high">HIGH</option>
+              </select>
+            </label>
+            <label class="option" for="camera-select">
+              <span class="option__label">CAMERA</span>
+              <select id="camera-select" class="select">
+                <option value="chase" selected>CHASE</option>
+                <option value="hood">HOOD</option>
+                <option value="far">WIDE</option>
+              </select>
+            </label>
+            <button id="mute-toggle" class="btn btn--ghost" type="button" aria-pressed="false">
+              SOUND: ON <span class="key">M</span>
+            </button>
+            <button id="start-race" class="btn btn--primary btn--wide" type="button">
+              START RACE <span class="key">ENTER</span>
+            </button>
+            <p id="loading-text" class="garage-foot">Ready. The grid is waiting.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-pause" class="screen screen--pause is-hidden" aria-label="Paused">
+        <div class="dialog">
+          <p class="eyebrow">RACE PAUSED</p>
+          <h2 class="panel-title">TAKE A BREATH</h2>
+          <div class="dialog__actions">
+            <button id="resume-race" class="btn btn--primary" type="button">RESUME <span class="key">P</span></button>
+            <button id="restart-race" class="btn btn--ghost" type="button">RESTART <span class="key">R</span></button>
+            <button id="quit-race" class="btn btn--ghost" type="button">GARAGE <span class="key">Q</span></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-results" class="screen screen--results is-hidden" aria-label="Race results">
+        <div class="dialog dialog--results">
+          <p class="eyebrow">CHEQUERED FLAG</p>
+          <h2 id="results-title" class="panel-title">RACE COMPLETE</h2>
+          <div class="results-hero">
+            <div>
+              <span class="results-label">POSITION</span>
+              <span id="results-position" class="results-value">—</span>
+            </div>
+            <div>
+              <span class="results-label">TOTAL TIME</span>
+              <span id="results-time" class="results-value">—</span>
+            </div>
+            <div>
+              <span class="results-label">BEST LAP</span>
+              <span id="results-best" class="results-value">—</span>
+            </div>
+          </div>
+          <table class="results-table">
+            <thead>
+              <tr><th>#</th><th>DRIVER</th><th>BEST LAP</th><th>TOTAL</th></tr>
+            </thead>
+            <tbody id="results-laps"></tbody>
+          </table>
+          <div class="dialog__actions">
+            <button id="again" class="btn btn--primary" type="button">RACE AGAIN <span class="key">R</span></button>
+            <button id="back-to-garage" class="btn btn--ghost" type="button">GARAGE <span class="key">Q</span></button>
+          </div>
+        </div>
+      </section>
+
+      <div id="loading" class="loading is-hidden" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <p id="loading-label">BUILDING CITY…</p>
+      </div>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+      <noscript>
+        <p class="noscript">Apex Drift needs JavaScript and WebGL2 enabled.</p>
+      </noscript>
+    </main>
+
+    <script type="module" src="./src/app/main.js"></script>
+  </body>
+</html>

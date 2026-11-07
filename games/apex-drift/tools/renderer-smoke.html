@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apex Drift — renderer smoke test</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #04070d; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <script type="module">
+      import { createRenderer } from '../src/render/renderer.js';
+      import { createMeshBuilder } from '../src/core/mesh.js';
+      import { createChaseCamera } from '../src/render/camera.js';
+
+      const result = { ok: false, error: null, frames: 0, stats: null, gl: null };
+      window.__SMOKE__ = result;
+
+      try {
+        const canvas = document.getElementById('view');
+        const renderer = createRenderer(canvas, { dpr: 1, quality: 'high' });
+        if (!renderer.ok) throw new Error(renderer.error);
+        renderer.resize();
+        result.gl = renderer.gl.getParameter(renderer.gl.VERSION);
+
+        const ground = createMeshBuilder();
+        for (let i = -10; i <= 10; i += 1) {
+          for (let j = -10; j <= 10; j += 1) {
+            const shade = ((i + j) & 1) === 0 ? [0.1, 0.11, 0.13] : [0.14, 0.15, 0.18];
+            ground.addQuad(i * 10, 0, j * 10, 1, 0, 0, 1, 10, 10, { color: shade });
+          }
+        }
+        const box = createMeshBuilder().addBox(0, 1.2, 0, 2.4, 2.4, 4.8, { color: [0.2, 0.85, 0.8], emissive: 0.1, colorTop: [0.9, 0.2, 0.4], emissiveTop: 0.5 }).build();
+        const lum = createMeshBuilder().addCylinder(6, 0, -4, 0.2, 0.15, 7, { color: [0.5, 0.5, 0.55] })
+          .addSphere(6, 7.2, -4, 0.5, { color: [1, 0.8, 0.4], emissive: 1 })
+          .build();
+
+        const camera = createChaseCamera();
+        camera.setMode('orbit');
+        camera.setOrbit([0, 1, 0], 18, 7);
+
+        const scene = {
+          camera: { position: camera.position, target: camera.target, fov: camera.fov, near: 0.3, far: 500 },
+          sun: { direction: [-0.35, 0.5, 0.78], color: [0.45, 0.58, 1.0], intensity: 0.5 },
+          ambient: { sky: [0.24, 0.28, 0.42], ground: [0.05, 0.06, 0.08], intensity: 0.95 },
+          fog: { color: [0.035, 0.045, 0.085], near: 40, far: 120 },
+          sky: { top: [0.015, 0.02, 0.055], horizon: [0.12, 0.07, 0.2], bottom: [0.02, 0.02, 0.035], sunGlow: 0.35, sunSize: 0.001, stars: 0.7 },
+          clear: [0.02, 0.02, 0.04],
+          time: 0,
+          objects: [
+            { mesh: ground.build() },
+            { mesh: box },
+            { mesh: lum, matrix: (() => { const m = new Float32Array(16); m[0]=1;m[5]=1;m[10]=1;m[15]=1; return m; })() },
+          ],
+          glows: [
+            { x: 6, y: 7.2, z: -4, size: 2.5, color: [1, 0.8, 0.4], intensity: 2.5 },
+            { x: 0, y: 0.4, z: 6, size: 1.5, color: [0.2, 0.9, 1], intensity: 1.2 },
+          ],
+          blobs: [
+            { x: 0, y: 0.02, z: 0, rx: 2.4, rz: 4, opacity: 1, color: [0.01, 0.01, 0.02] },
+          ],
+        };
+
+        let last = performance.now();
+        function frame(now) {
+          const dt = Math.min(0.05, (now - last) / 1000);
+          last = now;
+          scene.time += dt;
+          camera.update(dt, null);
+          scene.camera.position = camera.position;
+          scene.camera.target = camera.target;
+          scene.camera.fov = camera.fov;
+          renderer.renderFrame(scene);
+          result.frames += 1;
+          result.stats = { ...renderer.stats };
+          if (result.frames === 3) {
+            result.ok = true;
+            document.title = 'SMOKE OK';
+          }
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      } catch (error) {
+        result.error = `${error.message}`;
+        document.title = `SMOKE FAIL: ${error.message}`;
+        document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f66;position:fixed;left:8px;top:8px">${error.message}</pre>`);
+      }
+    </script>
+  </body>
+</html>

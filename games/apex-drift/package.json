@@ -1,0 +1,15 @@
+{
+  "name": "apex-drift",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A zero-dependency WebGL2 arcade street racer.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "serve": "node tools/serve.mjs",
+    "shots": "node tools/screenshot.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
