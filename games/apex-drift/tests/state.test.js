@@ -166,6 +166,9 @@ test('submitTotal stores total race times', () => {
   assert.equal(store.submitTotal('neon-bay', 185.4), true, 'first total time is stored');
   assert.equal(store.get('bestTotal')['neon-bay'], 185.4, 'total time readback');
   assert.equal(store.submitTotal('neon-bay', NaN), false, 'NaN total time rejected');
+  assert.equal(store.submitTotal('neon-bay', 200), false, 'slower total must not replace the best');
+  assert.equal(store.get('bestTotal')['neon-bay'], 185.4, 'best total survives a slower race');
+  assert.equal(store.submitTotal('neon-bay', 180), true, 'faster total replaces the best');
 });
 
 test('incrementRaces counts races and wins', () => {
@@ -396,4 +399,29 @@ test('formatGap renders a signed gap', () => {
   assert.equal(formatGap(-75.5), '-1:15.5', 'negative gap over a minute');
   assert.equal(formatGap(NaN), '—', 'missing gap placeholder');
   assert.equal(formatGap(Infinity), '—', 'infinite gap placeholder');
+});
+
+test('gamepad buttons do not latch after release', () => {
+  const target = createStubTarget();
+  const input = createInput({ target });
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  let held = true;
+  const pad = () => ({
+    connected: true,
+    axes: [0, 0],
+    buttons: Array.from({ length: 10 }, (_, i) => ({ pressed: held && (i === 0 || i === 2) })),
+  });
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { getGamepads: () => [pad()] } });
+  try {
+    const down = input.sample();
+    assert.equal(down.handbrake, true, 'pad button holds the handbrake');
+    assert.equal(down.nitro, true, 'pad button holds the nitro');
+    held = false;
+    const up = input.sample();
+    assert.equal(up.handbrake, false, 'handbrake releases with the pad button');
+    assert.equal(up.nitro, false, 'nitro releases with the pad button');
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'navigator', original);
+    else delete globalThis.navigator;
+  }
 });

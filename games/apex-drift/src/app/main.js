@@ -824,8 +824,10 @@ function boot() {
     onSelectCar: (carId) => app.ui?.setStatus(`${CAR_SPECS[carId]?.name ?? carId} selected`),
     onSelectTrack: (trackId) => {
       if (app.mode !== 'garage') return;
+      app.selectedTrackId = trackId;
       const scene = app.scenes.get(trackId);
       if (scene) {
+        app.ui.setLoading(null);
         app.trackScene = scene;
         app.camera.setMode('orbit');
         app.camera.setOrbit(
@@ -837,6 +839,7 @@ function boot() {
         app.ui.setStatus(`LOADING ${TRACK_DEFS[trackId]?.name ?? 'CIRCUIT'}…`);
         app.ui.setLoading(`BUILDING ${TRACK_DEFS[trackId]?.name ?? 'CIRCUIT'}…`);
         setTimeout(() => {
+          if (app.mode !== 'garage' || app.selectedTrackId !== trackId) return;
           const built = sceneForTrack(trackId);
           app.trackScene = built;
           app.camera.setMode('orbit');

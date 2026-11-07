@@ -129,6 +129,7 @@ export function createRecordStore(options = {}) {
     submitTotal(trackId, seconds) {
       if (!Number.isFinite(seconds) || seconds <= 5) return false;
       const current = records.bestTotal[trackId];
+      if (current !== undefined && current <= seconds) return false;
       records.bestTotal[trackId] = seconds;
       write();
       return true;

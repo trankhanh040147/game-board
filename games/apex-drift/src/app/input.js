@@ -161,13 +161,11 @@ export function createInput(options = {}) {
     }
     state.throttle = Math.max(-1, Math.min(1, throttle));
     state.steer = Math.max(-1, Math.min(1, steer));
-    state.handbrake = state.handbrake || Boolean(pad?.handbrake);
-    state.nitro = state.nitro || Boolean(pad?.nitro);
     return {
       throttle: state.throttle,
       steer: state.steer,
-      handbrake: state.handbrake,
-      nitro: state.nitro,
+      handbrake: state.handbrake || Boolean(pad?.handbrake),
+      nitro: state.nitro || Boolean(pad?.nitro),
     };
   }
 
