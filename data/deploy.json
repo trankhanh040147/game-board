@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T09:19:44.321Z",
+  "generatedAt": "2026-11-07T10:50:32.929Z",
   "games": {
     "blade-and-mount": {
       "url": "https://blade-and-mount.vercel.app",
@@ -19,7 +19,7 @@
     },
     "apex-drift": {
       "url": "https://apex-drift-ivory.vercel.app",
-      "deployedAt": "2026-11-07T09:19:43Z"
+      "deployedAt": "2026-11-07T10:50:31Z"
     }
   },
   "board": {
