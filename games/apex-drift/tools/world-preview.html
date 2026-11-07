@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>World preview</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #04070d; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <script type="module">
+      import { TRACK_DEFS } from '../src/sim/config.js';
+      import { buildTrack } from '../src/sim/track.js';
+      import { buildTrackMeshes } from '../src/render/worldMesh.js';
+      import { createRenderer } from '../src/render/renderer.js';
+      import { createChaseCamera } from '../src/render/camera.js';
+      import { CAR_SPECS } from '../src/sim/config.js';
+      import { createCarBodyMesh, createWheelMesh, WHEEL_OFFSETS } from '../src/render/carModel.js';
+      import { compose4, mat4, multiply4, rotationX, rotationY, translation4 } from '../src/core/math.js';
+
+      const result = { ok: false, error: null, frames: 0, info: null };
+      window.__SMOKE__ = result;
+
+      function boot() {
+        try {
+          const trackId = new URLSearchParams(location.search).get('track') || 'neon-bay';
+          const def = TRACK_DEFS[trackId];
+          const track = buildTrack(def);
+          const built = buildTrackMeshes({ track, palette: def.palette, seed: def.seed });
+          const canvas = document.getElementById('view');
+          const renderer = createRenderer(canvas, { dpr: 1, quality: 'high' });
+          if (!renderer.ok) throw new Error(renderer.error);
+          renderer.resize();
+
+          const camera = createChaseCamera();
+          camera.setMode('orbit');
+          const start = track.startLine;
+          const mode = new URLSearchParams(location.search).get('mode');
+          const s = Number(new URLSearchParams(location.search).get('s') || 0);
+          const point = track.pointAt(start.s + s);
+          if (mode === 'chase') {
+            camera.setMode('chase');
+            camera.snapTo({ x: point.x, y: point.y, z: point.z, heading: point.heading, vx: Math.sin(point.heading) * 20, vz: Math.cos(point.heading) * 20, topSpeed: 80 });
+          } else {
+            camera.setOrbit([point.x, point.y, point.z], Number(new URLSearchParams(location.search).get('r') || 24), Number(new URLSearchParams(location.search).get('h') || 8.5));
+          }
+
+          const palette = def.palette;
+          const fog = palette.fog;
+          const sun = palette.sun;
+          const scene = {
+            camera: { position: camera.position, target: camera.target, fov: camera.fov, near: 0.3, far: 1600 },
+            sun: { direction: sun.direction, color: [sun.color[0] * sun.intensity, sun.color[1] * sun.intensity, sun.color[2] * sun.intensity] },
+            ambient: palette.ambient,
+            fog: { color: fog.color, near: fog.near, far: fog.far },
+            sky: { ...palette.sky },
+            clear: palette.sky.bottom,
+            time: 0,
+            objects: built.batches.map((batch) => ({ mesh: batch.mesh })),
+            glows: built.lamps.map((lamp) => ({ x: lamp.x, y: lamp.y, z: lamp.z, size: lamp.size ?? 1.6, color: lamp.color, intensity: 1 })),
+            blobs: [],
+          };
+          if (new URLSearchParams(location.search).get('car')) {
+            const spec = CAR_SPECS[new URLSearchParams(location.search).get('car')] || CAR_SPECS.vanko;
+            const heading = point.heading;
+            const body = createCarBodyMesh(spec.palette);
+            const wheel = createWheelMesh(spec.palette);
+            scene.objects.push({ mesh: body, matrix: compose4(point.x, point.y + 0.03, point.z, heading) });
+            for (const offset of WHEEL_OFFSETS) {
+              const carMatrix = compose4(point.x, point.y + 0.02, point.z, heading);
+              let m = multiply4(mat4(), carMatrix, translation4(offset.x, offset.y, offset.z));
+              m = multiply4(mat4(), m, rotationX(0.4));
+              scene.objects.push({ mesh: wheel, matrix: m });
+            }
+            const cos = Math.cos(heading); const sin = Math.sin(heading);
+            const toWorld = (lx, ly, lz) => [point.x + cos * lx + sin * lz, point.y + ly, point.z - sin * lx + cos * lz];
+            const hc = spec.palette.headlight; const tc = spec.palette.taillight;
+            for (const lx of [-0.62, 0.62]) {
+              const [wx, wy, wz] = toWorld(lx, 0.62, 2.12);
+              scene.glows.push({ x: wx, y: wy, z: wz, size: 1.15, color: hc, intensity: 0.85 });
+              const [tx, ty, tz] = toWorld(lx * 1.05, 0.72, -2.18);
+              scene.glows.push({ x: tx, y: ty, z: tz, size: 0.78, color: tc, intensity: 1.1 });
+            }
+            scene.blobs.push({ x: point.x, y: point.y + 0.04, z: point.z, rx: 1.18, rz: 2.25, opacity: 0.9, color: [0.01, 0.01, 0.02] });
+            result.info = {
+              triangles: built.triangles,
+              batches: built.batches.map((b) => b.name),
+              lamps: built.lamps.length,
+              carTriangles: body.triangleCount + wheel.triangleCount * 4,
+            };
+          } else {
+            result.info = { triangles: built.triangles, batches: built.batches.map((b) => b.name), lamps: built.lamps.length };
+          }
+
+          let last = performance.now();
+          function frame(now) {
+            const dt = Math.min(0.05, (now - last) / 1000);
+            last = now;
+            scene.time += dt;
+            camera.update(dt, null, track);
+            scene.camera.position = camera.position;
+            scene.camera.target = camera.target;
+            scene.camera.fov = camera.fov;
+            renderer.renderFrame(scene);
+            result.frames += 1;
+            if (result.frames === 3) {
+              result.ok = true;
+              document.title = 'WORLD OK';
+            }
+            requestAnimationFrame(frame);
+          }
+          requestAnimationFrame(frame);
+        } catch (error) {
+          result.error = `${error.message}`;
+          document.title = `WORLD FAIL: ${error.message}`;
+          console.error(error);
+          document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f66;position:fixed;left:8px;top:8px;z-index:9">${error.message}</pre>`);
+        }
+      }
+      boot();
+    </script>
+  </body>
+</html>
