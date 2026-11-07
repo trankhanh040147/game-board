@@ -180,6 +180,44 @@
       "sourceRef": "games/city-sim",
       "sortOrder": 4,
       "requirements": "Mouse and keyboard: drag to build, number keys pick tools, right-drag pans, scroll zooms"
+    },
+    {
+      "slug": "apex-drift",
+      "title": "Apex Drift",
+      "subtitle": "WebGL2 street racer",
+      "genre": "Arcade street racer",
+      "accent": "#2fd6c8",
+      "accent2": "#f2b84b",
+      "oneLiner": "Pick a car, hit the neon streets and out-drift five rivals over three laps.",
+      "description": "A WebGL2 arcade street racer with no downloads: three cars, two night circuits, five AI rivals and three laps, with every model, track and sound generated in code. Plain JavaScript, zero dependencies, 132 tests and a headless-Chrome verification harness.",
+      "highlights": [
+        "Three cars with distinct handling, from grippy AWD to a tail-happy RWD drift build",
+        "Neon Bay downtown loop and Sunset Canyon with its 180-degree hairpin",
+        "Race HUD with standings, minimap, nitrous, speedometer and saved best laps"
+      ],
+      "tech": [
+        "WebGL2",
+        "JavaScript",
+        "Web Audio",
+        "Node test runner"
+      ],
+      "year": 2026,
+      "repoPath": "games/apex-drift",
+      "media": {
+        "hero": "/media/apex-drift/hero.webp",
+        "heroAlt": "Chase view of a blue sports car at the start line of Neon Bay at night, under a checkered gantry between lit glass towers, with the race HUD, standings and speedometer",
+        "gallery": [
+          {
+            "src": "/media/apex-drift/garage.webp",
+            "alt": "The garage screen: three cars, two circuits and the render quality, camera and sound settings"
+          }
+        ]
+      },
+      "playUrl": "",
+      "sourceRef": "games/apex-drift",
+      "sortOrder": 5,
+      "requirements": "Keyboard: W/S throttle and brake, A/D steer, Space handbrake, Shift nitrous. A gamepad also works. Needs a browser with WebGL2",
+      "note": "Built in eight reviewed steps, and the full commit history is kept in this repo. Its session was not exported, so there are no prompt, token or time figures for it."
     }
   ]
 }

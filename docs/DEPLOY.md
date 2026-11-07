@@ -1,6 +1,6 @@
 # Deploying the Game Board
 
-The repository ships **five independent Vercel projects**. Each game has its own
+The repository ships **six independent Vercel projects**. Each game has its own
 URL; the board links out to them and reads those URLs from `data/deploy.json`.
 
 | Vercel project   | Deployed from          | Framework | Build command                             | Output          |
@@ -10,9 +10,10 @@ URL; the board links out to them and reads those URLs from `data/deploy.json`.
 | `blade-and-mount`| `games/blade-and-mount`| Vite      | `npm run build` (`tsc --noEmit && vite build`) | `dist`     |
 | `alien-shooter`  | `games/alien-shooter`  | Other (`null`) | `mkdir -p dist && cp -R index.html css js screenshots dist/` | `dist` |
 | `city-sim`       | `games/city-sim`       | Vite      | `pnpm build` (`tsc --noEmit && vite build`), `pnpm install --frozen-lockfile` | `dist` |
+| `apex-drift`     | `games/apex-drift`     | Other (`null`) | `mkdir -p dist && cp -R index.html style.css src dist/` | `dist` |
 
 Nothing here needs environment variables, secrets, a database or a server
-runtime. All five projects are static output.
+runtime. All six projects are static output.
 
 ---
 
@@ -231,6 +232,7 @@ Production aliases after the first deploy:
 | `blade-and-mount` | <https://blade-and-mount.vercel.app> | canonical alias |
 | `alien-shooter` | <https://alien-shooter-omega.vercel.app> | `alien-shooter.vercel.app` was already taken by another account, so Vercel assigned the `-omega` alias |
 | `city-sim` | <https://city-sim-six.vercel.app> | created by `vercel deploy --prod --project city-sim --create-if-missing`; `games/city-sim/pnpm-workspace.yaml` allows esbuild's build script so a frozen-lockfile pnpm 10/11 install passes |
+| `apex-drift` | <https://apex-drift-ivory.vercel.app> | created by `vercel deploy --prod --project apex-drift --create-if-missing`; plain static copy, no build |
 | `game-board` | <https://game-board-pi.vercel.app> | `game-board.vercel.app` was taken, so Vercel assigned `-pi` |
 
 `data/deploy.json` is the authoritative list of URLs the board links to; do not
