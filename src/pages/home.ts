@@ -153,7 +153,7 @@ function unmeasuredRow(game: GameEntry): string {
         ${playButton(play, 'Play ' + game.title)}
         <a class="link-arrow" href="${attr(site.repoUrl)}/tree/main/${attr(game.repoPath)}" target="_blank" rel="noopener">Source <span class="link-arrow__arrow" aria-hidden="true">↗</span></a>
       </div>
-      <p class="game-row__req meta">Built with Seleya, Fabric Coding, from one prompt. Its session was not exported, so there are no prompt, token or time figures for it.</p>
+      <p class="game-row__req meta">${esc(game.note ?? 'Built with Seleya, Fabric Coding, from one prompt. Its session was not exported, so there are no prompt, token or time figures for it.')}</p>
       ${game.requirements ? `<p class="game-row__req meta">${esc(game.requirements)}</p>` : ''}
     </div>
   </article>`

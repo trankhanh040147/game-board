@@ -30,6 +30,8 @@ export interface GameEntry {
   sortOrder: number
   /** Human-input requirements, shown next to the Play action. */
   requirements?: string
+  /** Provenance line for shelf games; replaces the default 'session not exported' copy. */
+  note?: string
 }
 
 export interface SiteInfo {
