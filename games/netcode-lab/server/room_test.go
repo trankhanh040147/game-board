@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"netcodelab/net/transport"
+	"netcodelab/sim"
 )
 
 func newTestServer(t *testing.T) (*Room, string) {
@@ -118,5 +119,22 @@ func TestTickStats(t *testing.T) {
 	ts := tickStats(d, 64)
 	if ts.Samples != 64 || ts.MaxMs != 20 || ts.WithinBudgetPct > 98.5 || ts.WithinBudgetPct < 98.4 {
 		t.Fatalf("%+v", ts)
+	}
+}
+
+// A host stall must not turn into a misprediction: catch-up ticks with no
+// input hold the player (counted), on-time ticks repeat input (counted, A.14).
+func TestCatchUpHoldsOnTimeStarves(t *testing.T) {
+	room := NewRoom(slog.New(slog.NewTextHandler(io.Discard, nil)), "x")
+	c := &Client{room: room, inbuf: map[uint32]sim.Cmd{}, started: true, lastInput: sim.Input{Buttons: sim.BtnForward}}
+	c.state = sim.State{Pos: room.m.Spawn("blue", 0), OnGround: true}
+	before := c.state
+	c.simulate(sim.DtForRate(64), true)
+	if c.held != 1 || c.starved != 0 || c.state != before {
+		t.Fatalf("catch-up: held=%d starved=%d moved=%v", c.held, c.starved, c.state != before)
+	}
+	c.simulate(sim.DtForRate(64), false)
+	if c.starved != 1 || c.state == before {
+		t.Fatalf("on-time: starved=%d moved=%v", c.starved, c.state != before)
 	}
 }

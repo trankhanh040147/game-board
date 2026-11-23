@@ -43,21 +43,24 @@ type Room struct {
 	params     sim.Params
 	adminToken string
 
-	mu       sync.Mutex
-	settings Settings
-	presetID string
-	clients  map[uint8]*Client
-	defCond  CondPair
-	sendAcc  int
-	durs     []float64 // tick processing time (ms), recent ticks
-	lates    []float64 // how late each tick started vs its schedule (ms)
-	lateMax  float64   // worst start lateness since start (ms)
-	wbuf     codec.Writer
+	mu           sync.Mutex
+	settings     Settings
+	presetID     string
+	clients      map[uint8]*Client
+	defCond      CondPair
+	sendAcc      int
+	durs         []float64 // tick processing time (ms), recent ticks
+	lates        []float64 // how late each tick started vs its schedule (ms)
+	lateMax      float64   // worst start lateness since start (ms)
+	catchUpTicks uint64    // ticks that started more than one period late
+	lastStallNs  int64     // start time (since r.start) of the last late tick
+	wbuf         codec.Writer
 
-	tick        atomic.Uint32
-	tickStartNs atomic.Int64 // since start
-	periodNs    atomic.Int64
-	tickRate    atomic.Int32
+	tick           atomic.Uint32
+	tickStartNs    atomic.Int64 // since start
+	periodNs       atomic.Int64
+	tickRate       atomic.Int32
+	scheduleResets atomic.Uint64
 }
 
 func NewRoom(log *slog.Logger, adminToken string) *Room {
@@ -95,6 +98,7 @@ type Client struct {
 	lastInput     sim.Input
 	started       bool
 	starved       uint32
+	held          uint32 // ticks during/just after a host stall with no input: player held, not repeated
 	skipped       uint32 // inputs never received (loss beyond redundancy)
 	redundant     uint64 // input copies that arrived after the original
 	inputLead     int8
@@ -123,9 +127,16 @@ func (r *Room) Run(ctx context.Context) {
 		next = next.Add(period)
 		if d := time.Until(next); d > 0 {
 			time.Sleep(d)
-		} else if -d > 5*period {
-			next = time.Now() // fell far behind (laptop sleep): do not burst
+		} else if -d > time.Second {
+			// Stalled for over a second (laptop sleep): drop the missed ticks.
+			// Clients resync their pacer on the tick jump.
+			r.scheduleResets.Add(1)
+			next = time.Now()
 		}
+		// Shorter stalls: the missed ticks run back to back (fixed-timestep
+		// catch-up), so the tick count stays tied to time and the clients'
+		// tick estimate stays right. Dropping them made the clients' pacer
+		// pause and starved the input buffer (DECISIONS 22).
 		late := time.Since(next)
 		if late > 3*period {
 			r.log.Warn("tick started late", "lateMs", float64(late.Microseconds())/1000, "budgetMs", float64(period.Microseconds())/1000)
@@ -147,8 +158,26 @@ func (r *Room) step(lateMs float64) {
 	r.tickStartNs.Store(t0.Sub(r.start).Nanoseconds())
 	s := r.settings
 	dt := sim.DtForRate(s.TickRate)
+	// A catch-up tick runs immediately after a host stall (the scheduler woke
+	// us late). The client was probably stalled too, so its input for this tick
+	// may not exist yet: such ticks hold the player instead of repeating input.
+	period := r.periodNs.Load()
+	if lateMs*1e6 > float64(period) {
+		r.catchUpTicks++
+		r.lastStallNs = t0.Sub(r.start).Nanoseconds()
+	}
+	nowNs := t0.Sub(r.start).Nanoseconds()
 	for _, c := range r.clients {
-		c.simulate(dt)
+		// Inputs the client sent during a stall wait in the socket and then
+		// pass the uplink conditioner, so for one uplink delay (+ jitter + 2
+		// ticks) after a stall an empty buffer is still the stall's effect.
+		up := c.up.Params()
+		grace := int64((up.DelayMs+up.JitterMs)*1e6) + 2*period
+		before := c.starved
+		c.simulate(dt, r.lastStallNs > 0 && nowNs-r.lastStallNs <= grace)
+		if c.starved != before {
+			r.log.Debug("input starvation", "id", c.id, "tick", tick, "msSinceStall", float64(nowNs-r.lastStallNs)/1e6, "lateMs", lateMs)
+		}
 	}
 	r.sendAcc += s.SendRate
 	if r.sendAcc >= s.TickRate {
@@ -167,7 +196,7 @@ func (r *Room) step(lateMs float64) {
 }
 
 // simulate consumes this tick's input(s) from the playout buffer (B.4 rule 3).
-func (c *Client) simulate(dt sim.Fx) {
+func (c *Client) simulate(dt sim.Fx, afterStall bool) {
 	r := c.room
 	c.mu.Lock()
 	if !c.started {
@@ -197,8 +226,18 @@ func (c *Client) simulate(dt sim.Fx) {
 			cmd, ok = c.inbuf[low]
 			c.skipped += low - c.lastProcessed - 1
 		}
+		if !ok && i > 0 {
+			break
+		}
+		if !ok && afterStall {
+			// Host stall: hold this player for the tick and count it. Inputs
+			// stay strictly sequential, so this causes no misprediction.
+			c.held++
+			break
+		}
 		if !ok {
-			// Buffer empty: repeat the last input and count it (A.14).
+			// Buffer empty on an on-time tick: repeat the last input and
+			// count it (A.14). The client will see a correction.
 			c.starved++
 			in := c.lastInput
 			in.Buttons &^= sim.BtnFire | sim.BtnJump
@@ -691,6 +730,7 @@ func (r *Room) sendStats() {
 	ts := tickStats(r.durs, r.settings.TickRate)
 	late := tickStats(r.lates, r.settings.TickRate)
 	lateMax := r.lateMax
+	catchUps := r.catchUpTicks
 	tick := r.tick.Load()
 	s := r.settings
 	cs := make([]*Client, 0, len(r.clients))
@@ -702,7 +742,7 @@ func (r *Room) sendStats() {
 		es := c.ep.Snapshot()
 		c.mu.Lock()
 		you := map[string]any{
-			"inputBuffer": len(c.inbuf), "starved": c.starved, "skippedInputs": c.skipped,
+			"inputBuffer": len(c.inbuf), "starved": c.starved, "heldOnStall": c.held, "skippedInputs": c.skipped,
 			"redundantInputs": c.redundant, "lastProcessedInputSeq": c.lastProcessed, "inputLead": c.inputLead,
 			"ackedSnapshotTick": c.ackedTick,
 		}
@@ -718,7 +758,7 @@ func (r *Room) sendStats() {
 		you["condStats"] = map[string]cond.Stats{"up": c.up.Stats(), "down": c.down.Stats()}
 		r.send(c, map[string]any{
 			"t": "stats", "serverTick": tick, "serverTimeMs": r.NowMs(), "tickRate": s.TickRate, "sendRate": s.SendRate,
-			"tick": ts, "tickStartLate": map[string]any{"p50Ms": late.P50Ms, "p99Ms": late.P99Ms, "maxMs": late.MaxMs, "maxSinceStartMs": lateMax},
+			"tick": ts, "tickStartLate": map[string]any{"p50Ms": late.P50Ms, "p99Ms": late.P99Ms, "maxMs": late.MaxMs, "maxSinceStartMs": lateMax, "catchUpTicks": catchUps, "scheduleResets": r.scheduleResets.Load()},
 			"players": len(cs), "you": you,
 		})
 	}

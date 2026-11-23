@@ -147,3 +147,28 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
    page reuses `src/net/transport.ts` read-only.
 8. **The sim pump runs from a worker timer** (4 ms), because a hidden tab's timers are throttled to 1 Hz and its peer
    would then wait at the rollback cap. Rendering stays on requestAnimationFrame. Demo with two windows side by side.
+
+## 2026-11-23 — core: late ticks, root cause and fix (check 2)
+
+22. **Late tick starts are host stalls, but the code turned them into corrections.**
+    - Environment: an idle 64 Hz `time.Sleep` probe, with no server code in it, wakes up to 23 ms late at default
+      QoS and 65 ms late at background QoS. This was measured at load average about 13 on 8 cores. The Go sleep is
+      fine at p50 (0.9 ms). So the 47–206 ms stalls come from a saturated host, and no code removes them.
+    - Code fault 1: `Run` dropped the missed ticks when it was more than 5 periods late. The server tick count then
+      fell behind time, the clients' tick estimate jumped back, and their pacers stopped sending until the count
+      caught up. The input buffer emptied and the server repeated inputs, which caused corrections. Fix: a
+      fixed-timestep catch-up. Missed ticks run back to back, and the schedule resets only after a stall longer
+      than 1 s (counted as `scheduleResets`).
+    - Code fault 2: a tick with an empty buffer during or just after a stall repeated the last input. Inputs the
+      client sent during the stall are still in the socket and the uplink conditioner. Fix: in a catch-up tick,
+      or within uplink delay + jitter + 2 ticks after one, an empty buffer **holds** the player for that tick. It
+      does not repeat the input and is counted as `heldOnStall` in the 1 Hz stats. Inputs stay strictly
+      sequential, so holding cannot cause a misprediction. On-time ticks still repeat the last input and count
+      `starved` (A.14). Starvation stays visible, and a genuinely late client still gets corrected.
+    - Code fault 3: the pacer margin rose on every starvation and fell 0.25 tick per 10 s. One stall raised it
+      by up to 5 ticks for about 3 minutes. Fix: at most one raise per second, and the margin falls 0.25 tick
+      per 3 s calm.
+    - Evidence (2 walker bots, default conditioner, server paused with SIGSTOP for 120 ms every 5 s, host load
+      10–16): before the fixes 15 + 14 corrections in 40 s; with catch-up only 8 + 7; with catch-up and hold 0 + 1.
+      The remaining starvation was 4 s after the last injected stall, when the bot process itself was late.
+      Stats also report `tickStartLate.catchUpTicks`.
