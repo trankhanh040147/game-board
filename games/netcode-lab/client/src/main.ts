@@ -12,6 +12,7 @@ import { fetchInfo, WsTransport, WtTransport, webTransportPossible, type Transpo
 import { Session } from "./net/session";
 import { loadAssets } from "./render/assets";
 import { PresenterView } from "./hud/presenter";
+import { mountPerf } from "./hud/perf";
 import { PRESET_DOCS, conceptUrl } from "./hud/presets";
 import { Sfx } from "./audio";
 import { ShotVfx } from "./render/vfx";
@@ -425,6 +426,8 @@ async function boot() {
 
   // Handle for automated browser checks (Playwright cannot grant pointer lock headless).
   (window as any).__netlab = { input, session: s, probe, presenter, vfx, world, shotSeen, drawn: () => lastDrawn, lab };
+  // Duel's D3 presenter displays (P11/P12/P15/P19/P29); mounted after the page set its session handlers, which it wraps.
+  if (s) (window as any).__perf = mountPerf(s, hud);
   lab.local = {
     get fpsCap() { return loop.fpsCap; },
     setFpsCap(v: number) { loop.fpsCap = v as FpsCap; },
