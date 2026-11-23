@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { CourtyardMap } from "./map";
+import { worldUVs, type Assets } from "./assets";
 
 export const TEAM_COLOR = { blue: 0x2563eb, orange: 0xea580c } as const;
 export type Team = keyof typeof TEAM_COLOR;
@@ -11,11 +12,11 @@ export class World {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(80, 1, 0.05, 500);
-  private players = new Map<number, THREE.Group>();
+  private players = new Map<number, PlayerView>();
   private ghosts = new Map<number, THREE.Group>();
   readonly rifle: Rifle;
 
-  constructor(canvas: HTMLCanvasElement, map: CourtyardMap) {
+  constructor(canvas: HTMLCanvasElement, map: CourtyardMap, private assets: Assets | null = null) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.scene.background = new THREE.Color(0x9cc3e6);
@@ -26,24 +27,29 @@ export class World {
     this.scene.add(sun);
     this.buildMap(map);
     this.scene.add(this.camera);
-    this.rifle = new Rifle(this.camera);
+    this.rifle = new Rifle(this.camera, assets?.rifle?.scene ?? null);
     this.resize();
     addEventListener("resize", () => this.resize());
   }
 
   private buildMap(map: CourtyardMap) {
+    const t = this.assets?.textures ?? {};
+    const mat = (tex: THREE.Texture | undefined, fallback: number, tint = 0xffffff) =>
+      tex ? new THREE.MeshLambertMaterial({ map: tex, color: tint }) : new THREE.MeshLambertMaterial({ color: fallback });
     const mats: Record<string, THREE.Material> = {
-      floor: new THREE.MeshLambertMaterial({ color: 0x8b8578 }),
-      wall: new THREE.MeshLambertMaterial({ color: 0xc8bfae }),
-      block: new THREE.MeshLambertMaterial({ color: 0xa8a29e }),
-      low: new THREE.MeshLambertMaterial({ color: 0x78716c }),
-      crate: new THREE.MeshLambertMaterial({ color: 0x92400e }),
+      floor: mat(t.ground, 0x8b8578),
+      wall: mat(t.wall, 0xc8bfae),
+      block: mat(t.wall, 0xa8a29e, 0xd6d3d1),
+      low: mat(t.cover, 0x78716c),
+      crate: mat(t.wall, 0x92400e, 0xd97706),
     };
     for (const b of map.boxes) {
       const size = b.max.map((v, i) => v - b.min[i]) as [number, number, number];
       const kind = b.id === "floor" ? "floor" : b.id.startsWith("wall") ? "wall"
         : b.id.startsWith("low") ? "low" : b.id.startsWith("crate") ? "crate" : "block";
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), mats[kind]);
+      const geo = new THREE.BoxGeometry(...size);
+      worldUVs(geo, size, kind === "floor" ? 4 : 2);
+      const mesh = new THREE.Mesh(geo, mats[kind]);
       mesh.position.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
       mesh.name = b.id;
       this.scene.add(mesh);
@@ -76,13 +82,25 @@ export class World {
   }
 
   /** Draws or moves another player. Feet position, sizes from the sim. */
-  upsertPlayer(id: number, team: Team, x: number, y: number, z: number, yaw: number, dims: PlayerDims, alive = true) {
-    let g = this.players.get(id);
-    if (!g) { g = playerMesh(TEAM_COLOR[team], dims, false); this.players.set(id, g); this.scene.add(g); }
-    g.visible = alive;
-    g.position.set(x, y, z);
-    g.rotation.y = yaw;
+  upsertPlayer(id: number, team: Team, x: number, y: number, z: number, yaw: number, dims: PlayerDims, alive = true, moving = false) {
+    let p = this.players.get(id);
+    if (!p || p.team !== team) {
+      if (p) this.scene.remove(p.root);
+      p = this.assets?.character ? modelPlayer(this.assets.character, team, dims) : { root: playerMesh(TEAM_COLOR[team], dims, false), team, mixer: null, idle: null, walk: null };
+      this.players.set(id, p);
+      this.scene.add(p.root);
+    }
+    p.root.visible = alive;
+    p.root.position.set(x, y, z);
+    p.root.rotation.y = yaw;
+    if (p.walk && p.idle) {
+      const want = moving ? p.walk : p.idle;
+      if (!want.isRunning()) { (moving ? p.idle : p.walk).fadeOut(0.15); want.reset().fadeIn(0.15).play(); }
+    }
   }
+
+  /** Advances player animations by real frame time (cosmetic only, never the sim). */
+  animate(dtMs: number) { for (const p of this.players.values()) p.mixer?.update(dtMs / 1000); }
 
   upsertGhost(id: number, x: number, y: number, z: number, yaw: number, dims: PlayerDims) {
     let g = this.ghosts.get(id);
@@ -95,11 +113,42 @@ export class World {
   hideGhosts() { for (const g of this.ghosts.values()) g.visible = false; }
 
   removeMissing(alive: Set<number>) {
-    for (const [id, g] of this.players) if (!alive.has(id)) { this.scene.remove(g); this.players.delete(id); }
+    for (const [id, p] of this.players) if (!alive.has(id)) { this.scene.remove(p.root); this.players.delete(id); }
     for (const [id, g] of this.ghosts) if (!alive.has(id)) { this.scene.remove(g); this.ghosts.delete(id); }
   }
 
   render() { this.renderer.render(this.scene, this.camera); }
+}
+
+interface PlayerView { root: THREE.Object3D; team: Team; mixer: THREE.AnimationMixer | null; idle: THREE.AnimationAction | null; walk: THREE.AnimationAction | null }
+
+function modelPlayer(g: { scene: THREE.Object3D; animations: THREE.AnimationClip[] }, team: Team, d: PlayerDims): PlayerView {
+  const model = g.scene.clone(true);
+  model.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) {
+      const src = m.material as THREE.MeshStandardMaterial;
+      const tinted = src.clone();
+      tinted.color = new THREE.Color(TEAM_COLOR[team]).lerp(new THREE.Color(0xffffff), 0.25);
+      m.material = tinted;
+    }
+  });
+  // Scale the model to the sim's player height; its own height is not the hitbox.
+  const box = new THREE.Box3().setFromObject(model);
+  const h = box.max.y - box.min.y;
+  const k = d.height / h;
+  model.scale.setScalar(k);
+  model.position.y = -box.min.y * k;
+  model.rotation.y = Math.PI; // the model faces +Z; sim yaw 0 faces -Z
+  const root = new THREE.Group();
+  root.add(model);
+  const mixer = new THREE.AnimationMixer(model);
+  const clip = (n: string) => g.animations.find((a) => a.name === n);
+  const idleClip = clip("idle"), walkClip = clip("walk");
+  const idle = idleClip ? mixer.clipAction(idleClip) : null;
+  const walk = walkClip ? mixer.clipAction(walkClip) : null;
+  idle?.play();
+  return { root, team, mixer, idle, walk };
 }
 
 function playerMesh(color: number, d: PlayerDims, ghost: boolean): THREE.Group {
@@ -129,8 +178,25 @@ export class Rifle {
   private flash: THREE.Mesh;
   private kick = 0;
   private flashUntil = 0;
+  private restZ = -0.42;
 
-  constructor(camera: THREE.Camera) {
+  constructor(camera: THREE.Camera, model: THREE.Object3D | null) {
+    if (model) {
+      const m = model.clone(true);
+      const box = new THREE.Box3().setFromObject(m);
+      const len = box.max.z - box.min.z;
+      m.scale.setScalar(0.5 / len); // about 0.5 m in hand
+      this.root.add(m);
+      this.flash = new THREE.Mesh(new THREE.OctahedronGeometry(0.05), new THREE.MeshBasicMaterial({ color: 0xfde68a }));
+      this.flash.position.set(0, 0.015, -0.27);
+      this.flash.visible = false;
+      this.root.add(this.flash);
+      this.root.position.set(0.24, -0.22, -0.42);
+      this.restZ = -0.42;
+      this.root.traverse((o) => { o.renderOrder = 20; });
+      camera.add(this.root);
+      return;
+    }
     const dark = new THREE.MeshLambertMaterial({ color: 0x1f2937 });
     const grey = new THREE.MeshLambertMaterial({ color: 0x4b5563 });
     const parts: [THREE.Material, [number, number, number], [number, number, number]][] = [
@@ -164,7 +230,7 @@ export class Rifle {
 
   update(now: number, dtMs: number) {
     this.kick = Math.max(0, this.kick - dtMs / 90);
-    this.root.position.z = -0.42 + this.kick * 0.04;
+    this.root.position.z = this.restZ + this.kick * 0.04;
     this.root.rotation.x = this.kick * 0.08;
     this.flash.visible = now < this.flashUntil;
   }

@@ -153,10 +153,10 @@ export class Session implements LabBackend {
       }
       this.curPred = r.state;
     }
-    const ents = new Map<number, EntitySample & { team: number }>();
+    const ents = new Map<number, EntitySample & { team: number; moving: boolean }>();
     const F = this.sim.FX;
     for (const e of s.entities) {
-      ents.set(e.id, { x: e.x / F, y: e.y / F, z: e.z / F, yaw: this.sim.angleToRadians(e.yaw), alive: (e.anim & this.sim.ANIM.dead) === 0, team: e.team });
+      ents.set(e.id, { x: e.x / F, y: e.y / F, z: e.z / F, yaw: this.sim.angleToRadians(e.yaw), alive: (e.anim & this.sim.ANIM.dead) === 0, team: e.team, moving: (e.anim & this.sim.ANIM.moving) !== 0 });
     }
     this.interp.push(s.serverTimeMs, now, ents);
     this.t.sendBinary(this.sim.encodeSnapshotAck(this.conn, s.baselineId, s.serverTick, now));

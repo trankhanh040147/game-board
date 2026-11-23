@@ -10,6 +10,7 @@ import type { ModeState } from "./hud/scorecard";
 import { loadSim, type NetcodeSim } from "./net/wasm";
 import { fetchInfo, WsTransport, WtTransport, webTransportPossible, type Transport } from "./net/transport";
 import { Session } from "./net/session";
+import { loadAssets } from "./render/assets";
 
 const hud = document.body;
 const offlineBackend: LabBackend = { connected: false, builtPresets: new Set(), settings: null, activePreset: null, applyPreset() {}, setSetting() {} };
@@ -87,7 +88,7 @@ async function boot() {
   start.appendChild(card);
   hud.appendChild(start);
 
-  const link = await connect();
+  const [link, assets] = await Promise.all([connect(), loadAssets()]);
   const s = link.session;
   const lab = new LabPanel(hud, s ?? offlineBackend);
   if (s) s.onChange = () => lab.refresh();
@@ -98,13 +99,14 @@ async function boot() {
     ${row(link.sim !== null, "Shared sim (WASM)", link.sim ? `api v${link.sim.apiVersion}` : "")}
     ${row(s !== null, "Game server", s ? `connected over ${s.t.kind === "wt" ? "WebTransport" : "WebSocket"}` : "")}
     ${link.problems.map((p) => `<div class="bad">${p}</div>`).join("")}
+    ${assets.failures.length ? `<div class="bad">Assets using primitive fallback: ${assets.failures.join("; ")}</div>` : ""}
     <p class="dim">${s ? "Click to play: mouse look, WASD, Space jump, left click fire." : "Offline: spectator camera only (WASD fly, Space up, Shift down); not the game's movement rules."} F1 opens the Lab panel. Esc releases the mouse.</p>`;
   const go = el("button", {}, s ? "Play" : "Enter spectator view");
   (go as HTMLButtonElement).disabled = !courtyard;
   card.appendChild(go);
   if (!courtyard) return;
 
-  const world = new World(canvas, courtyard);
+  const world = new World(canvas, courtyard, assets);
   const input = new InputCapture(canvas);
   const fps = new FpsMeter();
   const probe = new MotionProbe();
@@ -161,6 +163,7 @@ async function boot() {
         world.setView(cam.x, cam.y, cam.z, input.yaw, input.pitch);
       }
       world.rifle.update(now, frameMs);
+      world.animate(frameMs);
       world.render();
     },
   });
@@ -174,7 +177,7 @@ async function boot() {
       for (const [id, e] of sample.entities) {
         alive.add(id);
         const team: Team = (e as any).team === 1 ? "orange" : "blue";
-        world.upsertPlayer(id, team, e.x, e.y, e.z, e.yaw, dims, e.alive);
+        world.upsertPlayer(id, team, e.x, e.y, e.z, e.yaw, dims, e.alive, !!(e as any).moving);
       }
     }
     if (s.ghost && s.setting("truthGhost", false)) {
