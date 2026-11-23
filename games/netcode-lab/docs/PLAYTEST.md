@@ -4,7 +4,13 @@ Host checklist for the team playtest: 4+ people on the LAN, conditioner at defau
 through presets P02 → P10 → P11–P15. This file holds no result yet. Fill the notes during the session and copy a
 summary into [DEMO.md](DEMO.md#playtest-notes).
 
-Preset build state read from `server/settings.go` at `e7d4272` (2026-11-23). Built: P01, P02, P03, P04, P05, P06, P07, P08, P09, P10, P12, P13, P24, P26, P27, P28.
+Preset build state read from `server/settings.go` at `aa01c11` (2026-11-23). Built: P01–P10, P12, P13, P24, P26,
+P27, P28. In the walkthrough below, P11, P14 and P15 are skipped (unchanged since `e7d4272`).
+
+> **Blocker at `aa01c11`: browsers cannot join.** Since `8819ee7` (protocol v3) the start card shows
+> "✗ Shared sim (WASM) · sim.wasm apiVersion 3, client expects 2" and the client falls back to the offline
+> spectator camera. The client smoke fails (1 passed, 1 failed). Seen 2026-11-23 on scribe's ports. Do not run the
+> playtest until the client is on API v3; the LAN check below was done at `e7d4272`, before the change.
 
 ## Before the session (host)
 
