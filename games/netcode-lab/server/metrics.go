@@ -40,7 +40,10 @@ func (h *hist) add(ms, budget float64) {
 
 func (h *hist) reset() {
 	h.mu.Lock()
-	*h = hist{}
+	// Zero the counters but not the mutex we hold (zeroing it made Unlock
+	// fatal: "unlock of unlocked mutex").
+	h.counts = [len(h.counts)]uint64{}
+	h.n, h.sum, h.max, h.over = 0, 0, 0, 0
 	h.mu.Unlock()
 }
 

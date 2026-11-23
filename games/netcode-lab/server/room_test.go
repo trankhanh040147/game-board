@@ -104,6 +104,8 @@ func TestControlProtocol(t *testing.T) {
 	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "admin token") {
 		t.Fatal(e)
 	}
+	ctrl(t, c, map[string]any{"t": "statsReset", "token": "secret"})
+	next(t, c, "statsReset") // the server must survive it (bots' crash report)
 	st := next(t, c, "stats")
 	if st["tick"].(map[string]any)["samples"].(float64) <= 0 {
 		t.Fatalf("stats %v", st)
@@ -171,5 +173,15 @@ func TestBudgetEstimateMatchesA11(t *testing.T) {
 	s.TickRate, s.SendRate, s.FPSCap = 128, 128, 144
 	if v := total(s); v < 68 || v > 74 {
 		t.Fatalf("128 Hz + 144 FPS %f, A.11 says ~71", v)
+	}
+}
+
+func TestHistResetKeepsMutex(t *testing.T) {
+	var h hist
+	h.add(3, 1)
+	h.reset() // used to be fatal: sync: unlock of unlocked mutex
+	h.add(1, 5)
+	if s := h.stats(); s.Samples != 1 || s.OverBudget != 0 || s.MaxMs != 1 {
+		t.Fatalf("%+v", s)
 	}
 }
