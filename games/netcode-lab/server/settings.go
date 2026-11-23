@@ -213,8 +213,18 @@ func Presets() []Preset {
 		{ID: "P10", Title: "Scorecard", Section: "A.2", Built: true, apply: base,
 			Banner: "Prediction + reconciliation, interpolation, lag compensation and server authority: all four goals green."},
 		{ID: "P11", Title: "Shot budget", Section: "A.11"},
-		{ID: "P12", Title: "Send and tick rate", Section: "A.11"},
-		{ID: "P13", Title: "Client FPS", Section: "A.11"},
+		{ID: "P12", Title: "Send and tick rate", Section: "A.11", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.SendRate = 64
+			},
+			Banner: "Snapshots at 64/s: the interpolation buffer and snapshot wait shrink (formula ~103 ms, est.), and server bytes/s rise roughly linearly."},
+		{ID: "P13", Title: "Client FPS", Section: "A.11", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.TickRate, s.SendRate, s.FPSCap = 128, 128, 144
+			},
+			Banner: "128 Hz ticks and snapshots plus 144 FPS clients: both frame waits shrink too (formula ~71 ms, est.)."},
 		{ID: "P14", Title: "Peeker's advantage", Section: "A.11"},
 		{ID: "P15", Title: "Budget table", Section: "A.11"},
 		{ID: "P16", Title: "Regions and fragile cables", Section: "A.12"},

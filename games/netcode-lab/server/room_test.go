@@ -157,3 +157,19 @@ func TestHistPercentiles(t *testing.T) {
 		t.Fatalf("gc stats %+v", g)
 	}
 }
+
+func TestBudgetEstimateMatchesA11(t *testing.T) {
+	total := func(s Settings) float64 { return budgetEst(s, DefaultCond())["totalMs"].(float64) }
+	if v := total(DefaultSettings()); v < 189 || v > 191 {
+		t.Fatalf("default %f, A.11 says ~190", v)
+	}
+	s := DefaultSettings()
+	s.SendRate = 64
+	if v := total(s); v < 101 || v > 105 {
+		t.Fatalf("64/s %f, A.11 says ~103", v)
+	}
+	s.TickRate, s.SendRate, s.FPSCap = 128, 128, 144
+	if v := total(s); v < 68 || v > 74 {
+		t.Fatalf("128 Hz + 144 FPS %f, A.11 says ~71", v)
+	}
+}

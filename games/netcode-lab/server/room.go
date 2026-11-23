@@ -120,6 +120,8 @@ type Client struct {
 	reportLoss    float64
 	reportJitter  float64
 
+	bytes byteCounters
+
 	// owned by the tick loop (room.mu)
 	spectator      bool
 	state          sim.State
@@ -501,6 +503,12 @@ type ctrlIn struct {
 	JitterMs float64         `json:"jitterMs,omitempty"` // report
 	LossPct  float64         `json:"lossPct,omitempty"`  // report
 	FPS      float64         `json:"fps,omitempty"`      // report
+	// shotSeen (P11, target side)
+	ShooterID int     `json:"shooterId,omitempty"`
+	ShotSeq   uint32  `json:"shotSeq,omitempty"`
+	RecvMs    float64 `json:"recvServerMs,omitempty"`
+	InterpMs  float64 `json:"interpMs,omitempty"`
+	FrameMs   float64 `json:"frameServerMs,omitempty"`
 }
 
 type presetOut struct {
@@ -534,6 +542,7 @@ func (r *Room) send(c *Client, v any) {
 		r.log.Error("marshal", "err", err)
 		return
 	}
+	c.bytes.downControl.Add(uint64(len(b)))
 	if err := c.conn.SendControl(b); err != nil {
 		r.log.Debug("control send", "id", c.id, "err", err)
 	}
@@ -591,6 +600,7 @@ func (r *Room) HandleConn(conn transport.Conn) {
 			return
 		}
 		if !m.Control {
+			c.bytes.upDatagram.Add(uint64(len(m.Data)))
 			c.up.Push(m.Data)
 			continue
 		}
@@ -645,6 +655,10 @@ func (r *Room) addClient(conn transport.Conn, name string, spectate bool) (*Clie
 	seed := uint64(time.Now().UnixNano()) ^ uint64(id)<<32
 	c.up = cond.NewLink(r.defCond.Up, ordered, seed, c.onDatagram)
 	c.down = cond.NewLink(r.defCond.Down, ordered, seed+1, func(b []byte) {
+		c.bytes.downDatagram.Add(uint64(len(b)))
+		if len(b) > 0 && b[0] == codec.TSnapshot {
+			c.bytes.snapshots.Add(1)
+		}
 		if err := conn.SendDatagram(b); err != nil {
 			r.log.Debug("datagram send", "id", id, "err", err)
 		}
@@ -796,6 +810,10 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 		r.tickHist.reset()
 		r.lateHist.reset()
 		r.send(c, map[string]any{"t": "statsReset", "serverTimeMs": r.NowMs()})
+	case "shotSeen":
+		// P11: the target's client reports when it received and drew a shot's
+		// effect (server-clock ms); relay it to the shooter, who owns the bar.
+		r.relayShotSeen(c, in)
 	case "history":
 		r.send(c, r.historyMsg())
 	case "chat":
@@ -918,6 +936,18 @@ func (r *Room) sendStats() {
 	// Whole window since start or the last {t:"statsReset"}: tick time and
 	// start lateness kept separate (slow tick vs late scheduler), plus GC.
 	window := map[string]any{"tickMs": r.tickHist.stats(), "startLateMs": r.lateHist.stats(), "gc": readGC()}
+	// Cost meters (P12): per-client rates first, then the room total.
+	nowMs := r.NowMs()
+	rates := make(map[uint8]map[string]float64, len(cs))
+	var egress, ingress float64
+	for _, c := range cs {
+		rt := c.bytes.rates(nowMs)
+		rates[c.id] = rt
+		egress += rt["downDatagramBps"] + rt["downControlBps"]
+		ingress += rt["upDatagramBps"] + rt["upControlBps"]
+	}
+	cost := map[string]any{"tickMsP50": ts.P50Ms, "tickMsP99": ts.P99Ms, "totalEgressBps": egress, "totalIngressBps": ingress,
+		"totalEgressKbps": egress * 8 / 1000, "clients": len(cs), "note": "payload bytes; transport framing not counted"}
 	for _, c := range cs {
 		es := c.ep.Snapshot()
 		c.mu.Lock()
@@ -940,7 +970,8 @@ func (r *Room) sendStats() {
 			"t": "stats", "serverTick": tick, "serverTimeMs": r.NowMs(), "tickRate": s.TickRate, "sendRate": s.SendRate,
 			"tick": ts, "tickStartLate": map[string]any{"p50Ms": late.P50Ms, "p99Ms": late.P99Ms, "maxMs": late.MaxMs, "maxSinceStartMs": lateMax, "catchUpTicks": catchUps, "scheduleResets": r.scheduleResets.Load()},
 			"players": len(cs), "you": you,
-			"window": window,
+			"window": window, "cost": cost, "youCost": rates[c.id],
+			"budgetEst": budgetEst(s, CondPair{Up: c.up.Params(), Down: c.down.Params()}),
 		})
 	}
 	r.broadcast(r.scoreboardMsg())
