@@ -84,3 +84,57 @@ func TestOrderedLossStalls(t *testing.T) {
 		t.Fatalf("packet behind a retransmit arrived after %v, want >= 200ms (head-of-line)", d)
 	}
 }
+
+// TCP model: with a 20/s stream, the 3rd later segment triggers a fast
+// retransmit before the RTO; everything sent meanwhile waits behind it.
+func TestOrderedFastRetransmitBeatsRTO(t *testing.T) {
+	var s sink
+	l := NewLink(Params{DelayMs: 20, LossPct: 100}, true, 4, s.deliver)
+	l.SetReverseDelay(20) // RTT 40
+	defer l.Close()
+	start := time.Now()
+	l.Push(pkt(0)) // lost
+	l.SetParams(Params{DelayMs: 20})
+	for i := 1; i <= 4; i++ {
+		time.Sleep(50 * time.Millisecond)
+		l.Push(pkt(i))
+	}
+	time.Sleep(150 * time.Millisecond)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.got) != 5 || s.got[0] != 0 || s.got[4] != 4 {
+		t.Fatalf("order %v", s.got)
+	}
+	// 3rd later send at ~150 ms, + RTT 40 + delay 20 = ~210 ms; RTO would be 0 + 240 + 20 = 260 ms.
+	d0 := s.at[0].Sub(start)
+	if d0 < 195*time.Millisecond || d0 > 250*time.Millisecond {
+		t.Fatalf("retransmit delivered after %v, want ~210 ms (fast retransmit)", d0)
+	}
+	for i := 1; i <= 3; i++ {
+		if s.at[i].Before(s.at[0]) {
+			t.Fatal("head-of-line blocking violated")
+		}
+	}
+	st := l.Stats()
+	if st.FastRetransmits != 1 || st.RTOs != 0 {
+		t.Fatalf("stats %+v", st)
+	}
+}
+
+func TestReleaseOncePerPush(t *testing.T) {
+	var mu sync.Mutex
+	rel := 0
+	l := NewLink(Params{LossPct: 30, DupPct: 30}, false, 5, func([]byte) {})
+	l.Release = func([]byte) { mu.Lock(); rel++; mu.Unlock() }
+	for i := 0; i < 500; i++ {
+		l.Push(pkt(i))
+	}
+	time.Sleep(50 * time.Millisecond)
+	l.Close()
+	time.Sleep(20 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if rel != 500 {
+		t.Fatalf("released %d of 500", rel)
+	}
+}

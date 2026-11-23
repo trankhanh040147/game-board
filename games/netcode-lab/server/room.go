@@ -663,6 +663,7 @@ func (r *Room) addClient(conn transport.Conn, name string, spectate bool) (*Clie
 			r.log.Debug("datagram send", "id", id, "err", err)
 		}
 	})
+	c.syncRTT()
 	r.clients[id] = c
 	return c, nil
 }
@@ -867,6 +868,7 @@ func (r *Room) handleCond(c *Client, in ctrlIn) {
 		if in.Down != nil {
 			t.down.SetParams(*in.Down)
 		}
+		t.syncRTT()
 		r.send(t, map[string]any{"t": "cond", "cond": CondPair{Up: t.up.Params(), Down: t.down.Params()}, "by": c.id})
 	}
 }
@@ -883,6 +885,7 @@ func (r *Room) setCondAll(cp CondPair) {
 	for _, c := range cs {
 		c.up.SetParams(cp.Up)
 		c.down.SetParams(cp.Down)
+		c.syncRTT()
 		r.send(c, map[string]any{"t": "cond", "cond": CondPair{Up: c.up.Params(), Down: c.down.Params()}, "by": 0})
 	}
 }
@@ -979,3 +982,10 @@ func (r *Room) sendStats() {
 
 // ProtocolVersion is sent in welcome; bump on wire changes.
 const ProtocolVersion = 2
+
+// syncRTT gives each ordered (TCP-modelled) link the other direction's delay,
+// so its retransmission model uses the full simulated RTT.
+func (c *Client) syncRTT() {
+	c.up.SetReverseDelay(c.down.Params().DelayMs)
+	c.down.SetReverseDelay(c.up.Params().DelayMs)
+}

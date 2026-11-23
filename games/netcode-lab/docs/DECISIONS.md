@@ -254,3 +254,24 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
    written in this branch.
 5. **`duelrelay.Mount`** registers `/duel/ws`, `/duel/wt` and the page under `/duel/` on another mux, for core to
    call from the game server. Until then the duel stays on the relay's own ports.
+
+## 2026-11-23 — core: C3 (M5/M6 server side)
+
+41. **WebSocket loss model (P29), simulated, replaces decision 8's "200 ms + 2 × delay".** Ordered links are a FIFO
+    with head-of-line blocking. A lost segment is retransmitted on the earlier of two events:
+    - fast retransmit: 3 duplicate ACKs, so delivery = send time of the 3rd later segment + RTT + one-way delay;
+    - Linux-style RTO = RTT + max(4·jitter, 200 ms); delivery = loss time + RTO + one-way delay.
+    RTT is the sum of both directions' conditioner delays. Everything behind the lost segment waits. Duplication
+    and reordering are ignored on a stream. Reason: snapshots at 20/s give 3 dup ACKs in about 150 ms, so most
+    losses recover by fast retransmit (about 210 ms at 40 ms RTT), not RTO. A flat 200 ms + 2 × delay
+    overstated some stalls and understated others. Stats per link: `retransmitted`, `fastRetransmits`, `rtos`,
+    `maxStallMs`. Unit test `TestOrderedFastRetransmitBeatsRTO`.
+42. **Cost meters count payload bytes** (snapshot, pong and debug datagrams after the downlink conditioner, plus
+    control JSON). WebSocket/QUIC framing is not counted and is labelled so. Reason: framing differs per transport
+    and is not something the server can see.
+43. **The P15 formula column is computed by the server** for each client (`budgetEst` in stats). It uses the room's
+    settings and that client's simulated conditioner delays, with each "wait for next X" = half its period, as
+    in A.11. Labelled `est.`. The measured column comes from the P11 traces on the client.
+44. **P11 target half travels as control JSON** (`shotSeen` from the target → `shotTrace` to the shooter). Reason:
+    these are measurements after the fact, not game state. The timings themselves were taken on the
+    conditioned game path (event in snapshot, receive time on the target's synced clock).
