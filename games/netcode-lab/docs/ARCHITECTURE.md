@@ -1,4 +1,4 @@
-# Architecture (M0 + M1, Go side)
+# Architecture (M0–M4, Go side)
 
 ```
 browser (client/, TS)                         Go server (cmd/server)
@@ -12,13 +12,13 @@ cmd/bot: same sim/codec/clock natively, over the same transports
 
 | Package | Role |
 |---|---|
-| `sim/` | Deterministic movement: Q16.16 fixed point, no floats in `Step`. Swept AABB collision per axis against `shared/map.json`. Hitboxes. `Predictor` = prediction + reconciliation (A.6, A.7). |
+| `sim/` | Deterministic movement: Q16.16 fixed point, no floats in `Step`. Swept AABB collision per axis against `shared/map.json`. Hitboxes. `Predictor` = prediction + reconciliation (A.6, A.7). `ray.go`: hitscan geometry (float64, server + cosmetics only, outside the hash). |
 | `shared/` | `map.json` (Courtyard), embedded into native and WASM builds. |
 | `net/codec` | Binary messages and the ack header `Endpoint` (see PROTOCOL.md). |
 | `net/cond` | In-process network conditioner, one `Link` per client per direction. |
 | `net/clock` | `Sync` (NTP-style clock and tick estimate) and `Pacer` (when to send inputs). |
 | `net/transport` | One `Conn` interface; WebSocket (`coder/websocket`) and WebTransport (`quic-go/webtransport-go` v0.13). |
-| `server/` | Room, tick loop, settings, presets, control JSON, HTTP/HTTPS/HTTP3 serving, startup cert. |
+| `server/` | Room, tick loop, settings, presets, control JSON, HTTP/HTTPS/HTTP3 serving, startup cert. `combat.go`: lag-comp history ring (512 ticks), shot resolution, damage/death/respawn, claims (trust mode), rounds, scoreboard, presenter history. `metrics.go`: whole-window tick histograms, GC stats. |
 | `cmd/server` | Binary. `cmd/bot`: headless walker bots. `cmd/simtrace`: determinism trace. |
 | `wasm/` | `GOOS=js GOARCH=wasm` entry → `client/public/sim.wasm` (+ `wasm_exec.js`). |
 
@@ -56,7 +56,7 @@ changes on restart: fetch `/certhash` on every connect.
   are "ordered": loss becomes a retransmit stall (≥ 200 ms RTO) that blocks later
   packets (simulated TCP head-of-line). On WebTransport loss drops the datagram.
 
-## WASM JS API (`globalThis.NetcodeSim`, apiVersion 1)
+## WASM JS API (`globalThis.NetcodeSim`, apiVersion 2)
 
 Load: include `wasm_exec.js`, then
 
@@ -82,7 +82,7 @@ type Input = { buttons: number, yaw: number, pitch: number };
 type Cmd   = Input & { seq: number, clientTick: number, renderTick?: number, renderFrac?: number, subtickFrac?: number };
 ```
 
-Constants: `S.FX`, `S.BTN {forward:1, back:2, left:4, right:8, jump:16, fire:32}`,
+Constants: `S.HIT {none:0, body:1, head:2}`, `S.FX`, `S.BTN {forward:1, back:2, left:4, right:8, jump:16, fire:32}`,
 `S.ANIM {onGround:1, moving:2, dead:4}`, `S.PLAYER {halfWidth:0.4, height:1.8,
 eyeHeight:1.6, body:{half:0.35, top:1.45}, head:{half:0.17, bottom:1.45, top:1.8}}`
 (metres, relative to the feet position), `S.mapJSON` (string, same as
@@ -97,7 +97,7 @@ eyeHeight:1.6, body:{half:0.35, top:1.45}, head:{half:0.17, bottom:1.45, top:1.8
 | `newPredictor(state)` | handle | use `welcome.spawn` |
 | `predictorReset(pred, state)` | – | e.g. on respawn |
 | `predict(pred, cmd, dt)` | State | applies now and keeps cmd pending |
-| `reconcile(pred, serverState, lastProcessedInputSeq, dt, replay)` | `{state, corrected, replayed, delta:[dx,dy,dz]}` | `replay = settings.reconcile`; false = hard snap (P04). `delta` = old − new predicted position, for visual smoothing |
+| `reconcile(pred, serverState, lastProcessedInputSeq, dt, replay, life?, dead?)` | `{state, corrected, replayed, respawned, delta:[dx,dy,dz]}` | `replay = settings.reconcile`; false = hard snap (P04). Pass `own.life` and `own.dead` (v2): a changed life (respawn) or dead state is not counted as a correction, and nothing is replayed while dead. `delta` = old − new predicted position, for visual smoothing |
 | `predictorInfo(pred)` | `{state, corrections, replayed, pending:[seq]}` | HUD "pending: #41 #42, replayed, corrections" |
 | `pendingCmds(pred)` | Cmd[] | |
 | `newConn()` | handle | ack state of one connection |
@@ -107,9 +107,13 @@ eyeHeight:1.6, body:{half:0.35, top:1.45}, head:{half:0.17, bottom:1.45, top:1.8
 | `encodeSnapshotAck(conn, baselineId, serverTick, nowMs)` | Uint8Array | send for each snapshot |
 | `decode(conn, bytes, nowMs)` | object | updates acks; see below |
 | `connStats(conn)` | `{sent, acked, lost, rttMs, received, duplicates, old, remoteGaps}` | `rttMs` is ack-based (includes the wait for the next packet back) |
+| `encodeClaim(conn, {seq, clientTick, x, y, z, victimId, hitbox}, nowMs)` | Uint8Array | type 7: trust mode (P03) and the "modded client" button |
+| `aimDir(yaw, pitch)` | `[x,y,z]` | unit view direction, same as the server's ray |
+| `traceMap(x, y, z, yaw, pitch)` | metres | distance from the eye (feet + 1.6 m) to the first map box: tracer end / impact decal |
+| `fireCooldownTicks(tickRate)` | int | 600 rpm rule (ceil(rate/10) inputs between shots) |
 | `newClock()` | handle | |
 | `clockPong(clock, pongMsg, recvNowMs)` | – | pass the decoded pong |
-| `clockEstimate(clock, nowMs)` | `{ready, offsetMs, rttMs, minRttMs, lastRttMs, jitterMs, samples, serverTimeMs, serverTick, tickRate}` | `serverTick` is fractional; render time for interpolation = `serverTick − interpMs·tickRate/1000` |
+| `clockEstimate(clock, nowMs)` | `{ready, offsetMs, rttMs, minRttMs, lastRttMs, jitterMs, samples, serverTimeMs, serverTick, tickRate}` | `serverTick` is fractional. The client derives the interpolation render time from snapshot arrival instead (measured ghost lead 120 ms, A.9) |
 | `newPacer()` | handle | |
 | `pacerDue(pacer, clock, nowMs)` | number[] | clientTicks to send an input for **now** (0–4); call every frame/2 ms |
 | `pacerFeedback(pacer, snapshot.own.starved, nowMs)` | – | on every snapshot |
@@ -118,7 +122,10 @@ eyeHeight:1.6, body:{half:0.35, top:1.45}, head:{half:0.17, bottom:1.45, top:1.8
 
 `decode` result: always `{type, dup, seq, ack, ackBits}`; ignore when `dup`. Plus:
 
-- `type:"snapshot"`: `serverTick, serverTimeMs, lastProcessedInputSeq, own:{state, health, inputBuffer, starved, inputLead}, baselineId, entities:[{id, team (0 blue,1 orange), x, y, z, yaw, pitch, health, anim}], events:[{type, data:Uint8Array}]`
+- `type:"snapshot"`: `serverTick, serverTimeMs, lastProcessedInputSeq, own:{state, health, inputBuffer, starved, inputLead, dead, life}, baselineId, entities:[{id, team (0 blue,1 orange), x, y, z, yaw, pitch, health, anim}], events:[...]`. Events are decoded (dedupe them, they repeat until acked):
+  - `{type:"shot", shotSeq, resolveTick, renderTick, renderFrac, rewoundTick, rewoundFrac, flags, lagcomp, clamped, favoured, killed, trust, hitId, hitbox, damage, victimHp, seenId, seenHitbox, movedCm, seenPos:[x,y,z], usedPos:[x,y,z], wallDistM, recvMs, tickStartMs}`: hit marker / damage number only from this (B.3); P08 miss reason = `seenId && !hitId` → "target moved movedCm cm"; P09 red box = `seenPos`, blue box = `usedPos`; P11 S2 = `recvMs`, S3 = `tickStartMs`, S4 = this snapshot's `serverTimeMs`
+  - `{type:"damage", shotSeq, shooterId, hitbox, damage, health, resolveTick, flags, killed}`
+  - `{type:"death", life, shooterId, hitbox, flags, lagcomp, shotSeq, resolveTick, rewoundTick, rewoundFrac, hitPos, nowPos, shooterPos, shooterYaw, shooterPitch, respawnTick}`: P24 replay (`hitPos` = where the server placed you, `nowPos` = where you were)
 - `type:"pong"`: `clientSendMs, serverRecvMs, serverSendMs, serverTick, tickFrac, tickRate`
 - `type:"debug"`: `serverTick, players:[{id,x,y,z}]` (truth ghost)
 - `type:"invalid"` / `"unknown"`
@@ -146,9 +153,30 @@ from `snapshot.own.state` only. Encoding needs pending commands, so either keep
 calling `predict` and ignore its state for drawing, or build the cmd list
 yourself and use `encodeInput(conn, last4, now)`.
 
-## Known limits (this milestone)
+## Shooting from the client (M3)
 
-- One room; trust mode, hitscan, lag compensation, delta compression and interest
-  management are later milestones (settings with `built:false`).
-- WebTransport is verified with the Go bot over QUIC (localhost). No browser
-  has connected to it yet.
+- Fire input: set `S.BTN.fire` on the input of the tick the click lands in, with
+  `renderTick`/`renderFrac` = the server time the client is drawing **other**
+  players at (the interpolation render time, as a fractional server tick), and
+  `subtickFrac` (P26, unused yet). Client measures render time from snapshot
+  arrival (client note, 2026-11-23); the server rewinds to exactly what it is
+  sent, clamped to `historyMs`.
+- Cosmetics (flash, tracer to `traceMap`, decal, sound) play at once; hit marker
+  and damage numbers only on a `shot` event (B.3).
+- Trust mode (`settings.authority == "trust"`): send `encodeClaim` every tick
+  with your predicted position, and with `victimId`/`hitbox` when your own ray
+  hits someone. The "modded client" button sends a claim with a far `victimId`
+  and `hitbox: 2` in any mode: the server relays it in trust mode and rejects it
+  otherwise (`claimRejected` broadcast).
+- Spectator / presenter: `{t:"join", spectate:true}`, then `{t:"history"}` for
+  the 2 s server ring, and `debugpos` relays from players while `truthGhost` is on.
+- Scorecard: `welcome.scorecard` / `settings.scorecard` (computed on the server
+  from `authority`, `predict`, `reconcile`, `interp`, `lagcomp`). There is no
+  `mode` key: dumb = `predict:false`, trust = `authority:"trust"`.
+
+## Known limits
+
+- One room. Delta compression, interest management, sub-tick and the
+  allocating vs zero-alloc toggle are later milestones (settings `built:false`).
+- WebTransport: verified with the Go bot and by "client" with Chromium 148
+  (`https://127.0.0.1:<port>/wt` with `serverCertificateHashes`).

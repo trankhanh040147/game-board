@@ -172,3 +172,33 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
       10–16): before the fixes 15 + 14 corrections in 40 s; with catch-up only 8 + 7; with catch-up and hold 0 + 1.
       The remaining starvation was 4 s after the last injected stall, when the bot process itself was late.
       Stats also report `tickStartLate.catchUpTicks`.
+
+## 2026-11-23 — core: M3/M4 server (shooting, lag comp, trust mode, rounds)
+
+23. **One ShotResult event per shot carries everything about it**: hit confirm, miss reason (P08), red and blue
+    boxes (P09) and the P11 timestamps (`recvMs`, `tickStartMs`). The shot id is the fire input's seq (research
+    R3). Reason: one shot needs one record, and the client can join the timestamps on the shot id.
+24. **The server computes both "what the shooter saw" and "what was used" for every shot**, even with lagcomp off.
+    It traces at the render time and at the time used. Reason: P08 needs the reason "target moved N cm", and that
+    is only measurable if the server knows what the shooter was rendering.
+25. **Events are resent in every snapshot until a SnapshotAck covers them, for at most 3 s.** Reason: snapshots are
+    unreliable datagrams, and a lost hit confirm or death would break the HUD. JSON would put them off the game
+    path, against review's guard (P11 timing must stay on the conditioned path).
+26. **Kill feed, round state, scoreboard and claim rejections are control JSON.** They are reliable, not
+    time-critical, and broadcast to everyone.
+27. **Shot origin = shooter state after applying the fire input, at eye height.** The client draws its predicted
+    state after the same input, so the ray starts where the camera is.
+28. **No friendly fire**: the ray passes through teammates. Reason: team deathmatch for 2–10 colleagues; friendly
+    fire would punish people learning the controls.
+29. **Trust mode keeps inputs flowing** (acks, pacing) but takes the position from type-7 claims and applies claimed
+    hits unchecked. The modded client is just a client sending claims. Reason: A.5 says the two packets "look
+    identical", so the server must not tell honest from modded claims apart.
+30. **Dead players' inputs are consumed but do not move them. `own.life` increments on respawn.**
+    `Predictor.ReconcileLife` does not count corrections while dead or across a life change. Reason: a respawn
+    teleport is intended, so B.9 check 2 must not count it.
+31. **Round and respawn timers use server milliseconds, not ticks.** Reason: they survive a live tick-rate change.
+32. **History ring: 512 ticks**, covering the 1 s lag-comp cap even at 128 Hz (and the presenter's 2 s at
+    ≤ 128 Hz with 512 entries ≥ 256). Only player positions are kept, never the map (A.10).
+33. **Presets apply the conditioner too.** P24 sets 50 ms each way (RTT 100 ms, labelled simulated in its banner)
+    so "died behind the wall" is visible. Every other preset restores 20 ms each way.
+34. **`speedScale` is a server-only Lab setting** (0.25–2). It serves the second half of B.9 check 2 and P25.

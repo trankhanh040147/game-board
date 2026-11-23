@@ -116,10 +116,10 @@ bin/server -http 127.0.0.1:28280 -https ""
 bin/bot -url ws://127.0.0.1:28280/ws -n 1 -d 5m
 ```
 
-| Run (start) | Transport | Tick | Inputs | Snapshots | **Corrections** | Server starvations | Pacer raises | RTT median / jitter | Max snapshot gap | Load avg (1 min) before → after |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 16:58 | WebTransport | 64 Hz | 19201 | 5996 | **15** | 23 | 15 | 40.90 / 0.52 ms | 216.83 ms | not recorded |
-| 17:05 | WebSocket | 64 Hz | 19137 | 5983 | **45** | 92 | 55 | 43.79 / 15.62 ms | 525.67 ms | 5.30 → 14.99 |
+| Run (start) | Transport | Tick | Inputs | Snapshots | **Corrections** | Server starvations | Pacer raises | RTT median / jitter | Max snapshot gap | Load avg (1 min) before → after | Server late ticks > 3 periods while bot connected (max) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 16:58 | WebTransport | 64 Hz | 19201 | 5996 | **15** | 23 | 15 | 40.90 / 0.52 ms | 216.83 ms | not recorded | 6 (85.6 ms) |
+| 17:05 | WebSocket | 64 Hz | 19137 | 5983 | **45** | 92 | 55 | 43.79 / 15.62 ms | 525.67 ms | 5.30 → 14.99 | 14 (206.3 ms) |
 
 Discarded run: a WebSocket run started at 16:58 joined a leftover 128 Hz smoke-test server of mine
 (its own server failed to bind the port). It is not a default-settings run. Its numbers, for the
@@ -178,3 +178,34 @@ average 13–18 on 8 cores this is mostly descheduling, not work; the same machi
 stalls with no clients (check 2 above). These numbers are therefore an upper bound on what the
 loop costs and say nothing yet about GC: B.9 #5 needs a run on an idle host, `runtime/metrics` GC
 pauses in the stats, and the allocating vs zero-alloc toggle.
+
+## Check 2 follow-up — host stalls injected on purpose (2026-11-23, core)
+
+The 5-minute runs above failed because of host stalls. To test the fix without a quiet machine, the server
+process was paused with `kill -STOP` for 120 ms every 5 s (6 times in 40 s; 3 times in 25 s for the last row)
+while 2 walker bots ran on the default conditioner. Host load average 10–16 on 8 cores (other members' work).
+
+| Server build | Corrections (bot 1 + bot 2) | Server starvations | Notes |
+|---|---|---|---|
+| before (missed ticks dropped after > 5 periods, repeat on empty) | 15 + 14 | 21 + 25 | pacer margin ended at 5.25 / 5.75 ticks |
+| + fixed-timestep catch-up | 8 + 7 | 19 + 15 | |
+| + hold on empty buffer during/just after a stall | **0 + 1** | 0 + 1 | the one starvation was 4 s after the last injected stall (bot process late at load 16), counted per A.14 |
+
+Independent sleep probe (no server code), 64 Hz for 15 s on the same host: default QoS p50 0.90 ms late, p99
+6.6 ms, max 23 ms; background QoS p99 33 ms, max 65 ms. The stalls are from the host; DECISIONS 22.
+
+Not yet run by core: the 5-minute B.9 #2 rerun on the fixed server (member "bots" owns long runs).
+
+## Check 3 (unit part) — lag compensation (2026-11-23, core)
+
+`go test -run TestLagCompRewindHitsWhatTheShooterSaw ./server`, passing. Known history: the target crosses the
+line of fire at 0.11 m/tick (7 m/s at 64 Hz); the shooter renders tick 100 and fires at tick 108.
+
+- lagcomp off: miss, `seenId` = target, `movedCm` 88 (8 ticks × 0.11 m), no damage.
+- lagcomp on: hit at `rewoundTick` 100, and the rewound box equals the box the shooter saw.
+- history cap 50 ms: render time clamped (flag), miss.
+- favour victim (threshold 30 ms, shooter RTT 80 ms): no rewind (flag), miss.
+
+`TestShootOverTheWire` sends the fire input over a real WebSocket through the 20 ms conditioner and gets the
+ShotResult (hit, `recvMs` ≤ `tickStartMs`) and the victim's Damage event back in snapshots.
+The integration part of check 3 (two bots at 40 ms RTT, target crossing the gap) is not run yet.
