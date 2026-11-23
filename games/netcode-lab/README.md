@@ -136,10 +136,12 @@ Build outputs (`bin/`, `client/dist`, `client/public/*.wasm`, `wasm_exec.js`) ar
 ## Status
 
 Board and decisions: [docs/STATUS.md](docs/STATUS.md). Preset build state: [docs/PRESETS-STATUS.md](docs/PRESETS-STATUS.md).
-B.9 check results: top of [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md). What each preset shows and what was seen:
+B.9 check results: top of [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md). What could not be made to work, with evidence and what a human must do: [docs/BLOCKERS.md](docs/BLOCKERS.md). What each preset shows and what was seen:
 [docs/DEMO.md](docs/DEMO.md).
 
 ## Known gaps
+
+Details and evidence: [docs/BLOCKERS.md](docs/BLOCKERS.md).
 
 - **No team playtest yet** (B.9 check 8). The checklist is ready in docs/PLAYTEST.md.
 - **No second machine tested.** LAN joins were checked from the host's own LAN IP.

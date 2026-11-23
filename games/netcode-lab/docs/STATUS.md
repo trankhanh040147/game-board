@@ -1,6 +1,6 @@
 # Status
 
-Updated 2026-11-23 (after aa01c11) by scribe, from the lead's board. Read this first after a context compaction.
+Updated 2026-11-23 (after aa01c11) by scribe, from the lead's board. Read this first after a context compaction. Blockers with evidence: [BLOCKERS.md](BLOCKERS.md).
 
 ## Members
 
@@ -40,6 +40,7 @@ core (claude), client (claude), review (hermes), research (hermes), art (antigra
 | S13 | scribe | Perf panel and P25 shooter glitches walked | `e8dcc8a` at `118cbcf`: verified P11 (est. 189 / avg of 8 hits 210 ms), P12 (egress 297 / 573 / 925 kbps at 20 / 64 / 128 /s), P15 (total +11%, within ±15%), P25 (rubber-band and teleport named on screen, gap 411 ms); partly P19 (switch works; numbers at load 38–87) and P29 (WS 23 vs WT 6 stalls at 5% loss). Verified on screen overall: P01–P05, P07–P12, P15–P17, P21–P23, P25. |
 | S14 | scribe | P18 and P20 evidence for core | `f05bcb6` at `d2c12c6`: P18 verified on screen (public vs backbone to sg: jitter 9.5 vs 0.5 ms, est. bar 208 vs 191 ms; with the cut 308 vs 233 ms, loss 1/10 vs 0/10); P20 verified (compose drill on 185xx, project scribe-s15, down afterwards: Grafana Mean vs p99 shows data, ISPRouteP95High FIRING for sg/vnpt, fpt, viettel). |
 | S15 | scribe | README refresh from a fresh clone | README at `8c4c1e1`: Play in 2 minutes (URL, cert click, keys incl. F3/F4/Tab, `?region=`), all 11 server flags, `make client` builds duel/infra pages, fill bots, compose up/down verified on 185xx, smoke 55/0/0, LAN and region joins checked; stale v2/v3 gap removed. |
+| S16 | scribe | BLOCKERS.md | Checks 5 (host load), 4 fast case (no 144 Hz display), 8 (human playtest, second machine), 2 (in progress, core fix `18e1e23`), non-team PIDs 18141 / 20847. |
 
 ### In progress
 
