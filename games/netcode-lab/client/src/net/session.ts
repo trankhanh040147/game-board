@@ -46,6 +46,7 @@ export class Session implements LabBackend {
   private prevPred: SimState | null = null;
   private curPred: SimState | null = null;
   private lastTickAt = 0;
+  private lastClientTick = 0;
   private offset = [0, 0, 0];
   private lastPing = -Infinity;
   lastReplayed = 0;
@@ -185,6 +186,7 @@ export class Session implements LabBackend {
       this.prevPred = this.curPred;
       this.curPred = this.sim.predict(this.pred, cmd, dt);
       this.lastTickAt = now;
+      this.lastClientTick = clientTick;
       this.t.sendBinary(this.sim.encodeInputFromPredictor(this.conn, this.pred, now));
     }
     const decay = Math.exp(-(now - (this.lastFrame || now)) / CORRECTION_TAU_MS);
@@ -193,15 +195,30 @@ export class Session implements LabBackend {
   }
   private lastFrame = 0;
 
-  /** Own eye position in metres for this frame: predicted (and blended) or, with prediction off, the raw server state. */
-  ownView(now: number): { x: number; y: number; z: number } | null {
+  /**
+   * How far (in ticks, 0..1) the clock has moved past the moment the newest predicted tick became due. The pacer makes
+   * tick T due once serverTick(now) + RTT/2 + margin passes T − 1 (net/clock TargetClientTick), so this is the real
+   * accumulator remainder, not "time since the frame that happened to run the tick".
+   */
+  private tickPhase(now: number): number {
+    const e = this.sim.clockEstimate(this.clock, now);
+    if (!e.ready || !this.lastClientTick) return 1;
+    const x = e.serverTick + (e.rttMs / 2) * (e.tickRate / 1000) + this.sim.pacerInfo(this.pacer).marginTicks;
+    return Math.min(1, Math.max(0, x - (this.lastClientTick - 1)));
+  }
+
+  /** Own eye position in metres for this frame: predicted (and blended) or, with prediction off, the raw server state.
+   *  frameMs is the measured frame interval. When a fixed tick is at least as frequent as a frame (64 Hz at 60 FPS)
+   *  the newest predicted state is drawn, so input shows in the frame that sampled it. Slower ticks are interpolated
+   *  between the last two predicted states ("fix your timestep"), which costs up to one tick of latency. */
+  ownView(now: number, frameMs = 1000 / 60): { x: number; y: number; z: number } | null {
     const F = this.sim.FX;
     if (!this.setting("predict", true)) {
       const s = this.ownServer;
       return s ? { x: s.x / F, y: s.y / F, z: s.z / F } : null;
     }
     if (!this.curPred || !this.prevPred) return null;
-    const a = Math.min(1, (now - this.lastTickAt) / this.tickMs);
+    const a = this.tickMs <= frameMs * 1.05 ? 1 : this.tickPhase(now);
     const p = this.prevPred, c = this.curPred;
     return {
       x: (p.x + (c.x - p.x) * a) / F + this.offset[0],

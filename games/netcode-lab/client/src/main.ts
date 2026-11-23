@@ -46,17 +46,19 @@ async function connect(): Promise<Link> {
   return link;
 }
 
-/** Measures key press → first frame where your own view moves (P02). Real timestamps only. */
-class MotionProbe {
+/** Measures key press → first frame where your own view moves (P02, P04). Real timestamps only.
+ *  A press counts only if the view was standing still on the frame before the press was seen. */
+export class MotionProbe {
   private armedAt = -1;
   private from: { x: number; y: number; z: number } | null = null;
-  results: number[] = [];
   private seenPress = -1;
-  update(now: number, pressAt: number, pos: { x: number; y: number; z: number }, prev: { x: number; y: number; z: number } | null) {
-    const still = prev && Math.hypot(pos.x - prev.x, pos.z - prev.z) < 1e-4;
+  private prev: { x: number; y: number; z: number } | null = null;
+  private prevStill = false;
+  results: number[] = [];
+  update(now: number, pressAt: number, pos: { x: number; y: number; z: number }) {
     if (pressAt !== this.seenPress) {
       this.seenPress = pressAt;
-      if (still && this.armedAt < 0) { this.armedAt = pressAt; this.from = { ...pos }; }
+      if (this.prevStill && this.prev && this.armedAt < 0 && pressAt > 0) { this.armedAt = pressAt; this.from = { ...this.prev }; }
     }
     if (this.armedAt >= 0 && this.from) {
       if (Math.hypot(pos.x - this.from.x, pos.z - this.from.z) > 0.005) {
@@ -65,6 +67,8 @@ class MotionProbe {
         this.armedAt = -1;
       } else if (now - this.armedAt > 2000) this.armedAt = -1;
     }
+    this.prevStill = !!this.prev && Math.hypot(pos.x - this.prev.x, pos.z - this.prev.z) < 1e-4;
+    this.prev = { ...pos };
   }
   get median(): number | null {
     if (!this.results.length) return null;
@@ -113,7 +117,7 @@ async function boot() {
   const fps = new FpsMeter();
   const probe = new MotionProbe();
   let lastFrameMs = 0;
-  let prevView: { x: number; y: number; z: number } | null = null;
+  let frameAvg = 1000 / 60;
   const cam = { x: 0, y: 6, z: 30 };
   input.pitch = -0.2;
   if (s) {
@@ -169,10 +173,10 @@ async function boot() {
       lastFrameMs = frameMs;
       if (s && s.connected) {
         s.frame(now, () => input.sample(), () => world.rifle.fire(now));
-        const v = s.ownView(now);
+        frameAvg = frameMs > 0 ? frameAvg * 0.9 + Math.min(frameMs, 100) * 0.1 : frameAvg;
+        const v = s.ownView(now, frameAvg);
         if (v && dims) {
-          probe.update(now, input.lastMoveKeyAt, v, prevView);
-          prevView = v;
+          probe.update(now, input.lastMoveKeyAt, v);
           world.setView(v.x, v.y + dims.eyeHeight, v.z, input.yaw, input.pitch);
         }
         drawOthers(now);

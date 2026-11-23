@@ -107,3 +107,14 @@
    else the newest Chromium in the Playwright cache). This avoids a browser download and a version lock to one
    Playwright release. Headless Chromium refuses pointer lock, so the test sets the lock flag directly and sends real
    key events; the refusal is shown on the start screen instead of throwing.
+
+## 2026-11-23 — client: own-view latency fix (P04 "reacts in the current frame")
+
+Before: input → motion with prediction measured 17–44 ms (P05 18–33). A trace showed key → predicted step took 2–15 ms
+(wait for the next fixed tick), then one more frame was lost: `ownView` interpolated between the last two predicted
+ticks with alpha = (now − time of the frame that ran the tick) / tick, so that frame always drew alpha 0, the old state.
+After: when the tick interval is ≤ the measured frame interval (64 Hz at 60 FPS) the newest predicted state is drawn;
+slower ticks interpolate with alpha = how far the pacer clock is past the tick's due time (net/clock
+TargetClientTick). Measured key → drawn: P05 1.4–16.4 ms, P04 1.6–16.4 ms, P02 (dumb) 81–115 ms; 20 Hz tick
+2.9–48 ms (the tick wait itself). The HUD probe also checked "standing still" against the frame that already moved; it
+now uses the previous frame and agrees with an independent trace to within 0.7 ms. The metric is unchanged.
