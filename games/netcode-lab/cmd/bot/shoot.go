@@ -23,6 +23,9 @@ type framer interface{ frame(b *bot, nowMs float64) }
 // ---- runner: crosses the gap behind and beside the low wall, back and forth ----
 
 type runner struct {
+	bud     *budget
+	arr     arrivalRender
+	dmgSeen map[uint32]bool
 	wp      int
 	life    uint8
 	started bool
@@ -31,7 +34,32 @@ type runner struct {
 
 var runnerPath = [][2]float64{{-7, -1.5}, {7, -1.5}}
 
-func (r *runner) onSnapshot(b *bot, s *codec.Snapshot, _ float64) {
+func (r *runner) onSnapshot(b *bot, s *codec.Snapshot, nowMs float64) {
+	if r.bud != nil {
+		r.arr.add(s, 0, nowMs)
+		maxOff := math.Inf(-1)
+		for _, o := range r.arr.offs {
+			maxOff = math.Max(maxOff, o.off)
+		}
+		for _, ev := range s.Events {
+			if ev.Type != codec.EvDamage {
+				continue
+			}
+			var d codec.Damage
+			rd := codec.Reader{B: ev.Data}
+			d.Read(&rd)
+			if rd.Err != nil {
+				continue
+			}
+			if r.dmgSeen == nil {
+				r.dmgSeen = map[uint32]bool{}
+			}
+			if !r.dmgSeen[d.ShotSeq] {
+				r.dmgSeen[d.ShotSeq] = true
+				r.bud.onDamage(b, d.ShotSeq, s.ServerTimeMs, nowMs, maxOff)
+			}
+		}
+	}
 	if r.started && s.Own.Life != r.life {
 		r.wp = 0 // respawned at an orange spawn: walk back to the gap
 	}
@@ -71,6 +99,7 @@ type shotRec struct {
 }
 
 type shooter struct {
+	bud       *budget
 	buf       []snapPos // runner positions by snapshot tick (newest last)
 	targetID  uint8
 	inputs    int
@@ -114,6 +143,9 @@ func (s *shooter) onSnapshot(b *bot, snap *codec.Snapshot, _ float64) {
 			continue
 		}
 		s.resolved[res.ShotSeq] = true
+		if s.bud != nil {
+			s.bud.onResult(&res)
+		}
 		rec, ok := s.pending[res.ShotSeq]
 		if !ok {
 			s.unmatched++ // a shot fired without a rendered live target: not part of the comparison
@@ -197,6 +229,9 @@ func (s *shooter) cmd(b *bot, nowMs float64, seq uint32) sim.Cmd {
 	c.RenderFrac = uint16((rt - math.Floor(rt)) * 65536)
 	s.shots++
 	s.pending[seq] = shotRec{sawHit: saw, sawHitbox: part, renderTick: rt}
+	if s.bud != nil {
+		s.bud.onFire(b, seq, nowMs)
+	}
 	return c
 }
 

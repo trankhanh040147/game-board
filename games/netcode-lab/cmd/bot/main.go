@@ -392,6 +392,8 @@ func main() {
 	stats := flag.Bool("stats", false, "record the server's 1 Hz tick stats (via bot 1) and print a load report")
 	warmup := flag.Duration("warmup", 10*time.Second, "with -stats: stats received in the first warmup after the last bot joined are not counted")
 	statsReset := flag.Bool("statsreset", false, "with -stats and -token: send statsReset after the warmup so the server's whole-window histograms cover only the measured window (off by default: a fresh server's window already starts at the run)")
+	fps := flag.Float64("fps", 0, "with -kind shootrun: measure the A.11 shot budget with frames modelled at this FPS (0 = off)")
+	budBuf := flag.Float64("buf", 0, "with -fps: the target's interpolation buffer in ms (default 100 = 2 x 50 ms)")
 	crossings := flag.Int("crossings", 20, "with -kind peek: crossings to run")
 	peekBuf := flag.Int("peekbuf", 100, "with -kind peek: the holder's interpolation buffer (ms), as the client's interpMs")
 	perBot := flag.Bool("perbot", true, "print one summary per bot (false: totals only)")
@@ -456,14 +458,27 @@ func main() {
 			rec = &statsRecorder{token: *token}
 		}
 		wg.Add(2)
-		go func() { defer wg.Done(); out[0] = run(ctx, *url, "bot-shooter", 1, rec, newShooter()) }()
+		var bud *budget
+		if *fps > 0 {
+			buf := *budBuf
+			if buf == 0 {
+				buf = 100
+			}
+			bud = newBudget(*fps, buf)
+		}
+		sh := newShooter()
+		sh.bud = bud
+		go func() { defer wg.Done(); out[0] = run(ctx, *url, "bot-shooter", 1, rec, sh) }()
 		time.Sleep(300 * time.Millisecond)
-		go func() { defer wg.Done(); out[1] = run(ctx, *url, "bot-runner", 2, nil, &runner{}) }()
+		go func() { defer wg.Done(); out[1] = run(ctx, *url, "bot-runner", 2, nil, &runner{bud: bud}) }()
 		if rec != nil {
 			rec.setFrom(time.Now())
 		}
 		wg.Wait()
 		res := map[string]any{"kind": "shootrun", "perBot": out}
+		if bud != nil {
+			res["budget"] = bud.report()
+		}
 		if rec != nil {
 			res["serverTick"] = rec.report(2)
 		}
