@@ -15,7 +15,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 2 | Reconciliation, 0 corrections over 5 min | **fail** (on this shared host) | At HEAD (`91b61db` build): 20 corrections (WS), 25 (WT) in 5 min, load avg mean 18; most line up with host stalls also seen by a no-game-code probe. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s (they appear; smoothing is a client render property) | [at HEAD](#check-2-at-head--5-minutes-1-bot-defaults-2026-11-23-18361841-bots), [speed modifier](#check-2-second-half--server-only-speed-modifier-on-2026-11-23-18481850-bots) |
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
 | 4 | Shot budget vs 190 ms est. / 71 ms | not run | — | — |
-| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | not run (preliminary only) | 40 bots, current loop: 128 Hz tick time p99 1.52 ms, 99.81% within budget; start lateness 97.38% within budget (host). No P19 toggle, no human players | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots) |
+| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met / inconclusive** | 40 bots, current loop (load ~15): tick p99 1.52 ms, 99.81% within budget. P19 with 50 bots at load 36–64: zero-alloc p99 22.1 ms, naive 8.4 ms, neither ≥ 99%; host-dominated. Zero-alloc allocates 37% less (1117 vs 1780 MB) but not zero | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots), [P19](#check-5--p19--zero-alloc-vs-allocating-loop-50-bots-at-128-hz-2026-11-23-20152019-bots-inconclusive-on-timing) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | **partial** | Gaps > 3× send interval per bot in 2 min: WS 106–119, WT 4–5 (expected ≈ 0.3 from loss alone; load avg up to 36, no gap timestamps yet) | [section](#check-6--p29--snapshot-inter-arrival-websocket-vs-webtransport-datagrams-at-5-loss-2026-11-23-bots) |
 | 7 | Client smoke (Playwright) | **partial** | 18/0/1 at `6db531d` (review: 18/1 independently), 20/0/1 at `082b412` with WT; shoot skipped: shooting not testable until M3 | [section](#check-7--client-smoke-playwright-b9-7-partial-shooting-not-testable-until-m3) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
@@ -592,3 +592,37 @@ client and the server under load, and no margin rule can absorb it. These runs t
 clean-link behaviour; the unit tests do (`go test -run 'TestPacerLead' -v ./net/clock`): margin 6 → lead 1 in
 12 s with 0 starvations, and settling at lead 3 when the host needs 3 ticks. **Owed**: the same 60 s command on
 a host with load average < 5, before and after.
+
+## Check 5 / P19 — zero-alloc vs allocating loop, 50 bots at 128 Hz (2026-11-23 20:15–20:19, bots): inconclusive on timing
+
+Clean worktree build at `aa29916`. Each run had a fresh server set to 128 Hz and the loop variant through the Lab
+(`{"loop":"zeroalloc"}` / `{"loop":"naive"}`). Then 50 walker bots from one process for 100 s; `statsReset` after
+a 10 s warmup, so the whole window covers about the last 88 s. There are no human players; B.9 #5 asks for 10 players
++ 40 bots, and 50 bots stand in for them.
+
+```
+HTTP_PORT=18610 sh scripts/check5-load.sh 128 50 100s 10s zeroalloc
+HTTP_PORT=18610 sh scripts/check5-load.sh 128 50 100s 10s naive
+```
+
+Server lifetime: PIDs 57361 (zero-alloc) and 63522 (naive) were alive at the end; 0 bots with errors.
+
+| | zero-alloc | allocating ("naive") |
+|---|---|---|
+| **Load avg 1 min, before → after** | **41.81 → 64.10** | **59.04 → 36.28** |
+| Tick time p50 / p95 / **p99** / p999 / max | 0.06 / 4.18 / **22.11** / 282.59 / 282.59 ms | 0.06 / 1.75 / **8.42** / 35.24 / 94.41 ms |
+| Tick time % within 7.81 ms budget (over) | 96.97 (336) | 98.94 (116) |
+| Start lateness p50 / p95 / p99 / max | 0.54 / 529.98 / 529.98 / 529.98 ms | 0.1 / 6.61 / 37.36 / 177.12 ms |
+| Start lateness % within budget; catch-up ticks | 82.79; 2104 | 95.58; 691 |
+| GC cycles; pause p50 / p99 / max | 79; 0.13 / 117.4 / 134.2 ms | 125; 0.066 / 25.2 / 117.4 ms |
+| **Total allocated by the server (whole run)** | **1117 MB** | **1780 MB** |
+| Heap at end; goroutines | 40.5 MB; 170 | 27.4 MB; 170 |
+| Bot corrections (all 50) / worst starvations / RTT median | 1404 / 74 / 64.61 ms | 717 / 49 / 41.04 ms |
+
+Reading:
+- **Timing: no verdict.** The zero-alloc run looks worse, but it ran while the host load average climbed to 64 on
+  8 cores, with one 530 ms stall and a bot RTT median of 64.6 ms against the 40 ms conditioner. The naive run
+  started at load 59 and ended at 36. Neither run meets B.9 #5 (p99 under budget and ≥ 99% within). These numbers
+  measure the host, not the loop. A real comparison needs a quiet host and the two runs back to back.
+- **Allocation: a real difference, independent of load.** Zero-alloc allocated 37% less (1117 vs 1780 MB, 79 vs
+  125 GC cycles). It is still far from zero: about 11 MB/s for 50 players at 128 Hz. This is reported to core.
