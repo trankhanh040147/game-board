@@ -80,3 +80,86 @@ starvation there was no correction. That is the A.14 rubber-band mechanism, not 
 Still to do for check 2: rerun on an otherwise idle machine (or server and bots on two
 machines). Open design question: the pacer margin only shrinks 0.25 tick per calm 10 s,
 so after bursts it stays at 5.25 ticks (≈ 82 ms of extra input delay at 64 Hz).
+
+### Check 2 — runs by "bots", 2026-11-23 (one bot per server, 5 minutes each)
+
+Machine: Apple M1 Pro, 8 cores, 16 GB, macOS 26.4.1, Go 1.26.4 darwin/arm64. Server and bot on
+the same host, shared with the rest of the team (builds, Chrome, Playwright). Each run used its own
+fresh server with default settings and the default conditioner; `condAtWelcome` in the bot output
+confirms `up` and `down` = `{delayMs: 20, jitterMs: 0, lossPct: 0, dupPct: 0, reorderPct: 0}`.
+No server-only speed modifier exists in the server yet, so the "with modifier" half of check 2
+cannot be run (the only speed-change coverage is the `sim` predictor unit test).
+
+Commands (from `games/netcode-lab`; `sh scripts/check2-reconcile.sh [ws|wt] 5m` does the same):
+
+```
+# WebTransport, server built at fc23a53 + core's then-uncommitted server/room.go (tickStartLate stats)
+bin/server -http 127.0.0.1:28180 -https 127.0.0.1:28443
+bin/bot -url https://127.0.0.1:28443/wt -info http://127.0.0.1:28180 -n 1 -d 5m
+# WebSocket, server built at 31b586b (server/, sim/, net/ clean)
+bin/server -http 127.0.0.1:28280 -https ""
+bin/bot -url ws://127.0.0.1:28280/ws -n 1 -d 5m
+```
+
+| Run (start) | Transport | Tick | Inputs | Snapshots | **Corrections** | Server starvations | Pacer raises | RTT median / jitter | Max snapshot gap | Load avg (1 min) before → after |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 16:58 | WebTransport | 64 Hz | 19201 | 5996 | **15** | 23 | 15 | 40.90 / 0.52 ms | 216.83 ms | not recorded |
+| 17:05 | WebSocket | 64 Hz | 19137 | 5983 | **45** | 92 | 55 | 43.79 / 15.62 ms | 525.67 ms | 5.30 → 14.99 |
+
+Discarded run: a WebSocket run started at 16:58 joined a leftover 128 Hz smoke-test server of mine
+(its own server failed to bind the port). It is not a default-settings run. Its numbers, for the
+record only: 128 Hz, 38358 inputs, 44 corrections, 88 starvations, 44 pacer raises.
+
+Server log of the WebTransport run: 6 "tick started late" warnings (51.6–85.6 ms against a 15.6 ms
+budget) while the bot was connected, and 3 more (60–115 ms) after it left, with no client at all.
+WebSocket run: 14 warnings (47–206 ms). Result: **check 2 still fails on this host** — 15 and 45
+corrections, not 0. Corrections track starvations (corrections ≤ starvations, and equal to pacer
+raises in the WebTransport run), which matches core's diagnosis above. The late ticks also happen
+with zero clients connected, so the stalls are host scheduling, not bot load.
+
+## Check 5 (preliminary) — tick health with 40 bots (B.9 #5, P19, P28)
+
+Not yet the real check: B.9 #5 wants 10 players + 40 bots and **both** loop variants. The
+zero-alloc vs allocating loop toggle does not exist in the server yet, so only the current loop is
+measured. No human players; 40 walker bots from one process (`cmd/bot`) on the same host as the
+server, so bots and server compete for the same 8 cores.
+
+Harness: `cmd/bot -n 40 -tick HZ -stats -warmup 10s`. Before the bots join, a short-lived admin
+client sets the tick rate through the Lab (`{"t":"lab","settings":{"tickRate":HZ}}`). Bot 1 records
+the server's 1 Hz control `stats` message; messages received during ramp-up and the 10 s warmup are
+dropped. `withinBudgetPct` is exact over all sampled ticks (tick-weighted). The server reports only
+p50/p99/max of the last `tickRate` ticks each second and **no p95**, so whole-window percentiles
+cannot be rebuilt: the table gives the median and maximum of the per-second values.
+"Tick ms" = server processing time of one tick (`step`), not including the sleep.
+
+Command (server built at 31b586b, server/ sim/ net/ clean):
+
+```
+HTTP_PORT=28380 sh scripts/check5-load.sh 64 40 70s 10s
+HTTP_PORT=28380 sh scripts/check5-load.sh 128 40 70s 10s
+```
+
+| | 64 Hz | 128 Hz |
+|---|---|---|
+| Budget per tick | 15.625 ms | 7.8125 ms |
+| Players in room | 40..40 | 40..40 |
+| Stats windows counted (≈1 s each) | 58 | 57 |
+| Ticks sampled | 3712 | 7296 |
+| **% ticks within budget** | **99.92** | **99.93** |
+| Tick ms p50 (median of per-second p50 / max) | 0.035 / 0.068 | 0.029 / 0.037 |
+| Tick ms p95 | not reported by the server | not reported by the server |
+| Tick ms p99 (median of per-second p99 / p95 of them / max) | 0.732 / 15.679 / 67.687 | 0.548 / 5.656 / 33.128 |
+| Tick ms max in any second (median / max) | 0.732 / 67.687 | 1.267 / 59.611 |
+| Tick start lateness p99 (median / max) | 1.557 / 63.86 ms | 2.671 / 34.243 ms |
+| Worst tick start lateness since server start | 92.861 ms | 179.18 ms |
+| Bot corrections, all 40 bots (≈70 s) | 660 | 2315 |
+| Worst bot's server-starvation count | 37 | 146 |
+| Bot RTT median (median over bots) | 40.22 ms | 40.45 ms |
+| Load avg (1 min) before → after | 14.72 → 12.82 | 12.82 → 17.91 |
+
+Reading: the typical tick is far under budget (p50 ≈ 0.03 ms for 40 players), but single ticks
+take up to 60–68 ms of processing time and tick starts slip by up to 179 ms. On a host with load
+average 13–18 on 8 cores this is mostly descheduling, not work; the same machine shows the same
+stalls with no clients (check 2 above). These numbers are therefore an upper bound on what the
+loop costs and say nothing yet about GC: B.9 #5 needs a run on an idle host, `runtime/metrics` GC
+pauses in the stats, and the allocating vs zero-alloc toggle.

@@ -38,30 +38,32 @@ type ctrl struct {
 	Settings *settings       `json:"settings"`
 	Spawn    map[string]any  `json:"spawn"`
 	Msg      string          `json:"msg"`
-	Raw      json.RawMessage `json:"-"`
+	Cond     json.RawMessage `json:"cond"`
 }
 
 type Summary struct {
-	Name             string   `json:"name"`
-	ID               int      `json:"id"`
-	Seconds          float64  `json:"seconds"`
-	InputsSent       uint32   `json:"inputsSent"`
-	Snapshots        int      `json:"snapshots"`
-	SnapshotsPerSec  float64  `json:"snapshotsPerSec"`
-	Corrections      uint64   `json:"corrections"`
-	Replayed         uint64   `json:"replayed"`
-	AvgReplayPerSnap float64  `json:"avgReplayPerSnapshot"`
-	ServerStarved    uint16   `json:"serverStarvedTicks"`
-	RTTMedianMs      float64  `json:"rttMedianMs"`
-	RTTMinMs         float64  `json:"rttMinMs"`
-	JitterMs         float64  `json:"jitterMs"`
-	AckRTTMs         float64  `json:"ackRttMs"`
-	LostUp           uint64   `json:"lostUpByAcks"`
-	DistanceM        float64  `json:"distanceWalkedM"`
-	MaxSnapGapMs     float64  `json:"maxSnapshotGapMs"`
-	PacerMarginTicks float64  `json:"pacerMarginTicks"`
-	PacerRaises      int      `json:"pacerRaises"`
-	Errors           []string `json:"errors,omitempty"`
+	Name             string          `json:"name"`
+	ID               int             `json:"id"`
+	Seconds          float64         `json:"seconds"`
+	InputsSent       uint32          `json:"inputsSent"`
+	Snapshots        int             `json:"snapshots"`
+	SnapshotsPerSec  float64         `json:"snapshotsPerSec"`
+	Corrections      uint64          `json:"corrections"`
+	Replayed         uint64          `json:"replayed"`
+	AvgReplayPerSnap float64         `json:"avgReplayPerSnapshot"`
+	ServerStarved    uint16          `json:"serverStarvedTicks"`
+	RTTMedianMs      float64         `json:"rttMedianMs"`
+	RTTMinMs         float64         `json:"rttMinMs"`
+	JitterMs         float64         `json:"jitterMs"`
+	AckRTTMs         float64         `json:"ackRttMs"`
+	LostUp           uint64          `json:"lostUpByAcks"`
+	DistanceM        float64         `json:"distanceWalkedM"`
+	MaxSnapGapMs     float64         `json:"maxSnapshotGapMs"`
+	PacerMarginTicks float64         `json:"pacerMarginTicks"`
+	PacerRaises      int             `json:"pacerRaises"`
+	Cond             json.RawMessage `json:"condAtWelcome,omitempty"`
+	TickRate         int             `json:"tickRate"`
+	Errors           []string        `json:"errors,omitempty"`
 }
 
 type bot struct {
@@ -85,7 +87,8 @@ type bot struct {
 	errs     []string
 	dist     float64
 	lastPos  [3]sim.Fx
-	rateCh   chan int
+	cond     json.RawMessage
+	rec      *statsRecorder // non-nil on the bot that records server stats
 }
 
 func (b *bot) now() float64 { return float64(time.Since(b.start).Nanoseconds()) / 1e6 }
@@ -118,6 +121,7 @@ func (b *bot) readLoop(ctx context.Context) {
 				st.Yaw, st.Pitch = int16(num("yaw")), int16(num("pitch"))
 				b.pred.Reset(st)
 				b.lastPos = st.Pos
+				b.cond = c.Cond
 				close(b.welcomed)
 			case "settings":
 				if c.Settings != nil {
@@ -125,6 +129,10 @@ func (b *bot) readLoop(ctx context.Context) {
 				}
 			case "error":
 				b.errs = append(b.errs, c.Msg)
+			case "stats":
+				if b.rec != nil {
+					b.rec.add(m.Data, time.Now())
+				}
 			}
 			b.mu.Unlock()
 			continue
@@ -203,9 +211,9 @@ func (wk *walker) next(rng *rand.Rand, now time.Time, speed float64) sim.Input {
 	return sim.Input{Buttons: btn, Yaw: sim.AngleFromRadians(wk.yaw)}
 }
 
-func run(ctx context.Context, url, name string, seed uint64) Summary {
+func run(ctx context.Context, url, name string, seed uint64, rec *statsRecorder) Summary {
 	b := &bot{name: name, start: time.Now(), rng: rand.New(rand.NewPCG(seed, seed*7+1)),
-		pred: sim.NewPredictor(sim.Courtyard(), sim.State{}), pacer: clock.NewPacer(), welcomed: make(chan struct{})}
+		pred: sim.NewPredictor(sim.Courtyard(), sim.State{}), pacer: clock.NewPacer(), welcomed: make(chan struct{}), rec: rec}
 	sum := Summary{Name: name}
 	conn, err := dial(ctx, url)
 	if err != nil {
@@ -291,6 +299,7 @@ loop:
 		Corrections:     b.pred.Corrections, Replayed: b.pred.Replayed,
 		ServerStarved: b.starved, RTTMedianMs: round2(e.RTTMs), RTTMinMs: round2(e.MinRTTMs), JitterMs: round2(e.JitterMs),
 		AckRTTMs: round2(es.RTTMs), LostUp: es.Lost, DistanceM: math.Round(b.dist), MaxSnapGapMs: round2(b.maxGap), PacerMarginTicks: b.pacer.Margin, PacerRaises: b.pacer.Adjustments,
+		Cond: b.cond, TickRate: b.set.TickRate,
 		Errors: append(sum.Errors, b.errs...),
 	}
 	if b.snaps > 0 {
@@ -332,6 +341,11 @@ func main() {
 	n := flag.Int("n", 1, "number of bots")
 	dur := flag.Duration("d", 30*time.Second, "how long to run (0 = until Ctrl-C)")
 	kind := flag.String("kind", "walker", "bot behaviour (walker)")
+	tick := flag.Int("tick", 0, "set the server tick rate (20/30/64/128) through the Lab before the bots join; needs -token")
+	token := flag.String("token", os.Getenv("NETLAB_ADMIN_TOKEN"), "admin token for -tick (default $NETLAB_ADMIN_TOKEN)")
+	stats := flag.Bool("stats", false, "record the server's 1 Hz tick stats (via bot 1) and print a load report")
+	warmup := flag.Duration("warmup", 10*time.Second, "with -stats: stats received in the first warmup after the last bot joined are not counted")
+	perBot := flag.Bool("perbot", true, "print one summary per bot (false: totals only)")
 	flag.Parse()
 	if *kind != "walker" {
 		log.Fatalf("unknown -kind %q (built: walker)", *kind)
@@ -342,19 +356,42 @@ func main() {
 		ctx, cancel = context.WithTimeout(ctx, *dur)
 		defer cancel()
 	}
+	if *tick > 0 {
+		if err := setTickRate(ctx, *url, *token, *tick); err != nil {
+			log.Fatalf("-tick %d: %v", *tick, err)
+		}
+	}
+	var rec *statsRecorder
+	if *stats {
+		rec = &statsRecorder{}
+	}
 	var wg sync.WaitGroup
 	out := make([]Summary, *n)
 	for i := 0; i < *n; i++ {
 		wg.Add(1)
+		var r *statsRecorder
+		if i == 0 {
+			r = rec
+		}
 		go func(i int) {
 			defer wg.Done()
-			out[i] = run(ctx, *url, fmt.Sprintf("bot-walker-%d", i+1), uint64(i+1))
+			out[i] = run(ctx, *url, fmt.Sprintf("bot-walker-%d", i+1), uint64(i+1), r)
 		}(i)
 		time.Sleep(50 * time.Millisecond)
 	}
+	if rec != nil {
+		rec.setFrom(time.Now().Add(*warmup))
+	}
 	wg.Wait()
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	res := map[string]any{"bots": len(out), "totals": totals(out)}
+	if *perBot {
+		res["perBot"] = out
+	}
+	if rec != nil {
+		res["serverTick"] = rec.report(*n)
+	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	enc.Encode(out)
+	enc.Encode(res)
 }
