@@ -305,5 +305,8 @@ Status: not built yet
 ## Playtest notes
 
 For HANDOFF B.9 check 8: 4+ people on the LAN, conditioner at default, play one round, then walk through presets
-P02 → P10 → P11–P15. Write the notes here.
+P02 → P10 → P11–P15. The host checklist, URLs and a notes template per step are in [PLAYTEST.md](PLAYTEST.md).
+Copy the session summary here afterwards.
+
+No playtest has been run yet.
 
