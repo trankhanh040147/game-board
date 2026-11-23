@@ -75,7 +75,7 @@ holds the player instead and counts `heldOnStall` (stats); see DECISIONS 22. A s
 | own.yaw, own.pitch | i16, i16 | |
 | own.health | u8 | |
 | own.inputBuffer | u8 | inputs queued at the server after this tick |
-| own.starved | u16 | cumulative ticks the server repeated an input (wraps) |
+| own.starved | u16 | cumulative ticks the server held (input late, one tick of grace) or repeated an input (wraps); the pacer raises its margin when it moves. Stats split it into `heldLate` and `starved` (DECISIONS 57) |
 | own.inputLead | i8 | smallest (clientTick − server tick at arrival) of the inputs that arrived since the previous snapshot; 1 = just in time; **127 = no input arrived** (pass it to `pacerFeedback`, which ignores 127) |
 | own.ownFlags | u8 | bit 0 dead (v2) |
 | own.life | u8 | +1 on every respawn (v2). A changed life = teleport, not a misprediction |

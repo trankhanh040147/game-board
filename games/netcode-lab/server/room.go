@@ -23,6 +23,10 @@ import (
 // Above TargetInputBuffer+2 it consumes two inputs in one tick to catch up.
 const TargetInputBuffer = 1
 
+// LateGraceTicks: a due input that is missing is waited for this many ticks
+// (player held) before the server repeats the last input (A.14 starvation).
+const LateGraceTicks = 1
+
 var teamNames = [2]string{"blue", "orange"}
 
 // CondPair is the conditioner setting of one client: up = client->server.
@@ -119,6 +123,8 @@ type Client struct {
 	starved        uint32
 	held           uint32 // ticks during/just after a host stall with no input: player held, not repeated
 	waitedEarly    uint32 // ticks the next input was stamped for a later tick (scheduled play)
+	heldLate       uint32 // ticks held because the due input was late (within LateGraceTicks)
+	lateHolds      int    // consecutive late holds
 	lastClientTick uint32
 	minLead        int32 // smallest arrival lead since the last snapshot (ticks)
 	haveMinLead    bool
@@ -319,6 +325,7 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings, tick uint32)
 		}
 		c.started = true
 	}
+	behind := false
 	for i := 0; i < 2; i++ {
 		cmd, ok := c.inbuf[c.lastProcessed+1]
 		if !ok && len(c.inbuf) > 0 {
@@ -353,7 +360,9 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings, tick uint32)
 		if i > 0 {
 			// Second input in one tick only to catch up: overdue scheduled
 			// input, or an unscheduled buffer deeper than target + 2.
-			if !ok || !(overdue || (!scheduled && len(c.inbuf) > TargetInputBuffer+2)) {
+			// After playing an overdue input we are behind: a second input
+			// that is already due plays too, putting the schedule back.
+			if !ok || !((scheduled && due && behind) || (!scheduled && len(c.inbuf) > TargetInputBuffer+2)) {
 				break
 			}
 		}
@@ -367,9 +376,18 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings, tick uint32)
 			c.held++
 			break
 		}
+		if !ok && c.lateHolds < LateGraceTicks {
+			// The input for this tick is late. Hold the player for one tick
+			// instead of repeating: inputs stay sequential, so the client's
+			// prediction still matches (no correction). Counted, and reported
+			// to the pacer, which raises its margin (DECISIONS 57).
+			c.lateHolds++
+			c.heldLate++
+			break
+		}
 		if !ok {
-			// The input this tick needs is missing: repeat the last input
-			// and count it (A.14). The client will see a correction.
+			// Still missing after the grace: repeat the last input and count
+			// it (A.14). The client will see a correction.
 			c.starved++
 			if c.lastClientTick != 0 {
 				c.lastClientTick++ // the repeated input used this tick's slot
@@ -380,6 +398,8 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings, tick uint32)
 			break
 		}
 		delete(c.inbuf, cmd.Seq)
+		behind = overdue
+		c.lateHolds = 0
 		c.lastProcessed = cmd.Seq
 		c.lastInput = cmd.In
 		c.lastClientTick = cmd.ClientTick
@@ -464,7 +484,7 @@ func (r *Room) sendSnapshots(tick uint32, s Settings, now float64) {
 // fillSnapshot sets everything in snap for client c except the header.
 func (r *Room) fillSnapshot(c *Client, snap *codec.Snapshot, tick uint32, now float64, ents []codec.Entity, s Settings) {
 	c.mu.Lock()
-	starved, lead, acked, ackedSnap := c.starved, c.inputLead, c.ackedTick, c.ackedBaseline
+	starved, lead, acked, ackedSnap := c.starved+c.heldLate, c.inputLead, c.ackedTick, c.ackedBaseline
 	// The snapshot reports the smallest lead of the inputs that arrived since
 	// the previous snapshot: the pacer's "how much slack is left" signal.
 	// No input arrived in this window: report 127 ("no news") instead of the
@@ -1136,7 +1156,7 @@ func (r *Room) sendStats() {
 		es := c.ep.Snapshot()
 		c.mu.Lock()
 		you := map[string]any{
-			"inputBuffer": len(c.inbuf), "starved": c.starved, "heldOnStall": c.held, "waitedEarly": c.waitedEarly, "skippedInputs": c.skipped,
+			"inputBuffer": len(c.inbuf), "starved": c.starved, "heldOnStall": c.held, "heldLate": c.heldLate, "waitedEarly": c.waitedEarly, "skippedInputs": c.skipped,
 			"redundantInputs": c.redundant, "lastProcessedInputSeq": c.lastProcessed, "inputLead": c.inputLead,
 			"ackedSnapshotTick": c.ackedTick,
 		}

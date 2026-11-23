@@ -137,8 +137,12 @@ func TestCatchUpHoldsOnTimeStarves(t *testing.T) {
 		t.Fatalf("catch-up: held=%d starved=%d moved=%v", c.held, c.starved, c.state != before)
 	}
 	c.simulate(sim.DtForRate(64), false, DefaultSettings(), 2)
+	if c.starved != 0 || c.heldLate != 1 || c.state != before {
+		t.Fatalf("on-time, first late tick: starved=%d heldLate=%d (one tick of grace, DECISIONS 57)", c.starved, c.heldLate)
+	}
+	c.simulate(sim.DtForRate(64), false, DefaultSettings(), 3)
 	if c.starved != 1 || c.state == before {
-		t.Fatalf("on-time: starved=%d moved=%v", c.starved, c.state != before)
+		t.Fatalf("on-time, still missing: starved=%d moved=%v", c.starved, c.state != before)
 	}
 }
 
@@ -210,13 +214,17 @@ func TestScheduledPlay(t *testing.T) {
 	if c.lastProcessed != 3 || c.starved != 0 {
 		t.Fatalf("catch-up: last=%d starved=%d", c.lastProcessed, c.starved)
 	}
-	c.simulate(dt, false, s, 104) // next input would be for 104: due and missing -> starvation (A.14)
+	c.simulate(dt, false, s, 104) // next input would be for 104: due and missing -> one tick of grace (held)
+	if c.starved != 0 || c.heldLate != 1 {
+		t.Fatalf("grace: starved %d heldLate %d", c.starved, c.heldLate)
+	}
+	c.simulate(dt, false, s, 105) // still missing -> starvation (A.14)
 	if c.starved != 1 {
 		t.Fatalf("starved %d", c.starved)
 	}
-	c.simulate(dt, false, s, 104) // its slot was used by the repeat; the next is for 105: wait, no starvation
-	if c.starved != 1 {
-		t.Fatalf("not-yet-due input counted as starvation: %d", c.starved)
+	c.simulate(dt, false, s, 106) // still no input: the grace is once per gap, so every further tick repeats (A.14)
+	if c.starved != 2 || c.heldLate != 1 {
+		t.Fatalf("long gap: starved %d heldLate %d", c.starved, c.heldLate)
 	}
 }
 
@@ -356,5 +364,43 @@ func TestPagePresetAnswersWithPage(t *testing.T) {
 	m := next(t, c, "presetPage")
 	if m["page"] != "/infra.html?preset=P16" {
 		t.Fatalf("%v", m)
+	}
+}
+
+// DECISIONS 57: an input that misses its tick by less than a tick is waited
+// for (player held, counted), so the client's prediction still matches; only
+// a longer gap repeats the last input (A.14 starvation, a correction).
+func TestLateInputHeldNotRepeated(t *testing.T) {
+	room := NewRoom(slog.New(slog.NewTextHandler(io.Discard, nil)), "x")
+	c := &Client{room: room, inbuf: map[uint32]sim.Cmd{}, recvMs: map[uint32]float64{}, started: true, alive: true}
+	c.state = sim.State{Pos: room.m.Spawn("blue", 0), OnGround: true}
+	dt, s := sim.DtForRate(64), DefaultSettings()
+	fwd := sim.Input{Buttons: sim.BtnForward}
+	c.inbuf[1] = sim.Cmd{Seq: 1, ClientTick: 100, In: fwd}
+	c.simulate(dt, false, s, 100)
+	// Input 2 (for tick 101) is late: held, not repeated.
+	before := c.state
+	c.simulate(dt, false, s, 101)
+	if c.starved != 0 || c.heldLate != 1 || c.state != before {
+		t.Fatalf("late input: starved=%d heldLate=%d moved=%v", c.starved, c.heldLate, c.state != before)
+	}
+	// It arrives with input 3: both play (catch-up) and the state equals
+	// applying 1, 2, 3 in order - what the client predicted.
+	c.inbuf[2] = sim.Cmd{Seq: 2, ClientTick: 101, In: fwd}
+	c.inbuf[3] = sim.Cmd{Seq: 3, ClientTick: 102, In: fwd}
+	c.simulate(dt, false, s, 102)
+	want := sim.State{Pos: room.m.Spawn("blue", 0), OnGround: true}
+	p := sim.DefaultParams()
+	for i := 0; i < 3; i++ {
+		sim.Step(room.m, &want, fwd, dt, &p)
+	}
+	if c.lastProcessed != 3 || c.state != want {
+		t.Fatalf("after the late input: last=%d, state matches prediction=%v", c.lastProcessed, c.state == want)
+	}
+	// Two ticks with nothing: one hold, then a repeat (A.14, counted).
+	c.simulate(dt, false, s, 103)
+	c.simulate(dt, false, s, 104)
+	if c.heldLate != 2 || c.starved != 1 {
+		t.Fatalf("long gap: heldLate=%d starved=%d", c.heldLate, c.starved)
 	}
 }

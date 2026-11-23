@@ -429,3 +429,24 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
     WebSocket client let snapshots through after about one RTO. Review measured a 199 ms gap where a real TCP
     stream stalls for the whole outage and then for the backoff. Datagram (WebTransport) links are unchanged:
     a burst simply drops everything. Test: `TestOrderedOutageBacksOff`.
+57. **One tick of grace for a late input** (B.9 check 2; bots' quiet-window run at dad056d: exactly 1 correction
+    per bot, about 6 s after join, on WS and WT).
+    - Why the probe starved: the server reports lead in whole ticks, and lead 1 means anywhere from 0 to 1 tick
+      of real slack. The lead pacer (decision 51) lowers its margin while every lead in the window is ≥ 2, so it
+      settles at lead 1, which the measurement allows. A rare jitter spike that the 2 s window never saw (bots'
+      probe saw host lateness up to 20 ms ≈ 1.3 ticks) then pushed one input past its tick. The server repeated
+      the last input, and that was one correction. No pacer rule based only on what it has seen can rule out an
+      unseen spike without keeping about two ticks of margin for ever.
+    - Rule: when the input a tick needs is missing, the server first **holds** that player for one tick
+      (`LateGraceTicks` = 1, counted as `heldLate`). Inputs stay strictly sequential, so the client's prediction
+      still matches and nothing is corrected. When the late input arrives it plays, together with the next due
+      input, which puts the schedule back. Only if the input is still missing on the next tick does the server
+      repeat the last input, count `starved` and cause a correction (A.14). The grace is once per gap: in a long
+      outage every further tick repeats.
+    - The pacer still sees a late hold: snapshot `own.starved` = repeats + late holds, so it raises its margin
+      and sets the 30 s floor as before. Stats report `starved` and `heldLate` separately.
+    - Cost: a held player stands still for one tick (15.6 ms at 64 Hz) on other screens. That is smaller than
+      interpolation can show and far smaller than a correction on the owner's screen.
+    - Tests: `TestLateInputHeldNotRepeated` (held, then the late input plays and the state equals the client's
+      sequential prediction; a long gap repeats), plus the updated `TestScheduledPlay` and
+      `TestCatchUpHoldsOnTimeStarves`.
