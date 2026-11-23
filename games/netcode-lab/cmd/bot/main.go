@@ -78,29 +78,31 @@ type bot struct {
 	start time.Time
 	rng   *rand.Rand
 
-	mu        sync.Mutex
-	ep        codec.Endpoint
-	clk       clock.Sync
-	pacer     *clock.Pacer
-	pred      *sim.Predictor
-	set       settings
-	id        int
-	welcomed  chan struct{}
-	snaps     int
-	lastSnap  float64
-	maxGap    float64
-	starved   uint16
-	errs      []string
-	dist      float64
-	lastPos   [3]sim.Fx
-	cond      json.RawMessage
-	brain     brain
-	baselines codec.Baselines // v3 delta baselines by SnapID
-	badSnaps  int
-	gaps      []float64      // snapshot inter-arrival times (ms), P29
-	stallAt   []string       // wall clock + length of each gap > 3x the send interval
-	corrAt    []string       // wall-clock time of each correction (first 500)
-	rec       *statsRecorder // non-nil on the bot that records server stats
+	mu               sync.Mutex
+	ep               codec.Endpoint
+	clk              clock.Sync
+	pacer            *clock.Pacer
+	pred             *sim.Predictor
+	set              settings
+	id               int
+	welcomed         chan struct{}
+	snaps            int
+	lastSnap         float64
+	maxGap           float64
+	starved          uint16
+	errs             []string
+	dist             float64
+	lastPos          [3]sim.Fx
+	cond             json.RawMessage
+	brain            brain
+	baselines        codec.Baselines // v3 delta baselines by SnapID
+	badSnaps         int
+	gaps             []float64 // snapshot inter-arrival times (ms), P29
+	stallAt          []string  // wall clock + length of each gap > 3x the send interval
+	lastSnapID       uint8
+	lossGaps, stalls int
+	corrAt           []string       // wall-clock time of each correction (first 500)
+	rec              *statsRecorder // non-nil on the bot that records server stats
 }
 
 func (b *bot) now() float64 { return float64(time.Since(b.start).Nanoseconds()) / 1e6 }
@@ -176,11 +178,24 @@ func (b *bot) readLoop(ctx context.Context) {
 			if b.lastSnap > 0 {
 				b.maxGap = math.Max(b.maxGap, now-b.lastSnap)
 				b.gaps = append(b.gaps, now-b.lastSnap)
-				if b.set.SendRate > 0 && now-b.lastSnap > 3*1000/float64(b.set.SendRate) && len(b.stallAt) < 300 {
-					b.stallAt = append(b.stallAt, fmt.Sprintf("%s %.1f", time.Now().Format("15:04:05.000"), now-b.lastSnap))
+				if b.set.SendRate > 0 && now-b.lastSnap > 3*1000/float64(b.set.SendRate) {
+					// B.9 #6 ruling (DECISIONS): a gap > 3x the send interval with missing
+					// snapshot ids is a loss gap; with none missing it is a stall (head-of-line).
+					missing := snapIDsMissing(b.lastSnapID, snap.SnapID)
+					kind := "stall"
+					if missing > 0 {
+						kind = "loss"
+						b.lossGaps++
+					} else {
+						b.stalls++
+					}
+					if len(b.stallAt) < 300 {
+						b.stallAt = append(b.stallAt, fmt.Sprintf("%s %.1f %s missing=%d", time.Now().Format("15:04:05.000"), now-b.lastSnap, kind, missing))
+					}
 				}
 			}
 			b.lastSnap = now
+			b.lastSnapID = snap.SnapID
 			b.snaps++
 			b.starved = snap.Own.Starved
 			b.pacer.OnServerLead(snap.Own.Starved, snap.Own.InputLead, now) // DECISIONS 51 (0b4e1af)
@@ -351,6 +366,7 @@ loop:
 	if len(b.gaps) > 0 && b.set.SendRate > 0 {
 		sum.InterArrival = interArrival(b.gaps, 1000/float64(b.set.SendRate))
 		sum.InterArrival["stallsAt"] = b.stallAt
+		sum.InterArrival["gapsOver3xByKind"] = map[string]int{"stall": b.stalls, "loss": b.lossGaps}
 	}
 	if b.snaps > 0 {
 		sum.AvgReplayPerSnap = round2(float64(b.pred.Replayed) / float64(b.snaps))
@@ -540,4 +556,17 @@ func main() {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.Encode(res)
+}
+
+// snapIDsMissing counts snapshot ids skipped between prev and cur (ids run
+// 1..255 and wrap past 0). 0 = consecutive, or unknown (either id 0).
+func snapIDsMissing(prev, cur uint8) int {
+	if prev == 0 || cur == 0 {
+		return 0
+	}
+	steps := (int(cur) - int(prev) + 255) % 255
+	if steps == 0 {
+		return 0
+	}
+	return steps - 1
 }

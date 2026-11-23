@@ -2,6 +2,9 @@
 # P29 / B.9 check 6: snapshot inter-arrival, WebSocket vs WebTransport datagrams, with LOSS % loss
 # each way on the default 20 ms delay. N walker bots per transport, D each, fresh server per run.
 # Pass (B.9 #6): WebSocket shows stalls > 3x the send interval; datagram mode does not.
+# Lead ruling (DECISIONS): every gap > 3x the interval (150 ms at 20/s) is classified by snapshot ids:
+# ids missing in the gap = loss gap (data gone, newer data on time); none missing = stall (head-of-line).
+# The check is judged on stalls; loss gaps are listed beside them.
 # Usage: sh scripts/p29-transport.sh [duration=2m] [loss=5] [bots=3]   (run from games/netcode-lab)
 # Team rule: ports 18600-18699; processes stopped by recorded PID only. OUT=<dir> keeps files.
 set -eu
@@ -47,11 +50,16 @@ for m in ["ws", "wt"]:
     print(m, "server", open(f"{out}/server-{m}.alive").read().strip(), "| uptime:", " / ".join(l.split("load averages:")[1].strip() for l in open(f"{out}/uptime-{m}.log")), "| host stall events:", len(host))
     for b in d["perBot"]:
         ia = b["snapshotInterArrival"]
-        unexplained = []
+        kinds = ia.get("gapsOver3xByKind") or {}
+        hoststall = {"stall": 0, "loss": 0}
+        stalls_not_host = []
         for st in ia.get("stallsAt") or []:
-            hms, ln = st.split(); end = sec(hms); start = end - float(ln) / 1000
-            if not any(a <= end + 0.05 and start - 0.05 <= z for a, z in host):
-                unexplained.append(st)
-        print(f'  {b["name"]}: snaps {b["snapshots"]} p50 {ia["p50Ms"]} p95 {ia["p95Ms"]} p99 {ia["p99Ms"]} max {ia["maxMs"]} stalls>3x {ia["stallsOver3xInterval"]} (not overlapping a host stall: {len(unexplained)} {unexplained[:8]}) hist {json.dumps(ia["histogramByInterval"], sort_keys=True)} errors {b.get("errors")}')
+            f = st.split(); hms, ln, kind = f[0], f[1], f[2]
+            end = sec(hms); start = end - float(ln) / 1000
+            if any(a <= end + 0.05 and start - 0.05 <= z for a, z in host):
+                hoststall[kind] += 1
+            elif kind == "stall":
+                stalls_not_host.append(f"{hms} {ln}")
+        print(f'  {b["name"]}: snaps {b["snapshots"]} p50 {ia["p50Ms"]} p95 {ia["p95Ms"]} p99 {ia["p99Ms"]} max {ia["maxMs"]} gaps>3x {ia["stallsOver3xInterval"]}: STALLS {kinds.get("stall")} (overlapping a host stall {hoststall["stall"]}; others {stalls_not_host[:6]}), loss gaps {kinds.get("loss")} (overlapping a host stall {hoststall["loss"]}) hist {json.dumps(ia["histogramByInterval"], sort_keys=True)} errors {b.get("errors")}')
 print("raw:", out)
 PY
