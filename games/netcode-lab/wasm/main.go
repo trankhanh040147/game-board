@@ -92,7 +92,7 @@ func fn(f func(args []js.Value) any) js.Func {
 
 func m(meters sim.Fx) float64 { return sim.ToFloat(meters) }
 
-func decode(ep *codec.Endpoint, b []byte, now float64) any {
+func decode(ep *codec.Endpoint, store *codec.Baselines, b []byte, now float64) any {
 	r := codec.Reader{B: b}
 	h := r.Header()
 	if r.Err != nil {
@@ -103,7 +103,7 @@ func decode(ep *codec.Endpoint, b []byte, now float64) any {
 	switch h.Type {
 	case codec.TSnapshot:
 		var s codec.Snapshot
-		codec.ReadSnapshot(&r, &s)
+		codec.ReadSnapshotWith(&r, &s, store)
 		ents := make([]any, len(s.Entities))
 		for i, e := range s.Entities {
 			ents[i] = map[string]any{"id": int(e.ID), "team": int(e.Team), "x": int(e.Pos[0]), "y": int(e.Pos[1]), "z": int(e.Pos[2]),
@@ -121,6 +121,8 @@ func decode(ep *codec.Endpoint, b []byte, now float64) any {
 			"starved": int(s.Own.Starved), "inputLead": int(s.Own.InputLead),
 			"dead": s.Own.Dead, "life": int(s.Own.Life)}
 		out["baselineId"] = int(s.BaselineID)
+		out["snapId"] = int(s.SnapID)
+		out["encoding"] = int(s.Encoding)
 		out["entities"] = ents
 		out["events"] = evs
 	case codec.TPong:
@@ -147,6 +149,12 @@ func decode(ep *codec.Endpoint, b []byte, now float64) any {
 		return map[string]any{"type": "invalid", "error": r.Err.Error()}
 	}
 	return out
+}
+
+// wconn is one connection's codec state: ack header + delta baselines.
+type wconn struct {
+	ep   codec.Endpoint
+	base codec.Baselines
 }
 
 func pos3(p [3]int32) any { return []any{int(p[0]), int(p[1]), int(p[2])} }
@@ -198,11 +206,12 @@ func pongFromJS(v js.Value) codec.Pong {
 
 func main() {
 	api := map[string]any{
-		"apiVersion":      2,
-		"protocolVersion": 2,
+		"apiVersion":      3,
+		"protocolVersion": 3,
 		"FX":              int(sim.One),
 		"BTN": map[string]any{"forward": int(sim.BtnForward), "back": int(sim.BtnBack), "left": int(sim.BtnLeft),
 			"right": int(sim.BtnRight), "jump": int(sim.BtnJump), "fire": int(sim.BtnFire)},
+		"ENC":  map[string]any{"quant": int(codec.EncQuant), "bitpack": int(codec.EncBitpack), "delta": int(codec.EncDelta)},
 		"HIT":  map[string]any{"none": int(sim.HitNone), "body": int(sim.HitBody), "head": int(sim.HitHead)},
 		"ANIM": map[string]any{"onGround": int(codec.AnimOnGround), "moving": int(codec.AnimMoving), "dead": int(codec.AnimDead)},
 		"PLAYER": map[string]any{"halfWidth": m(sim.HalfWidth), "height": m(sim.Height), "eyeHeight": m(sim.EyeHeight),
@@ -250,9 +259,9 @@ func main() {
 			return map[string]any{"state": stateToJS(p.State), "corrections": float64(p.Corrections), "replayed": float64(p.Replayed), "pending": seqs}
 		}),
 
-		"newConn": fn(func(a []js.Value) any { return put(&codec.Endpoint{}) }),
+		"newConn": fn(func(a []js.Value) any { return put(&wconn{}) }),
 		"encodeInput": fn(func(a []js.Value) any {
-			ep := get[*codec.Endpoint](a[0])
+			ep := &get[*wconn](a[0]).ep
 			arr := a[1]
 			cmds := make([]sim.Cmd, arr.Length())
 			for i := range cmds {
@@ -263,7 +272,7 @@ func main() {
 			return bytesToJS(w.B)
 		}),
 		"encodeInputFromPredictor": fn(func(a []js.Value) any {
-			ep := get[*codec.Endpoint](a[0])
+			ep := &get[*wconn](a[0]).ep
 			pend := get[*sim.Predictor](a[1]).Pending()
 			var w codec.Writer
 			codec.AppendInput(&w, ep.NextHeader(codec.TInput, a[2].Float()), &codec.Input{Cmds: pend[max(0, len(pend)-codec.MaxCmds):]})
@@ -278,30 +287,31 @@ func main() {
 			return out
 		}),
 		"encodePing": fn(func(a []js.Value) any {
-			ep := get[*codec.Endpoint](a[0])
+			ep := &get[*wconn](a[0]).ep
 			now := a[1].Float()
 			var w codec.Writer
 			codec.AppendPing(&w, ep.NextHeader(codec.TPing, now), &codec.Ping{ClientSendMs: now})
 			return bytesToJS(w.B)
 		}),
 		"encodeSnapshotAck": fn(func(a []js.Value) any {
-			ep := get[*codec.Endpoint](a[0])
+			ep := &get[*wconn](a[0]).ep
 			var w codec.Writer
 			codec.AppendSnapshotAck(&w, ep.NextHeader(codec.TSnapshotAck, a[3].Float()),
 				&codec.SnapshotAck{BaselineID: uint8(a[1].Int()), ServerTick: uint32(a[2].Int())})
 			return bytesToJS(w.B)
 		}),
 		"decode": fn(func(a []js.Value) any {
-			return decode(get[*codec.Endpoint](a[0]), bytesFromJS(a[1]), a[2].Float())
+			wc := get[*wconn](a[0])
+			return decode(&wc.ep, &wc.base, bytesFromJS(a[1]), a[2].Float())
 		}),
 		"connStats": fn(func(a []js.Value) any {
-			s := get[*codec.Endpoint](a[0]).Snapshot()
+			s := get[*wconn](a[0]).ep.Snapshot()
 			return map[string]any{"sent": float64(s.Sent), "acked": float64(s.Acked), "lost": float64(s.Lost), "rttMs": s.RTTMs,
 				"received": float64(s.Received), "duplicates": float64(s.Duplicates), "old": float64(s.Old), "remoteGaps": float64(s.RemoteGaps)}
 		}),
 
 		"encodeClaim": fn(func(a []js.Value) any {
-			ep := get[*codec.Endpoint](a[0])
+			ep := &get[*wconn](a[0]).ep
 			v := a[1]
 			c := codec.Claim{InputSeq: uint32(optInt(v, "seq")), ClientTick: uint32(optInt(v, "clientTick")),
 				Pos:      [3]int32{int32(optInt(v, "x")), int32(optInt(v, "y")), int32(optInt(v, "z"))},

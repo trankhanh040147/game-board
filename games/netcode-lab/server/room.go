@@ -56,27 +56,29 @@ type Room struct {
 	lastStallNs  int64     // start time (since r.start) of the last late tick
 	wbuf         codec.Writer
 
-	tick      atomic.Uint32
-	hist      *history
-	pool      bufPool
-	ents      []codec.Entity // zero-alloc loop scratch
-	dbg       codec.Debug
-	snap      codec.Snapshot
-	timingOn  hist // P26 shot timing error with sub-tick on
-	timingOff hist // ... and quantised to the tick
-	tickHist  hist // whole-window tick processing time
-	lateHist  hist // whole-window tick start lateness
-	round     roundState
-	teamScore [2]int
-	spawnSeq  int
-	tickNowMs float64 // server time at the start of the current tick
-	outbox    []any   // control messages produced inside a tick, sent after unlock
+	tick        atomic.Uint32
+	hist        *history
+	pool        bufPool
+	ents        []codec.Entity // zero-alloc loop scratch
+	dbg         codec.Debug
+	snap        codec.Snapshot
+	compScratch codec.Writer
+	timingOn    hist // P26 shot timing error with sub-tick on
+	timingOff   hist // ... and quantised to the tick
+	tickHist    hist // whole-window tick processing time
+	lateHist    hist // whole-window tick start lateness
+	round       roundState
+	teamScore   [2]int
+	spawnSeq    int
+	tickNowMs   float64 // server time at the start of the current tick
+	outbox      []any   // control messages produced inside a tick, sent after unlock
 
 	tickStartNs    atomic.Int64 // since start
 	periodNs       atomic.Int64
 	tickRate       atomic.Int32
 	scheduleResets atomic.Uint64
 	naiveLoop      atomic.Bool
+	lastEnc        uint8
 }
 
 func NewRoom(log *slog.Logger, adminToken string) *Room {
@@ -128,7 +130,12 @@ type Client struct {
 	reportJitter  float64
 
 	bytes    byteCounters
-	entsSent atomic.Uint32 // entities in the last snapshot (P28)
+	comp     [4]atomic.Uint64 // P27 entity-section bytes: raw, quant, quant+bitpack, delta
+	compLast [4]uint64
+	snapSeq  uint8           // last SnapID (1..255)
+	sentBase codec.Baselines // entity lists sent, by SnapID (delta baselines)
+	baseEnc  [256]uint8      // encoding each stored baseline was sent with
+	entsSent atomic.Uint32   // entities in the last snapshot (P28)
 
 	// owned by the tick loop (room.mu)
 	spectator      bool
@@ -423,12 +430,31 @@ func (r *Room) sendSnapshots(tick uint32, s Settings, now float64) {
 // fillSnapshot sets everything in snap for client c except the header.
 func (r *Room) fillSnapshot(c *Client, snap *codec.Snapshot, tick uint32, now float64, ents []codec.Entity, s Settings) {
 	c.mu.Lock()
-	starved, lead, acked := c.starved, c.inputLead, c.ackedTick
+	starved, lead, acked, ackedSnap := c.starved, c.inputLead, c.ackedTick, c.ackedBaseline
 	c.mu.Unlock()
 	snap.ServerTick, snap.ServerTimeMs, snap.LastProcessedInputSeq = tick, now, c.snapLast
 	snap.Own = codec.OwnState{State: c.state, Health: c.health, InputBuffer: c.snapBuf, Starved: uint16(starved), InputLead: lead,
 		Dead: !c.alive && !c.spectator, Life: c.life}
-	snap.BaselineID = 0
+	c.snapSeq++
+	if c.snapSeq == 0 {
+		c.snapSeq = 1
+	}
+	snap.SnapID, snap.BaselineID, snap.Base = c.snapSeq, 0, nil
+	snap.Encoding = s.Encoding()
+	// Delta only against a snapshot the client acked, recent enough to still
+	// be in both rings, and sent with the same encoding.
+	var ackedEnts []codec.Entity
+	if base, ok := c.sentBase.Get(ackedSnap); ok && c.sentBase.Age(ackedSnap) < 200 {
+		ackedEnts = base
+		if snap.Encoding&codec.EncDelta != 0 && c.baseEnc[ackedSnap] == snap.Encoding {
+			snap.BaselineID, snap.Base = ackedSnap, base
+		}
+	}
+	defer func() {
+		c.sentBase.Put(snap.SnapID, snap.Entities)
+		c.baseEnc[snap.SnapID] = snap.Encoding
+		r.measureComp(c, snap.Entities, ackedEnts)
+	}()
 	// Events ride every snapshot until the client acks one that carried them.
 	keep := c.events[:0]
 	for _, pe := range c.events {
@@ -812,6 +838,12 @@ func (r *Room) applySettings(s Settings, preset string) {
 	r.sendAcc = 0
 	r.params.SpeedScale = sim.FromFloat(s.SpeedScale)
 	r.naiveLoop.Store(s.Loop == "naive")
+	if s.Encoding() != r.lastEnc {
+		for _, c := range r.clients {
+			c.sentBase = codec.Baselines{} // next snapshot is full in the new encoding
+		}
+		r.lastEnc = s.Encoding()
+	}
 	applyMemLimit(s.GoMemLimitMB)
 	if rateChanged {
 		r.setRate(s.TickRate)
@@ -1038,6 +1070,7 @@ func (r *Room) sendStats() {
 		you["downSent"], you["downAcked"], you["downLost"] = es.Sent, es.Acked, es.Lost
 		you["cond"] = CondPair{Up: c.up.Params(), Down: c.down.Params()}
 		you["entitiesPerSnapshot"] = c.entsSent.Load()
+		you["entityBytes"] = c.compRates(1) // stats run at 1 Hz; payload of the entity section only
 		you["condStats"] = map[string]cond.Stats{"up": c.up.Stats(), "down": c.down.Stats()}
 		r.send(c, map[string]any{
 			"t": "stats", "serverTick": tick, "serverTimeMs": r.NowMs(), "tickRate": s.TickRate, "sendRate": s.SendRate,
@@ -1051,7 +1084,7 @@ func (r *Room) sendStats() {
 }
 
 // ProtocolVersion is sent in welcome; bump on wire changes.
-const ProtocolVersion = 2
+const ProtocolVersion = 3
 
 // syncRTT gives each ordered (TCP-modelled) link the other direction's delay,
 // so its retransmission model uses the full simulated RTT.

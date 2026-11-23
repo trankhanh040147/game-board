@@ -2,6 +2,8 @@ package server
 
 import (
 	"sync/atomic"
+
+	"netcodelab/net/codec"
 )
 
 // Per-client byte counters (M5 cost meters, P12). Payload bytes only: the
@@ -85,4 +87,32 @@ func (r *Room) relayShotSeen(from *Client, in ctrlIn) {
 	}
 	r.send(sh, map[string]any{"t": "shotTrace", "shotSeq": in.ShotSeq, "targetId": from.id,
 		"targetRecvServerMs": in.RecvMs, "targetInterpMs": in.InterpMs, "targetFrameServerMs": in.FrameMs})
+}
+
+// measureComp adds what this snapshot's entity list would cost in each P27
+// encoding, whatever encoding is active, for the raw/quantised/delta meters.
+func (r *Room) measureComp(c *Client, ents, acked []codec.Entity) {
+	w := &r.compScratch
+	c.comp[0].Add(uint64(codec.EntitySectionSize(w, 0, ents, nil)))
+	c.comp[1].Add(uint64(codec.EntitySectionSize(w, codec.EncQuant, ents, nil)))
+	c.comp[2].Add(uint64(codec.EntitySectionSize(w, codec.EncQuant|codec.EncBitpack, ents, nil)))
+	full := codec.EncQuant | codec.EncBitpack | codec.EncDelta
+	if acked == nil {
+		full &^= codec.EncDelta // no acked baseline yet: delta degenerates to a full list
+	}
+	c.comp[3].Add(uint64(codec.EntitySectionSize(w, full, ents, acked)))
+}
+
+// compRates returns the P27 meters in bytes/s since the last call.
+func (c *Client) compRates(dtSec float64) map[string]float64 {
+	names := [4]string{"rawBps", "quantBps", "quantBitpackBps", "deltaBps"}
+	out := map[string]float64{}
+	for i := range c.comp {
+		cur := c.comp[i].Load()
+		if dtSec > 0 {
+			out[names[i]] = float64(cur-c.compLast[i]) / dtSec
+		}
+		c.compLast[i] = cur
+	}
+	return out
 }

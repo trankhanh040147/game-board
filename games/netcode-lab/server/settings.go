@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 
+	"netcodelab/net/codec"
+
 	"fmt"
 	"netcodelab/net/cond"
 	"slices"
@@ -44,6 +46,25 @@ type Settings struct {
 	// 8 neighbouring cells; InterestCellM is the cell size in metres.
 	Interest      bool `json:"interest"`
 	InterestCellM int  `json:"interestCellM"`
+	// Compression of other players in snapshots (P27). Own state stays exact.
+	CompQuant   bool `json:"compQuant"`
+	CompBitpack bool `json:"compBitpack"`
+	CompDelta   bool `json:"compDelta"`
+}
+
+// Encoding is the snapshot entity encoding these settings select.
+func (s Settings) Encoding() uint8 {
+	var e uint8
+	if s.CompQuant {
+		e |= codec.EncQuant
+	}
+	if s.CompBitpack {
+		e |= codec.EncBitpack
+	}
+	if s.CompDelta {
+		e |= codec.EncDelta
+	}
+	return e
 }
 
 // DefaultSettings match A.1 / B.4.
@@ -92,6 +113,9 @@ func SupportedSettings() []SettingInfo {
 		{Key: "subtick", Kind: "bool", Built: true, Note: "P26: shot timed at the click inside the tick vs quantised to the tick end"},
 		{Key: "interest", Kind: "bool", Built: true, Note: "P28: replicate only entities in nearby grid cells"},
 		{Key: "interestCellM", Kind: "int", Min: 4, Max: 64, Built: true, Note: "P28 grid cell size (m); the window is 3x3 cells"},
+		{Key: "compQuant", Kind: "bool", Built: true, Note: "P27: other players' positions to 1/256 m, angles to 8 bits"},
+		{Key: "compBitpack", Kind: "bool", Built: true, Note: "P27: pack fields to their bit widths"},
+		{Key: "compDelta", Kind: "bool", Built: true, Note: "P27: send only what changed since the snapshot the client acked"},
 		{Key: "goMemLimitMB", Kind: "int", Min: 0, Max: 65536, Built: true, Note: "GOMEMLIMIT via runtime/debug.SetMemoryLimit; 0 = no limit"},
 		{Key: "speedScale", Kind: "float", Min: 0.25, Max: 2, Built: true, Note: "server-only movement modifier, not known to clients (rubber-band, P25)"},
 		{Key: "tickRate", Kind: "enum", Allowed: allowedTick, Built: true},
@@ -277,7 +301,12 @@ func Presets() []Preset {
 				s.Subtick = false
 			},
 			Banner: "Shots quantised to the tick: the server times every shot at the tick end, up to one tick (15.6 ms at 64 Hz) after the click. Toggle sub-tick to compare the timing-error histogram. Sub-tick is not the same as 128 Hz."},
-		{ID: "P27", Title: "Compression", Section: "A.15"},
+		{ID: "P27", Title: "Compression", Section: "A.15", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.CompQuant, s.CompBitpack, s.CompDelta = true, true, true
+			},
+			Banner: "Quantised positions, bit packing and delta against the snapshot you acked: compare the raw, quantised and delta kbps meters at rest and while moving."},
 		{ID: "P28", Title: "Interest management", Section: "A.15", Built: true,
 			apply: func(s *Settings) {
 				base(s)

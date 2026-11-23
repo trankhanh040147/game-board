@@ -204,3 +204,85 @@ func TestEventsAndClaimRoundTrip(t *testing.T) {
 		t.Fatal(c2)
 	}
 }
+
+func encodeDecode(t *testing.T, s *Snapshot, store *Baselines) (Snapshot, int) {
+	t.Helper()
+	var w Writer
+	AppendSnapshot(&w, Header{}, s)
+	r := &Reader{B: w.B}
+	r.Header()
+	var out Snapshot
+	ReadSnapshotWith(r, &out, store)
+	if r.Err != nil || r.Off != len(w.B) {
+		t.Fatalf("decode: err=%v off=%d/%d", r.Err, r.Off, len(w.B))
+	}
+	return out, len(w.B)
+}
+
+func someEntities(n int, step int32) []Entity {
+	var es []Entity
+	for i := 1; i <= n; i++ {
+		es = append(es, Entity{ID: uint8(i), Team: uint8(i % 2), Pos: [3]int32{int32(i)*70000 + step*5000, 0, -int32(i)*90000 + step*3000},
+			Yaw: int16(i * 1000), Pitch: int16(-i * 300), Health: 100, Anim: AnimOnGround})
+	}
+	return es
+}
+
+// P27: raw is exact; quantised is within 1/512 m and 1/256 turn; delta at
+// rest is tiny and reconstructs exactly the quantised values.
+func TestEntityEncodings(t *testing.T) {
+	ents := someEntities(10, 0)
+	raw, rawN := encodeDecode(t, &Snapshot{SnapID: 1, Entities: ents}, nil)
+	if !reflect.DeepEqual(raw.Entities, ents) {
+		t.Fatal("raw must be exact")
+	}
+	q, qN := encodeDecode(t, &Snapshot{SnapID: 1, Encoding: EncQuant, Entities: ents}, nil)
+	qb, qbN := encodeDecode(t, &Snapshot{SnapID: 1, Encoding: EncQuant | EncBitpack, Entities: ents}, nil)
+	if !reflect.DeepEqual(q.Entities, qb.Entities) {
+		t.Fatal("bit packing must not change values")
+	}
+	for i, e := range q.Entities {
+		for k := 0; k < 3; k++ {
+			if d := e.Pos[k] - ents[i].Pos[k]; d > 128 || d < -128 {
+				t.Fatalf("quantisation error %d units on axis %d", d, k)
+			}
+		}
+		if d := int(e.Yaw) - int(ents[i].Yaw); d > 128 || d < -128 {
+			t.Fatalf("yaw error %d", d)
+		}
+	}
+	t.Logf("10 entities: raw %d B, quant %d B, quant+bitpack %d B", rawN, qN, qbN)
+	if !(qbN < qN && qN < rawN) {
+		t.Fatal("sizes must shrink")
+	}
+
+	// Delta: client stores snapshot 1, then gets 2 (at rest) and 3 (moving, one entity gone).
+	enc := EncQuant | EncBitpack | EncDelta
+	var cstore Baselines
+	full, _ := encodeDecode(t, &Snapshot{SnapID: 1, Encoding: enc, Entities: ents}, &cstore) // no base -> full
+	rest, restN := encodeDecode(t, &Snapshot{SnapID: 2, BaselineID: 1, Encoding: enc, Entities: ents, Base: ents}, &cstore)
+	if !reflect.DeepEqual(rest.Entities, full.Entities) {
+		t.Fatal("delta at rest must reproduce the baseline")
+	}
+	moved := someEntities(10, 1)[:9]
+	mv, mvN := encodeDecode(t, &Snapshot{SnapID: 3, BaselineID: 2, Encoding: enc, Entities: moved, Base: ents}, &cstore)
+	want, _ := encodeDecode(t, &Snapshot{SnapID: 9, Encoding: EncQuant | EncBitpack, Entities: moved}, nil)
+	if !reflect.DeepEqual(mv.Entities, want.Entities) {
+		t.Fatalf("delta while moving must equal the full quantised list\n got %+v\nwant %+v", mv.Entities, want.Entities)
+	}
+	t.Logf("delta at rest %d B (whole packet), moving %d B", restN, mvN)
+	if restN >= qbN || mvN <= restN {
+		t.Fatal("delta sizes")
+	}
+	// A delta without its baseline is an error, not garbage.
+	var empty Baselines
+	var w Writer
+	AppendSnapshot(&w, Header{}, &Snapshot{SnapID: 4, BaselineID: 3, Encoding: enc, Entities: moved, Base: moved})
+	r := &Reader{B: w.B}
+	r.Header()
+	var out Snapshot
+	ReadSnapshotWith(r, &out, &empty)
+	if r.Err != ErrNoBaseline {
+		t.Fatalf("want ErrNoBaseline, got %v", r.Err)
+	}
+}

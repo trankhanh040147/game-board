@@ -48,7 +48,7 @@ ws.onmessage = (ev) => {
       if (r.corrected) stats.corrections++;
       stats.replayed += r.replayed;
     }
-    ws.send(S.encodeSnapshotAck(conn, msg.baselineId, msg.serverTick, now));
+    ws.send(S.encodeSnapshotAck(conn, msg.snapId, msg.serverTick, now));
   }
 };
 

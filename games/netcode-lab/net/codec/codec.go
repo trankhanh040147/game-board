@@ -61,7 +61,10 @@ type Reader struct {
 }
 
 func (r *Reader) need(n int) bool {
-	if r.Err != nil || r.Off+n > len(r.B) {
+	if r.Err != nil {
+		return false // keep the first error
+	}
+	if r.Off+n > len(r.B) {
 		r.Err = ErrShort
 		return false
 	}
@@ -198,9 +201,14 @@ type Snapshot struct {
 	ServerTimeMs          float64
 	LastProcessedInputSeq uint32
 	Own                   OwnState
-	BaselineID            uint8 // 0 = full snapshot (no delta yet)
+	SnapID                uint8 // this snapshot's id (1..255, wraps; 0 = untracked); the client acks it
+	BaselineID            uint8 // snapshot the entity list is a delta against (0 = none)
+	Encoding              uint8 // EncQuant | EncBitpack | EncDelta (P27); own state is always exact
 	Entities              []Entity
 	Events                []Event
+	// Base is the baseline's entity list, used only when encoding with
+	// EncDelta (not on the wire).
+	Base []Entity
 }
 
 func AppendSnapshot(w *Writer, h Header, s *Snapshot) {
@@ -220,20 +228,17 @@ func AppendSnapshot(w *Writer, h Header, s *Snapshot) {
 	}
 	w.U8(of)
 	w.U8(s.Own.Life)
-	w.U8(s.BaselineID)
-	w.U8(uint8(len(s.Entities)))
-	for i := range s.Entities {
-		e := &s.Entities[i]
-		w.U8(e.ID)
-		w.U8(e.Team)
-		w.I32(e.Pos[0])
-		w.I32(e.Pos[1])
-		w.I32(e.Pos[2])
-		w.I16(e.Yaw)
-		w.I16(e.Pitch)
-		w.U8(e.Health)
-		w.U8(e.Anim)
+	w.U8(s.SnapID)
+	base := s.Base
+	if s.Encoding&EncDelta == 0 || s.BaselineID == 0 {
+		base = nil
 	}
+	if base == nil {
+		w.U8(0)
+	} else {
+		w.U8(s.BaselineID)
+	}
+	appendEntities(w, s.Encoding, s.Entities, base)
 	w.U8(uint8(len(s.Events)))
 	for _, ev := range s.Events {
 		w.U8(ev.Type)
@@ -242,7 +247,13 @@ func AppendSnapshot(w *Writer, h Header, s *Snapshot) {
 	}
 }
 
-func ReadSnapshot(r *Reader, s *Snapshot) {
+// ReadSnapshot decodes a snapshot without baselines: delta-encoded entity
+// lists fail with ErrNoBaseline. Clients use ReadSnapshotWith.
+func ReadSnapshot(r *Reader, s *Snapshot) { ReadSnapshotWith(r, s, nil) }
+
+// ReadSnapshotWith decodes and, when store is set, resolves delta entity
+// lists against it and stores the result under the snapshot's SnapID.
+func ReadSnapshotWith(r *Reader, s *Snapshot, store *Baselines) {
 	s.ServerTick = r.U32()
 	s.ServerTimeMs = r.F64()
 	s.LastProcessedInputSeq = r.U32()
@@ -253,19 +264,16 @@ func ReadSnapshot(r *Reader, s *Snapshot) {
 	s.Own.InputLead = int8(r.U8())
 	s.Own.Dead = r.U8()&1 != 0
 	s.Own.Life = r.U8()
+	s.SnapID = r.U8()
 	s.BaselineID = r.U8()
-	n := int(r.U8())
-	s.Entities = s.Entities[:0]
-	for i := 0; i < n && r.Err == nil; i++ {
-		var e Entity
-		e.ID = r.U8()
-		e.Team = r.U8()
-		e.Pos = [3]int32{r.I32(), r.I32(), r.I32()}
-		e.Yaw = r.I16()
-		e.Pitch = r.I16()
-		e.Health = r.U8()
-		e.Anim = r.U8()
-		s.Entities = append(s.Entities, e)
+	var base []Entity
+	have := false
+	if store != nil && s.BaselineID != 0 {
+		base, have = store.Get(s.BaselineID)
+	}
+	s.Entities, s.Encoding = readEntities(r, s.Entities, base, have)
+	if r.Err == nil && store != nil && s.SnapID != 0 {
+		store.Put(s.SnapID, s.Entities)
 	}
 	m := int(r.U8())
 	s.Events = s.Events[:0]
