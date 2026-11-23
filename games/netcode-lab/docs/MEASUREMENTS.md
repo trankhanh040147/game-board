@@ -376,3 +376,74 @@ members' processes cannot be stopped.
 
 These are unit and wire tests, not live-room measurements. The live P19 run (50 bots, % ticks within budget per
 loop) and the P29 inter-arrival histogram belong to "bots" and the client.
+
+## Check 2, second half — server-only speed modifier on (2026-11-23 18:48–18:50, bots)
+
+`speedScale` 0.8 is set through the Lab before the bot joins. The server moves the player at 80% speed and the
+client does not know it, so every snapshot should disagree with the prediction. Clean worktree build at `152ea15`.
+
+```
+HTTP_PORT=18600 HTTPS_PORT=18643 sh scripts/check2-reconcile.sh ws 2m '{"speedScale":0.8}'
+```
+
+| Run | Inputs | Snapshots | **Corrections** | Replayed inputs | Starvations | RTT median / jitter | Server late ticks > 3 periods (max) | Load avg 1 min first / mean / max |
+|---|---|---|---|---|---|---|---|---|
+| WS, 120 s | 7678 | 2399 | **2394** | 9470 | 5 | 42.14 / 2.34 ms | 12 (120.3 ms) | 16.55 / 17.43 / 19.24 |
+
+Server lifetime: PID 72447 alive at the end, no bot errors, 120 s run. Server whole-window figures for this run:
+tick time p50 0.01 ms, p99 0.07 ms, max 135.25 ms, 99.97% within budget. Start lateness p99 7.77 ms, max 120.32 ms,
+99.52% within budget, 37 catch-up ticks.
+
+Result: **corrections appear, as B.9 #2 expects**: 2394 of 2399 snapshots corrected the prediction. Whether they
+are smoothed is a rendering property of the browser client, so a headless bot cannot measure it. A Go bot also
+has no render loop that could smooth anything. Smoothing is to be shown in the client (P25 rubber-band).
+
+Discarded: a first speedScale run at 18:42 crashed its server at 0.1 s with `fatal error: sync: unlock of unlocked
+mutex` in `server.(*hist).reset` (server/metrics.go:44), triggered by the harness's `statsReset`. `statsReset` is
+now opt-in (`-statsreset`), and the bug is reported to core.
+
+## Check 3 integration — shooter vs runner, lagcomp on and off (2026-11-23 18:48–18:54, bots)
+
+Tolerance fixed in advance by core (DECISIONS 39). Pass with lagcomp on: at least 300 shots and at least 97%
+agreement between the shooter's verdict and the server's `hitId`; clamped shots count as disagreements. Lagcomp
+off is reported only.
+
+Setup (`bin/bot -kind shootrun`, cmd/bot/shoot.go):
+- Two bots, default conditioner (20 ms each way), 64 Hz, 20 snapshots/s, interp 100 ms.
+- The shooter (blue) stands at its spawn. The runner (orange) walks to the gap and patrols x −7 → 7 at z −1.5,
+  passing behind the 2 m low wall (x −3…3). Its path therefore has open ground, wall edges and full cover.
+- Every `ceil(64/10)` = 7 inputs the shooter aims at the runner's rendered body centre and fires. The rendered
+  position is interpolated between snapshots at server tick − 100 ms, and that time is sent as `renderTick`/`renderFrac`.
+- The shooter's verdict is `sim.RayPlayer` against the rendered position, with `sim.TraceMap` for walls. It is
+  compared with the ShotResult `hitId` for the same `shotSeq`.
+
+Both runs ran at the same time on separate servers, from a clean worktree build at `152ea15`:
+
+```
+HTTP_PORT=18630 sh scripts/check3-lagcomp.sh on 6m
+HTTP_PORT=18640 sh scripts/check3-lagcomp.sh off 6m
+```
+
+| lagcomp | Shots compared | Agree | **Agreement** | Shooter saw hit | Server hit | Clamped | Server "moved" p50 / p95 / max | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| on | 1500 | 1500 | **100.0%** | 276 | 276 | 0 | 0 / 0 / 0 cm | **PASS** (≥ 300 shots, ≥ 97%) |
+| off | 2023 | 1416 | **70.0%** | 795 | 188 | 0 | 0 / 106 / 138 cm | reported only |
+
+Context:
+- Server lifetime: PIDs 72442 (on) and 72444 (off) were alive at the end, both bots ran 360 s with no errors.
+- RTT medians: shooter 41.70 / runner 40.91 ms (on), 40.66 / 40.47 ms (off).
+- Server late ticks > 3 periods: 33 (on) and 24 (off).
+- Load average 1 min: 16.55 at the start, 15.62 at the end (15-min 20.50 → 18.76).
+
+With lagcomp off, every disagreement goes the same way: the shooter saw a hit and the server missed. The server
+says the target had moved about 1.05 m between what the shooter saw and the resolve tick (`movedCm` 105–106 on the
+first examples). That is the P08 "three truths" gap: about 10 ticks of render delay plus uplink at roughly 7 m/s.
+
+Limits:
+1. The shooter always aims at the body centre, so grazing shots within a few cm of a box edge are rare. The 100%
+   says the rewind places the target where the shooter saw it, but it barely tests edge cases. A follow-up could
+   add a random aim offset of up to the body half-width.
+2. Every shot that rewinds to the render time reports `movedCm` 0 by definition (DECISIONS 38).
+
+Discarded: runs at 18:42 built from the shared working tree, which held core's uncommitted server edits (lagcomp
+on: 1273 shots, 100%; off: 1893 shots, 74.7%). They are not counted because their server code is not a commit.
