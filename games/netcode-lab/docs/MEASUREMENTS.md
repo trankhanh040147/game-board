@@ -788,3 +788,56 @@ comparison. A pass or fail on a quiet host is still owed: `sh scripts/quiet-wind
 
 Allocation volume is a byte count, so it does not depend on host load. The GC-pause and tick-time comparison
 (bots' check 5) still needs the quiet window.
+
+## Preset effects — P12, P13, P27, P28 measured with bots (2026-11-23 20:32–20:41, bots, loaded host)
+
+Clean worktree build at `5e0f1d5`. One fresh server per row and walker bots from one process, 45 s per row. The
+server's whole-window stats are reset after a 10 s warmup, and the figures are means over the remaining 1 Hz stats
+messages of bot 1: the server's `cost`, `youCost` and `you.entityBytes`. "Datagram B/s per client" counts only the
+binary hot path; `downKbps` also includes the 1 Hz JSON stats (about 4 kB/s). **Loaded host** for every row: the
+1-min load average ranged from 20.5 to 47.3 (listed per row). Every server was alive at the end and 0 bots had
+errors. The quiet-window repeats come later.
+
+```
+HTTP_PORT=18640 sh scripts/presets-effect.sh all 45s
+```
+
+**P12 — send rate cost** (20 bots, tick 128 Hz so that every send rate is allowed):
+
+| Send rate | Tick ms p50 / p99 (cost meter) | Datagram B/s per client | Total egress kbps (all clients) | Load avg 1 min (before → after) |
+|---|---|---|---|---|
+| 20/s | 0.026 / 3.52 | 9 084 | 2 618 | 31.02 → 26.60 |
+| 64/s | 0.191 / 4.02 | 28 708 (3.16×) | 5 760 | 26.60 → 25.66 |
+| 128/s | 0.253 / 2.78 | 57 258 (6.30×) | 10 328 | 24.97 → 22.47 |
+
+Bytes per client grow linearly with the send rate (3.2× and 6.4× the rate gives 3.16× and 6.30× the bytes). The
+tick p50 grows from 0.03 to 0.25 ms. The p99 is dominated by host stalls at these loads.
+
+**P13 — FPS cap: browser-only.** Bots have no frames, so the Lab's FPS cap cannot be measured here. The client
+smoke checks that it applies and broadcasts; the measured effect needs the client's perf smoke.
+
+**P27 — compression** (20 bots, 64 Hz, 20/s). `entityBytes` are the server's per-client meters for the same
+entity data encoded four ways. The last column is what was actually sent.
+
+| Bots | Lab compression | raw B/s | quantised B/s | + bit packing B/s | + delta B/s | Datagram B/s per client (sent) | Load avg |
+|---|---|---|---|---|---|---|---|
+| moving | off | 7 640 | 4 600 | 3 660 | 3 310 | 9 084 | 22.47 → 25.16 |
+| moving | quant + bitpack + delta | 7 640 | 4 600 | 3 660 | 3 308 | **4 752** | 25.16 → 20.45 |
+| at rest | quant + bitpack + delta | 7 385 | 4 447 | 3 538 | **58** | **1 434** | 20.81 → 35.98 |
+| at rest | off | 7 640 | 4 600 | 3 660 | 60 | 9 088 | 47.27 → 29.92 |
+
+Moving: quantisation and bit packing cut the entity bytes by 52%. Delta adds only 10% more, because every walker
+moves every snapshot. At rest, delta cuts the entities to under 1% of raw. With all three on, the bytes sent per
+client fall 48% while moving and 84% at rest.
+
+**P28 — interest management** (60 bots, 64 Hz, 20/s, cell 8 m, 3×3 window):
+
+| Interest | Entities per snapshot | Datagram B/s per client | Entity raw B/s | Total egress kbps | Tick ms p99 (cost meter) | Load avg |
+|---|---|---|---|---|---|---|
+| off | 59 | 25 108 | 23 640 | 19 280 | 25.58 | 29.92 → 28.64 |
+| on | 7.9 | 4 704 (−81%) | 3 239 | 9 688 | 31.35 | 28.64 → 34.87 |
+
+With interest on, each client gets about 8 of 59 other players, and bytes per client fall 81%. Tick p99 is
+host-dominated at this load, so the CPU cost of the grid cannot be read from these runs.
+
+**P19** is in "Check 5 / P19" above (loaded host, timing inconclusive; zero-alloc allocates 37% less).
