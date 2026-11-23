@@ -29,6 +29,9 @@ type Config struct {
 	// ExtraWWW are more built page directories served when a path is not in
 	// DistDir (bin/duel-www holds infra.html and duel.html).
 	ExtraWWW []string
+	// AdvertiseHTTPSPort, when > 0, is the port browsers reach HTTPS/WebTransport on
+	// (compose remaps ports); /certhash, /api/info and Mount report it.
+	AdvertiseHTTPSPort int
 	// Mount adds more handlers to the HTTP mux (cmd/server mounts the M7
 	// regions, matchmaker and metrics here; package server cannot import
 	// them without an import cycle). wt wraps a handler for WebTransport.
@@ -60,6 +63,9 @@ func Serve(ctx context.Context, log *slog.Logger, room *Room, cfg Config) error 
 	if cfg.HTTPSAddr != "" {
 		_, ps, _ := net.SplitHostPort(cfg.HTTPSAddr)
 		httpsPort, _ = strconv.Atoi(ps)
+	}
+	if cfg.AdvertiseHTTPSPort > 0 {
+		httpsPort = cfg.AdvertiseHTTPSPort
 	}
 	certHash := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

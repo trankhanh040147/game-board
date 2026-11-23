@@ -32,6 +32,7 @@ func main() {
 	dist := flag.String("dist", "client/dist", "built client directory")
 	extraWWW := flag.String("www", "bin/duel-www", "extra built pages served after -dist (infra.html, duel.html); empty disables")
 	infra := flag.Bool("infra", true, "mount the M7 infrastructure demo: region rooms /r/{hcm,hn,sg}, beacons, matchmaker, /metrics")
+	advPort := flag.Int("advertise-https-port", 0, "HTTPS/WebTransport port to tell browsers when it differs from the listen port (docker port mapping); 0 = the listen port")
 	botBin := flag.String("bot", "bin/bot", "bot binary for the Lab's P14 peek test (make bot); empty disables")
 	pprofOn := flag.Bool("pprof", false, "serve net/http/pprof at /debug/pprof/ (P19 allocation profiling; off by default)")
 	relaxAfter := flag.Float64("relax-after", 10, "matchmaker: seconds before the threshold relaxes")
@@ -58,7 +59,7 @@ func main() {
 	if *botBin != "" {
 		room.SetPeekRunner(peekRunner(*botBin, *httpAddr))
 	}
-	cfg := server.Config{HTTPAddr: *httpAddr, HTTPSAddr: *httpsAddr, DistDir: *dist}
+	cfg := server.Config{HTTPAddr: *httpAddr, HTTPSAddr: *httpsAddr, DistDir: *dist, AdvertiseHTTPSPort: *advPort}
 	if *extraWWW != "" {
 		cfg.ExtraWWW = []string{*extraWWW}
 	}
