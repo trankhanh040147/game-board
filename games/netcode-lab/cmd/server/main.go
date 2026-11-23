@@ -18,6 +18,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"netcodelab/net/transport"
 	"netcodelab/server"
@@ -33,6 +34,7 @@ func main() {
 	extraWWW := flag.String("www", "bin/duel-www", "extra built pages served after -dist (infra.html, duel.html); empty disables")
 	infra := flag.Bool("infra", true, "mount the M7 infrastructure demo: region rooms /r/{hcm,hn,sg}, beacons, matchmaker, /metrics")
 	advPort := flag.Int("advertise-https-port", 0, "HTTPS/WebTransport port to tell browsers when it differs from the listen port (docker port mapping); 0 = the listen port")
+	fillN := flag.Int("fill", 0, "start this many fill bots at boot (-1 = balance the teams; needs -bot); the Lab's {t:'fill'} changes it later")
 	botBin := flag.String("bot", "bin/bot", "bot binary for the Lab's P14 peek test (make bot); empty disables")
 	pprofOn := flag.Bool("pprof", false, "serve net/http/pprof at /debug/pprof/ (P19 allocation profiling; off by default)")
 	relaxAfter := flag.Float64("relax-after", 10, "matchmaker: seconds before the threshold relaxes")
@@ -60,6 +62,25 @@ func main() {
 		room.SetPeekRunner(peekRunner(*botBin, *httpAddr))
 		room.SetFillBots(*botBin, "ws://"+selfAddr(*httpAddr)+"/ws") // {t:"fill"} (bots' fill bots)
 		defer room.StopFill()
+		if *fillN != 0 {
+			go func() {
+				// The bots dial this server: wait until it answers.
+				url := "http://" + selfAddr(*httpAddr) + "/api/info"
+				for i := 0; i < 100; i++ {
+					if resp, err := http.Get(url); err == nil {
+						resp.Body.Close()
+						if n, err := room.SetFill(*fillN); err != nil {
+							log.Error("fill at boot", "err", err)
+						} else {
+							log.Info("fill at boot", "bots", n)
+						}
+						return
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+				log.Error("fill at boot: server did not answer")
+			}()
+		}
 	}
 	cfg := server.Config{HTTPAddr: *httpAddr, HTTPSAddr: *httpsAddr, DistDir: *dist, AdvertiseHTTPSPort: *advPort}
 	if *extraWWW != "" {

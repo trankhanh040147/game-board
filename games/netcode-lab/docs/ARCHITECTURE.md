@@ -33,6 +33,10 @@ make test                       # go test ./...
 make determinism                # B.9 check 1
 ```
 
+More server flags: `-fill N` starts N fill bots at boot (`-1` balances the teams to 3v3; needs `-bot bin/bot`),
+`-bot` (fill bots and the P14 peek test), `-advertise-https-port` (docker port mapping), `-infra` (region rooms,
+beacons, matchmaker, `/metrics`; default on), `-www` (infra/duel pages), `-pprof` (allocation profiling).
+
 `NETLAB_ADMIN_TOKEN` sets the Lab token; if unset the server prints a random one
 at start. Flags: `-http 0.0.0.0:8080`, `-https 0.0.0.0:8443` (empty disables
 HTTPS/WebTransport), `-dist client/dist`.
