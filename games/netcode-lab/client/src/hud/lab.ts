@@ -15,6 +15,8 @@ export interface LabBackend {
   cond?: { up: { delayMs: number; jitterMs: number; lossPct: number }; down: { delayMs: number; jitterMs: number; lossPct: number } } | null;
   setCond?(up: { delayMs: number; jitterMs: number; lossPct: number }, down: { delayMs: number; jitterMs: number; lossPct: number }): void;
   lastError?: string;
+  fill?: { bots: number; enabled: boolean; error: string } | null;
+  sendFill?(token: string, n: number): void;
   /** P25 glitch lab (admin only). */
   sendGlitch?(token: string, kind: "rubberband" | "lossBurst", opts: { on?: boolean; ms?: number; all?: boolean }): void;
   /** P03: send one forged result claim as a "modded client" (admin only). */
@@ -86,7 +88,7 @@ export class LabPanel {
     const b = this.backend;
     // Rebuild only when something shown here changed. The session calls refresh on every control message (stats and
     // scoreboard arrive at 1 Hz); rebuilding then would replace a button between mouse-down and mouse-up and lose the click.
-    const key = JSON.stringify([b.connected, [...b.builtPresets], b.settings, b.activePreset, b.lastError ?? "", b.cond ?? null,
+    const key = JSON.stringify([b.connected, [...b.builtPresets], b.settings, b.activePreset, b.lastError ?? "", b.cond ?? null, b.fill ?? null,
       this.token.length > 0, this.local?.fpsCap ?? null, (b.supported ?? []).map((x) => x.key + x.built)]);
     if (key === this.shownKey) return;
     this.shownKey = key;
@@ -153,6 +155,22 @@ export class LabPanel {
       frag.appendChild(box);
     }
 
+    if (b.sendFill) {
+      frag.appendChild(el("h3", {}, "Bots (fill the teams)"));
+      const f = b.fill;
+      frag.appendChild(el("div", { class: "dim" }, !f ? "state not reported yet (the server sends it on the first change)" : !f.enabled ? "this server cannot start fill bots (no bot binary)"
+        : `${f.bots} fill bot${f.bots === 1 ? "" : "s"} running; their names end in [bot]${f.error ? ` · <span class="err">${f.error.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}</span>` : ""}`));
+      const row = el("div", { class: "preset" });
+      const fillBtn = el("button", { id: "fill-teams" }, "Fill teams (3v3)");
+      fillBtn.addEventListener("click", () => b.sendFill!(this.token, -1));
+      const rmBtn = el("button", { id: "fill-remove" }, "Remove bots");
+      rmBtn.addEventListener("click", () => b.sendFill!(this.token, 0));
+      fillBtn.disabled = !canAdmin || (f !== null && f !== undefined && !f.enabled);
+      rmBtn.disabled = !canAdmin || (f !== null && f !== undefined && (!f.enabled || !f.bots));
+      row.append(fillBtn, rmBtn);
+      frag.appendChild(row);
+    }
+
     if (b.sendGlitch) {
       frag.appendChild(el("h3", {}, "Glitch lab (P25, A.14)"));
       const rubberOn = typeof b.settings?.speedScale === "number" && b.settings.speedScale < 1;
@@ -173,17 +191,20 @@ export class LabPanel {
       const built = b.connected && b.builtPresets.has(p.id);
       const row = el("div", { class: "preset" });
       const btn = el("button", { "data-preset": p.id }, p.id);
-      btn.disabled = !built || !canAdmin;
+      const page = b.presets?.find((x) => x.id === p.id)?.page;
+      // A preset shown on its own page (duel, regions) has no room state: the button opens that page (it applies ?preset=).
+      btn.disabled = page ? !built : !built || !canAdmin;
       if (b.activePreset === p.id) btn.style.outline = "2px solid #4ade80";
-      btn.addEventListener("click", () => b.applyPreset(p.id, this.token));
+      btn.addEventListener("click", () => (page ? window.open(`.${page}`, "_blank", "noopener") : b.applyPreset(p.id, this.token)));
+      if (page) btn.dataset.page = page;
       const sp = b.presets?.find((x) => x.id === p.id);
-      const reason = !b.connected ? "server not connected" : !built ? (sp?.page ? "shown on its own page" : "not built yet") : !this.token ? "needs admin token" : "";
+      const reason = !b.connected ? "server not connected" : !built ? "not built yet" : sp?.page ? "opens its own page" : !this.token ? "needs admin token" : "";
       if (sp?.banner && !PRESET_DOCS.has(p.id)) row.title = sp.banner;
       const doc = PRESET_DOCS.get(p.id);
       const sec = doc ? `<a href="${conceptUrl(doc.concept)}" target="_blank" rel="noopener">${p.section}</a>` : p.section;
       row.append(btn, el("span", {}, `${p.idea} <span class="dim">(${sec})</span>${reason ? ` <span class="why dim">· ${reason}</span>` : ""}`));
-      // Presets shown on their own page (duel, regions): link it (same host, served by the game server).
-      if (sp?.page) row.appendChild(el("a", { href: `.${sp.page}`, target: "_blank", rel: "noopener", class: "pagelink" }, `open ${sp.page.replace(/^\//, "")} →`));
+      // Also a plain link, usable before the preset is marked built (the page itself is served either way).
+      if (sp?.page) row.appendChild(el("a", { href: `.${sp.page}`, target: "_blank", rel: "noopener", class: "pagelink" }, `${sp.page.replace(/^\/|\?.*$/g, "")} →`));
       if (doc) row.title = `${doc.banner}\nObserve: ${doc.observe}`;
       frag.appendChild(row);
     }

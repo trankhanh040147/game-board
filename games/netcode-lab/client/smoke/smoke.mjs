@@ -151,6 +151,17 @@ try {
   const disabled = await A.$$eval("#lab [data-preset]", (bs) => bs.filter((b) => b.disabled).length);
   check("Lab lists presets P01–P29", enabled.length + disabled === 29, `${enabled.length} enabled (${enabled.join(", ")}), ${disabled} disabled as not built`);
   for (const id of enabled) {
+    const page = await A.$eval(`#lab [data-preset="${id}"]`, (b) => b.dataset.page ?? null);
+    if (page) {
+      // Page presets (duel, regions) have no room state: the button opens their page, which applies ?preset=.
+      const [popup] = await Promise.all([A.context().waitForEvent("page", { timeout: 5000 }), A.click(`#lab [data-preset="${id}"]`)]);
+      await popup.waitForLoadState("domcontentloaded").catch(() => {});
+      const url = popup.url();
+      const status = (await fetch(new URL(page, BASE + "/")).catch(() => null))?.status ?? 0;
+      await popup.close();
+      check(`preset ${id} opens its own page`, url.endsWith(page) && status === 200, `${page} · HTTP ${status}`);
+      continue;
+    }
     await A.click(`#lab [data-preset="${id}"]`);
     const ok = await A.waitForFunction((id) => window.__netlab.session.activePreset === id, id, { timeout: 3000 }).then(() => true, () => false);
     const bOk = await B.waitForFunction((id) => window.__netlab.session.activePreset === id, id, { timeout: 3000 }).then(() => true, () => false);
@@ -184,6 +195,21 @@ try {
     for (let i = 0; i < 10; i++) { await A.waitForTimeout(200); gap = Math.max(gap, await A.evaluate(() => window.__netlab.session.meas.maxSnapGapMs)); }
     check("P25 loss burst: named on screen, snapshots stop for longer than the 100 ms buffer", /Teleporting/.test(box2) && gap >= 300,
       `"${box2.split("\n")[0]}" · max measured snapshot gap ${gap.toFixed(0)} ms`);
+    await lab(false);
+  }
+
+  // 4c. Fill bots: the Lab fills the teams with server-run bots (names end in [bot]) and removes them.
+  {
+    const lab = async (open) => { for (let i = 0; i < 5 && (await A.locator("#lab.open").isVisible()) !== open; i++) { await A.keyboard.press("F1"); await A.waitForTimeout(150); } };
+    await lab(true);
+    await A.click("#fill-teams");
+    const filled = await A.waitForFunction(() => { const s = window.__netlab.session; const bots = [...s.players.values()].filter((p) => / \[bot\]$/.test(p.name)).length; return s.fill?.bots > 0 && bots > 0 ? { fill: s.fill, bots } : null; }, null, { timeout: 15000 })
+      .then((h) => h.jsonValue(), async () => ({ fill: await A.evaluate(() => window.__netlab.session.fill), bots: 0 }));
+    const labText = await A.locator("#lab").innerText();
+    check("fill bots: 'Fill teams' starts server-run bots, shown in the Lab and the player list", filled.bots > 0 && /fill bots? running/.test(labText), `${JSON.stringify(filled.fill)}, ${filled.bots} players named "… [bot]"`);
+    await A.click("#fill-remove");
+    const gone = await A.waitForFunction(() => { const s = window.__netlab.session; return s.fill?.bots === 0 && ![...s.players.values()].some((p) => / \[bot\]$/.test(p.name)); }, null, { timeout: 15000 }).then(() => true, () => false);
+    check("fill bots: 'Remove bots' ends them", gone);
     await lab(false);
   }
 
@@ -318,7 +344,9 @@ try {
     const kill = await aimAndFire(1.62);
     const replay = await T.waitForFunction(() => { const r = document.getElementById("deathreplay"); return r && getComputedStyle(r).display !== "none" ? r.innerText : null; }, null, { timeout: 4000 })
       .then((h) => h.jsonValue(), () => null);
-    const feedA = await A.locator("#killfeed").innerText();
+    // The kill feed comes from the 'kill' control message, separate from the shot result in the snapshot: wait for it.
+    const feedA = await A.waitForFunction(() => /smoke-target/.test(document.getElementById("killfeed").innerText) ? document.getElementById("killfeed").innerText : null, null, { timeout: 3000 })
+      .then((h) => h.jsonValue(), () => A.locator("#killfeed").innerText());
     if (process.env.SMOKE_SHOTS) {
       await T.screenshot({ path: process.env.SMOKE_SHOTS + "/deathreplay.png" });
       const ov = await T.evaluate(() => { const r = (id) => document.getElementById(id)?.getBoundingClientRect(); const a = r("deathreplay"), out = {};
