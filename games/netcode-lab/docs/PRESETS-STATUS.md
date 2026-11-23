@@ -31,16 +31,16 @@ room's Lab; the link carries `?preset=Pxx` so the page can apply that preset's s
 | P23 Lockstep | ✗ (page; verified, flip waits) | as P21 | `?preset=P23`: lockstep, D auto (verified) | client, as P16 |
 | P24 Died behind the wall | ✓ | done (Death event, 50 ms each way) | death replay; smoke covers a real kill | – |
 | P25 Glitch lab | ✓ (58367a2) | done; WS loss burst now stalls for the whole outage (b66f098, DECISIONS 56) | glitch buttons + names (118cbcf); duel page desync | – |
-| P26 Sub-tick | ✗ | done (timing error per shot + histograms per mode) | client sends subtickFrac; histogram panel not built | client (panel) |
-| P27 Compression | ✗ | done (quant/bitpack/delta, raw/quant/bitpack/delta meters) | client decodes deltas; meter panel not built | client (panel) |
-| P28 Interest management | ✗ | done (3×3 grid, entitiesPerSnapshot) | effect visible (players outside vanish); meter panel not built | client (panel) |
+| P26 Sub-tick | ✓ (C6) | done | F4 panel: own-shot timing histogram on vs quantised + server percentiles (2a83a4b) | – |
+| P27 Compression | ✓ (C6) | done | F4 panel: raw/quant/bitpack/delta kbps now, at rest, moving (2a83a4b) | – |
+| P28 Interest management | ✓ (C6) | done | F4 panel: entities and kbps with interest off vs on (2a83a4b) | – |
 | P29 Transport | ✓ (58367a2; preset sets 5 % down loss, simulated) | done | perf panel inter-arrival histogram | – |
 
 Resolved (DECISIONS 54): **P04 scorecard.** A.6 says prediction alone gives "Instant ✓, Cheat-proof ✓". The
 A.10 table says "Instant | prediction + reconciliation", and B.6 P10 says "all green only with predict, reconcile,
 interp, lagcomp and authority on". The server follows A.10/P10, so P04 (reconcile off) shows Instant ✗.
 
-P26–P28 went back to ✗ (DECISIONS 55): their B.6 Observe is a meter on screen, and the panels have not landed.
+P26–P28 went back to ✗ (DECISIONS 55) until their meter panels landed; flipped again in C6 after verification below.
 P04 scorecard ruling: DECISIONS 54.
 
 
@@ -57,3 +57,18 @@ Clean worktree builds (client, sim.wasm, duel-www, server, bot) at 118cbcf, then
 | all built presets after the flips | client's `smoke/smoke.mjs` at 58367a2 | 43 passed, 0 failed, 1 skipped (HTTPS join: server ran without HTTPS); 19 presets applied and broadcast |
 | P16, P17, P18, P21, P22, P23 links | `docs/evidence/pages-core.mjs` | every `?preset=` puts the page in the preset's state (route/region/cut, mode/D), banner names it, "simulated" on infra, no console errors |
 | flipping page presets now | client's smoke with P16/P17/P21–P23 built | 43 passed, **5 failed**: the Lab enables "apply" for built page presets and the smoke expects a settings broadcast; the server answers `presetPage` (it has no room state to apply). Flips reverted until the Lab opens the link |
+
+
+## C6 verification (2026-11-23, core)
+
+Clean worktree build at 2c9ba63 (client, sim.wasm, duel-www, server, bot); server on 127.0.0.1:18116 (HTTPS + WebTransport
+on 18117), PID-recorded, alive for every run and stopped by PID; host load average 22–31.
+
+| Check | Command | Result |
+|---|---|---|
+| P26, P27, P28 panels (F4) | client's `smoke/smoke.mjs` | P26: own shots 3 with sub-tick on (p50 0.0 ms), 1 quantised (14.7 ms); P27: raw 3.5 / quant 2.2 / bitpack 1.9 / delta 0.5 kbps at rest, delta 1.6 moving; P28: 1 entity with interest off, 0 on |
+| whole client smoke with HTTPS | client's `smoke/smoke.mjs` | **50 passed, 0 failed, 0 skipped** (WebTransport join, region rooms over ws and wt). A run without HTTPS had one expected failure: the region-over-wt leg fell back to ws |
+| fill bots (bots' 4ebe927 + core hook 2c9ba63) | bots' `smoke/fill.mjs` | 5 bots balanced the teams, a full round (blue 23 : orange 21, kills both ways, 29 bot-vs-bot), removal left 1 player, no console errors, no bot process left over |
+
+Page presets P16, P17, P21, P22, P23 stay ✗: client's Lab at 2c9ba63 still offers "apply" for built page presets
+(lab.ts 180-186), so flipping them still fails the smoke's apply loop (C5 evidence). They flip when the Lab opens the page.

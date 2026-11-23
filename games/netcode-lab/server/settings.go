@@ -321,19 +321,19 @@ func allPresets() []Preset {
 				s.SpeedScale = rubberBandScale
 			},
 			Banner: "Glitches on demand: a server-only speed modifier rubber-bands you (on now); the loss-burst button makes others teleport; the duel page injects nondeterminism (desync)."},
-		{ID: "P26", Title: "Sub-tick", Section: "A.15", Built: false,
+		{ID: "P26", Title: "Sub-tick", Section: "A.15", Built: true,
 			apply: func(s *Settings) {
 				base(s)
 				s.Subtick = false
 			},
 			Banner: "Shots quantised to the tick: the server times every shot at the tick end, up to one tick (15.6 ms at 64 Hz) after the click. Toggle sub-tick to compare the timing-error histogram. Sub-tick is not the same as 128 Hz."},
-		{ID: "P27", Title: "Compression", Section: "A.15", Built: false,
+		{ID: "P27", Title: "Compression", Section: "A.15", Built: true,
 			apply: func(s *Settings) {
 				base(s)
 				s.CompQuant, s.CompBitpack, s.CompDelta = true, true, true
 			},
 			Banner: "Quantised positions, bit packing and delta against the snapshot you acked: compare the raw, quantised and delta kbps meters at rest and while moving."},
-		{ID: "P28", Title: "Interest management", Section: "A.15", Built: false,
+		{ID: "P28", Title: "Interest management", Section: "A.15", Built: true,
 			apply: func(s *Settings) {
 				base(s)
 				s.Interest = true
