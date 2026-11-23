@@ -250,15 +250,19 @@ Status: verified 2026-11-23 @ 4b5a2e6 (infra.html in Chromium, main server)
 
 ### P18 — Relay / backbone
 
-Status: partly: 2026-11-23 @ 4b5a2e6 — the simulated route table shows backbone with less jitter and loss, and backbone medians beat public; per-sample loss did not improve and the budget bar is not on this page
+Status: verified 2026-11-23 @ d2c12c6 (infra.html?preset=P18 in Chromium, main server)
 
 - **Idea:** Relay / backbone. See [CONCEPTS.md](CONCEPTS.md#a12).
-- **What to click:** ISP vnpt, last mile bad: switch **Route** between direct, relay: public, relay: backbone and Ping each time.
+- **What to click:** Open `https://<host-ip>:8443/infra.html?preset=P18&admin=<token>`. The page pings once per route (direct, relay: public, relay: backbone) and draws one est. budget bar per route. Then **Cut cables to sg** and ping each route again.
 - **What to point at (B.6):** Jitter and loss graphs and the budget bar improve. Labelled simulated.
 - **Observed:**
-  - [screen] Route table (simulated, sg · vnpt): direct 135 / 33 / 3.5%, relay-public 141 / 39 / 4.5%, relay-backbone 97 / 3 / 0% (RTT / jitter / loss, with the cable cut on).
-  - [screen] Measured medians (vnpt, bad last mile): public hcm 79.6 · hn 109.4 · sg 139.7 ms; backbone hcm 73.8 · hn 111.0 · sg 120.3 ms.
-  - [screen] Lost of 10: public hn 2, sg 1; backbone sg 3 — the bad last mile adds loss on every route, and 10 samples are too few to compare loss.
+  - [screen] Run: `bin/server -http 127.0.0.1:18502 -https 127.0.0.1:18545` at `d2c12c6` (PID recorded, alive for the whole walk, stopped by PID); headless Chrome 156; ISP viettel, last mile good, beacons over WebTransport. Routes and the cable cut are **simulated**; RTTs are measured by the browser.
+  - [screen] Preset banner: "P18 Relay / backbone … State: route relay-backbone · budget region sg · cable cut off · simulated · Pinged once per route: compare the jitter, loss and budget bars of public vs backbone."
+  - [screen] Cable cut off, to sg: direct median 41.0 / p95 41.7 / jitter 1.1 ms / lost 0/10 → **191 ms est.**; relay-public 52.4 / 58.8 / **9.5** / 0/10 → **208 ms est.**; relay-backbone 41.1 / 41.7 / **0.5** / 0/10 → **191 ms est.**
+  - [screen] Cable cut ON, to sg: direct 109.4 / 124.5 / 11.9 / 0/10 → 274 ms est.; relay-public 136.9 / 158.3 / **16.0** / **1/10** → **308 ms est.**; relay-backbone 81.4 / 83.1 / **1.5** / **0/10** → **233 ms est.** Backbone holds up under the cut.
+  - [screen] Route table (simulated, sg · viettel), cut off: direct 38 / 4 / 0.2%, relay-public 44 / 14 / 1.5%, relay-backbone 40 / 1 / 0%; cut ON: 118 / 29 / 3.2%, 124 / 39 / 4.5%, 80 / 3 / 0% (RTT / jitter / loss).
+  - [screen] Bar parts: shooter frame, uplink (½ RTT), tick wait, snapshot wait, downlink (½ RTT), late-packet allowance (p95 − median), interpolation buffer, target frame; labelled est.
+  - Earlier walk at `4b5a2e6` (vnpt, bad last mile) gave the same direction for medians but noisier loss; that run is superseded by this one.
 
 ### P19 — Tick health
 
@@ -275,14 +279,18 @@ Status: partly: 2026-11-23 @ 118cbcf — the loop switch works and both loops ar
 
 ### P20 — Percentiles
 
-Status: partly: with beaconbot 2026-11-23 @ 078053b, percentiles seen; Prometheus/Grafana alert not run
+Status: verified 2026-11-23 @ d2c12c6 (docker compose stack, drill script, Grafana panel in Chromium)
 
 - **Idea:** Percentiles. See [CONCEPTS.md](CONCEPTS.md#a12).
-- **What to click:** Regions page percentiles; `docker compose up` for Prometheus + Grafana.
+- **What to click:** Run `docker compose up` in `deploy/`, keep beacon traffic flowing, cut the cables to sg, and watch Grafana "Mean vs p99" and the alert ISPRouteP95High. Scripted: `scripts/cable-cut-drill.sh`.
 - **What to point at (B.6):** The mean looks fine while p99 does not; the cable-cut drill fires the alert.
 - **Observed:**
-  - [bot] Per region × ISP: sg/viettel mean 94.6 ms vs p99 350 ms; hcm/vnpt mean 21 ms vs p99 86.1 ms — the mean hides the tail.
-  - Not run by scribe: Prometheus, Grafana and the "p95 of one ISP" alert (deploy/).
+  - [bot] Stack at `d2c12c6`: `GAME_HTTP_PORT=18560 GAME_HTTPS_PORT=18561 INFRA_HTTP_PORT=18562 INFRA_HTTPS_PORT=18563 PROM_PORT=18564 GRAFANA_PORT=18565 NETLAB_ADMIN_TOKEN=… docker compose -p scribe-s15 -f deploy/docker-compose.yml up --build -d` (4 services up in 47 s), then `N=30 BASE_S=30 CUT_S=150 AFTER_S=60 sh scripts/cable-cut-drill.sh http://127.0.0.1:18562 https://127.0.0.1:18563 http://127.0.0.1:18564` (30 beaconbot players over WebTransport). `docker compose … down` afterwards; no scribe containers left.
+  - [bot] Drill log (Prometheus recording rules, sg): before the cut mean 43–62 / p95 59–83 / p99 69–106 ms; cut ON at t = 30 s; at t = 147 s mean fpt 145 · viettel 140 · vnpt 156 vs p99 385 · 415 · 363 ms — the mean stays far below the tail.
+  - [bot] Prometheus `/api/v1/alerts`, ISPRouteP95High: sg/vnpt **pending** 14:17:47Z (value 158) → **firing** by t = 103 s (value 194); sg/fpt pending 14:18:02Z → firing by t = 124 s (184); sg/viettel pending 14:18:17Z → firing by t = 137 s (191). All three still firing at t = 214 s (cable repaired at t = 180 s; the 1-minute window still held cut samples).
+  - [page data] Grafana `/api/ds/query` for panel 2 queries (`netlab:rtt_ms:mean_1m` and `netlab:rtt_ms:p99_1m`, sg) returned 6–7 points per ISP, e.g. at 14:19:12Z mean fpt 139.2 / viettel 129.5 / vnpt 148.7 vs p99 346.0 / 269.2 / 237.6 ms; no errors.
+  - [screen] Grafana "Mean vs p99 (averages hide the players who lag)" (panel view, last 10 min) in Chromium: 18 series drawn (mean and p99 for hcm/hn/sg × fpt/viettel/vnpt); the sg p99 lines rise to 350–560 ms during the cut while the sg means stay near 130–155 ms. "No data" did not appear.
+  - Note: hcm and hn p99 also rose near the end of the drill; host load was very high (load average up to 87 earlier this hour), so part of that tail is host scheduling, not the simulated route.
 
 ## Other genres (A.13), in the duel mini-mode
 
