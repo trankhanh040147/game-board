@@ -287,6 +287,9 @@ loop:
 		case t := <-tk.C:
 			b.mu.Lock()
 			now := b.now()
+			if f, ok := b.brain.(framer); ok {
+				f.frame(b, now)
+			}
 			ticks := b.pacer.Due(&b.clk, now)
 			var outs [][]byte
 			for _, ct := range ticks {
@@ -389,10 +392,12 @@ func main() {
 	stats := flag.Bool("stats", false, "record the server's 1 Hz tick stats (via bot 1) and print a load report")
 	warmup := flag.Duration("warmup", 10*time.Second, "with -stats: stats received in the first warmup after the last bot joined are not counted")
 	statsReset := flag.Bool("statsreset", false, "with -stats and -token: send statsReset after the warmup so the server's whole-window histograms cover only the measured window (off by default: a fresh server's window already starts at the run)")
+	crossings := flag.Int("crossings", 20, "with -kind peek: crossings to run")
+	peekBuf := flag.Int("peekbuf", 100, "with -kind peek: the holder's interpolation buffer (ms), as the client's interpMs")
 	perBot := flag.Bool("perbot", true, "print one summary per bot (false: totals only)")
 	flag.Parse()
-	if *kind != "walker" && *kind != "probe" && *kind != "shootrun" {
-		log.Fatalf("unknown -kind %q (built: walker, probe, shootrun)", *kind)
+	if *kind != "walker" && *kind != "probe" && *kind != "shootrun" && *kind != "peek" {
+		log.Fatalf("unknown -kind %q (built: walker, probe, shootrun, peek)", *kind)
 	}
 	ctx := context.Background()
 	var cancel context.CancelFunc
@@ -426,6 +431,21 @@ func main() {
 		if err := applyLab(ctx, *url, *token, m); err != nil {
 			log.Fatalf("-lab %s: %v", *lab, err)
 		}
+	}
+	if *kind == "peek" {
+		// P14: the holder joins first (blue), the peeker second (orange).
+		sh := &peekShared{want: *crossings, buffer: float64(*peekBuf)}
+		var wg sync.WaitGroup
+		out := make([]Summary, 2)
+		wg.Add(2)
+		go func() { defer wg.Done(); out[0] = run(ctx, *url, "bot-holder", 1, nil, &holder{sh: sh}) }()
+		time.Sleep(300 * time.Millisecond)
+		go func() { defer wg.Done(); out[1] = run(ctx, *url, "bot-peeker", 2, nil, &peeker{sh: sh}) }()
+		wg.Wait()
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(map[string]any{"kind": "peek", "peek": sh.report(), "perBot": out})
+		return
 	}
 	if *kind == "shootrun" {
 		// B.9 check 3 integration: the shooter joins first (blue), the runner second (orange).

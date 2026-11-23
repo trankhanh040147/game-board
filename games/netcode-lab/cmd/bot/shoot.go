@@ -17,6 +17,9 @@ type brain interface {
 	report() any
 }
 
+// framer is an optional brain hook run every loop pass (~2 ms) to model frames.
+type framer interface{ frame(b *bot, nowMs float64) }
+
 // ---- runner: crosses the gap behind and beside the low wall, back and forth ----
 
 type runner struct {
