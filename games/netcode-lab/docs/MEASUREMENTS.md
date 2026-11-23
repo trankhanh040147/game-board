@@ -14,10 +14,10 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** | Identical state hashes on every tick at 20/30/64/128 Hz | [section](#check-1--determinism-native-vs-wasm-b9-1) |
 | 2 | Reconciliation, 0 corrections over 5 min | **fail (loaded host)** | Latest at `8a760ac`: 14 (WS) and 14 (WT) at load avg mean 27; 24 of 28 within 2 s of a host stall. Earlier 20/25 at `91b61db`. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s. Quiet-window run owed | [latest](#check-2-rerun-at-8a760ac--pacer-probe-floor-7bcc6de-and-lead-pacer-0b4e1af-loaded-host-2026-11-23-20262031-bots), [speed modifier](#check-2-second-half--server-only-speed-modifier-on-2026-11-23-18481850-bots) |
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
-| 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default within ±15%: bots 211.5 ± 9.7 ms, browser 214.4 / 206.6 / 211.0 ms (loaded host). 128 Hz + 144 FPS (modelled): 90.4 ms vs ≈ 71 (not met); quiet-window repeat owed | [bots](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots), [browser](#check-4-in-the-browser--first-in-browser-shot-budget-forwarded-from-duel-d3-d8ffe39) |
+| 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default within ±15%: bots 211.5 ± 9.7 ms, browser 214.4 / 206.6 / 211.0 ms (loaded host). 128 Hz + 144 FPS: 90.4 ms vs ≈ 71 (not met), frame segments modelled at 144 FPS (display cannot do 144); named gap: playout buffer from the pacer lead (bots then on the old pacer). Quiet-window repeat owed | [bots](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots), [browser](#check-4-in-the-browser--first-in-browser-shot-budget-forwarded-from-duel-d3-d8ffe39) |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met / inconclusive** | 40 bots, current loop (load ~15): tick p99 1.52 ms, 99.81% within budget. P19 with 50 bots at load 36–64: zero-alloc p99 22.1 ms, naive 8.4 ms, neither ≥ 99%; host-dominated. Zero-alloc allocates 37% less (1117 vs 1780 MB) but not zero | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots), [P19](#check-5--p19--zero-alloc-vs-allocating-loop-50-bots-at-128-hz-2026-11-23-20152019-bots-inconclusive-on-timing) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | **partial** | Gaps > 3× send interval per bot in 2 min: WS 106–119, WT 4–5 (expected ≈ 0.3 from loss alone; load avg up to 36, no gap timestamps yet) | [section](#check-6--p29--snapshot-inter-arrival-websocket-vs-webtransport-datagrams-at-5-loss-2026-11-23-bots) |
-| 7 | Client smoke (Playwright) | **pass** | v3: 36/0/0 twice at `078053b` (client), 35/0/1 (review V12), real P09/P08 shots; earlier 18/0/1 and 20/0/1 | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review) |
+| 7 | Client smoke (Playwright) | **partial** | v3: 36/0/0 twice at `078053b` (client); 35/0/1 (review V12); 36/1/1 at `9e1923d` (review V16: `#forged-claim` click timeout, client fixing; real P24 kill and replay passed). Shooting is tested (P09, P08, P24) | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review-partial) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
 
 ## Check 1 — Determinism: native vs WASM (B.9 #1)
@@ -239,7 +239,7 @@ line of fire at 0.11 m/tick (7 m/s at 64 Hz); the shooter renders tick 100 and f
 ShotResult (hit, `recvMs` ≤ `tickStartMs`) and the victim's Damage event back in snapshots.
 The integration part of check 3 (two bots at 40 ms RTT, target crossing the gap) is not run yet.
 
-## Check 7 — Client smoke, Playwright (B.9 #7): partial (shooting not testable until M3)
+## Check 7 — Client smoke, Playwright (B.9 #7), early runs (superseded by the v3 runs below)
 
 Forwarded by client (it cannot write here); run by client unless noted. Chromium 148 headless.
 
@@ -256,7 +256,8 @@ New since the earlier 15-pass run:
 - Pointer lock refused as a synchronous `WrongDocumentError`: the overlay closes, the message names the error, the player moves 9.95 m.
 - Esc returns to the overlay.
 
-Skipped: shoot. When these runs were taken the server had no hitscan. Status: **partial: shooting not testable until M3.**
+Skipped: shoot. When these early runs were taken the server had no hitscan. This is stale: shooting is tested since
+the v3 runs below.
 The server-side shooting landed later (`a2afd2d`), but no smoke run with shooting is recorded yet.
 
 ## Duel (P21–P23, P25)
@@ -669,7 +670,7 @@ HTTP_PORT=18690 sh scripts/check4-budget.sh fast 2m      # build 7397f20 (first 
 | Shooter frame wait | 8 | 7.76; 4.62 | ≈ 3.5 | 3.25; 1.88 |
 | Frame → input sent (pacer) | (not in A.11) | 8.68; 4.86 | (not in A.11) | 3.45; 2.05 |
 | Uplink | 20 | 20.76; 2.55 | 20 | 21.06; 2.23 |
-| Wait for server tick | 8 | **45.69; 5.99** | ≈ 4 | **23.43; 5.12** |
+| Playout buffer (server receive → tick start; A.11 "wait for server tick") | 8 | **45.69; 5.99** | ≈ 4 | **23.43; 5.12** |
 | Wait for snapshot send | 25 | 18.06; 15.11 | ≈ 4 | 0.06; 0.31 |
 | Downlink | 20 | 21.18; 1.81 | 20 | 21.01; 1.61 |
 | Target interpolation | 100 | 81.10; 15.53 | ≈ 16 | 14.65; 1.79 |
@@ -685,13 +686,19 @@ Context:
 
 Verdict against B.9 #4:
 - **Default: pass.** 211.5 ms is +11.3% over the 190 ms estimate, inside the ±15% bar.
-- **128 Hz + 144 FPS: not "near 71".** 90.4 ms is +27%.
+- **128 Hz + 144 FPS: not "near 71".** 90.4 ms is +27%. The three frame segments (shooter frame, frame → send,
+  target frame) are **modelled at 144 FPS** in the bot: this laptop's 60/120 Hz display cannot produce 144 FPS, so
+  no real 144 FPS frame was measured. The named gap is the **playout buffer** (server tick wait), caused by the
+  pacer lead.
 
 Where the difference comes from:
-1. **"Wait for server tick" is the largest gap: 46 ms against 8, and 23 ms against 4.** The pacer sends each input
-   early, by RTT/2 plus a margin (DECISIONS 15, 40, 51), so it waits in the server's playout buffer until its tick.
-   A.11 assumes the input arrives at a random point in the tick. Our design trades this wait for fewer
-   starvations: its cost is about 38 ms at 64 Hz and 19 ms at 128 Hz.
+1. **The playout buffer is the largest gap: 46 ms against 8, and 23 ms against 4.** Since DECISIONS 51 inputs
+   wait in the server's playout buffer for their stamped tick, by design. The pacer sends each input early, by
+   RTT/2 plus a margin (DECISIONS 15, 40, 51). A.11 assumes the input arrives at a random point in the tick.
+   - **Pacer in these runs:** the server already had lead mode (`0b4e1af`), but the bots still used the old
+     `OnServerFeedback` pacer; they moved to `OnServerLead` in `8a760ac`. Core expects about 1–1.5 ticks in lead
+     mode (16–23 ms at 64 Hz, half that at 128 Hz), so these values likely include the old ratcheting margin.
+   - **Re-measure:** the quiet-window run uses `OnServerLead`.
 2. **"Frame → input sent"** (about 9 ms at 60 FPS and 3.5 ms at 144) is a segment A.11 does not have. The client
    sends inputs on the tick schedule, not every frame.
 3. **Interpolation and snapshot wait.**
@@ -701,17 +708,19 @@ Where the difference comes from:
    - At 20/s the snapshot wait averages 18 ms, not 25. Shots fire every 7 ticks while snapshots go every 3–4 ticks,
      so not every phase is sampled.
 
-## Check 7 — client smoke on protocol v3 (forwarded by lead from client and review)
+## Check 7 — client smoke on protocol v3 (forwarded by lead from client and review): partial
 
 | Client commit | Server | Result | Run by |
 |---|---|---|---|
 | `078053b` (v3) | built from `9be4b0e` | **36 passed, 0 failed, 0 skipped**, run twice | client |
 | HEAD at the time | review's own server | **35 passed, 0 failed, 1 skipped** | review V12, independently |
+| `9e1923d` | review's own server (:18330, PID recorded, alive the whole run) | **36 passed, 1 failed, 1 skipped**; the failure is a `#forged-claim` click timeout (mechanical, client is fixing it); a real P24 headshot kill and death replay passed | review V16 |
 
 The client run applied 16 enabled presets. It included a real P09 hit confirm, the P08 miss reason, and a P27 delta
 check (28 delta snapshots with `compDelta` on). Client `npm test`: 18/18. The smoke checks that presets P12, P13,
-P19, P27 and P28 apply and broadcast; their measured effects are in "Preset effects" below. Status: **pass** (the
-shooting step is now exercised). Verbatim output is with the client member.
+P19, P27 and P28 apply and broadcast; their measured effects are in "Preset effects" below. Shooting is now
+exercised (real P09, P08 and P24). Status: **partial** until client's `#forged-claim` fix lands and the smoke is
+green again. Verbatim output is with the client member.
 
 ## Check 4 in the browser — first in-browser shot budget (forwarded from duel D3, `d8ffe39`)
 
