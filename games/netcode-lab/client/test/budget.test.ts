@@ -47,3 +47,10 @@ test("arrival histogram counts stalls beyond 3× the interval", () => {
   assert.equal(h.stalls, 1);
   assert.equal(h.maxGap, 250);
 });
+
+import { memLimitLabel } from "../src/hud/budgetCalc.ts";
+test("GOMEMLIMIT: math.MaxInt64 (unset) reads as no limit, a real limit in MB", () => {
+  assert.equal(memLimitLabel(9223372036854775807), "unset (no limit)");
+  assert.equal(memLimitLabel(undefined), "unset (no limit)");
+  assert.equal(memLimitLabel(512 * 1048576), "512 MB");
+});

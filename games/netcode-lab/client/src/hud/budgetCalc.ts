@@ -120,3 +120,9 @@ export class ArrivalHist {
     this.last = atMs;
   }
 }
+
+/** GOMEMLIMIT as sent by the server. Go reports math.MaxInt64 bytes when it is unset; anything ≥ 1 PiB is "no limit". */
+export function memLimitLabel(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes <= 0 || bytes >= 2 ** 50) return "unset (no limit)";
+  return `${(bytes / 1048576).toFixed(0)} MB`;
+}

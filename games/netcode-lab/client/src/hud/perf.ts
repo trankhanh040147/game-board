@@ -7,7 +7,7 @@
 // the previous handler, so the page's behaviour is unchanged. F3 toggles the panel; it also opens on P11, P12, P15,
 // P19 and P29. Numbers are measured here or by the server; the A.11 formula column is labelled est. (A.16).
 import type { Session } from "../net/session";
-import { SEGMENTS, type SegKey, type ShotStamps, segments, total, rollingMean, withinTolerance, WHY, ClockSync, ArrivalHist } from "./budgetCalc";
+import { SEGMENTS, type SegKey, type ShotStamps, segments, total, rollingMean, withinTolerance, WHY, ClockSync, ArrivalHist, memLimitLabel } from "./budgetCalc";
 
 const PRESETS = new Set(["P11", "P12", "P14", "P15", "P19", "P29"]);
 const COLORS = ["#60a5fa", "#a78bfa", "#f472b6", "#fbbf24", "#34d399", "#22d3ee", "#f87171"];
@@ -195,7 +195,7 @@ export function mountPerf(s: Session, root: HTMLElement) {
       <div>Active loop: <b>${loop}</b> (switch at the top of this panel)</div>
       <div>Ticks within budget (${f(budgetMs, 2)} ms): <b>${f(w?.withinBudgetPct, 2)}%</b> of ${w?.samples ?? 0} · over budget ${w?.overBudget ?? "—"}</div>
       <div class="dim">Tick duration percentiles; bar = share of the budget</div>${ladder}
-      <div>GC: ${gc ? `${gc.cycles} cycles · pause p50 ${f(gc.pauseP50Ms, 3)} / p99 ${f(gc.pauseP99Ms, 3)} / max ${f(gc.pauseMaxMs, 3)} ms · heap ${f(gc.heapBytes / 1048576)} MB${gc.goMemLimitBytes ? ` · GOMEMLIMIT ${f(gc.goMemLimitBytes / 1048576, 0)} MB` : ""}` : "—"}</div>
+      <div>GC: ${gc ? `${gc.cycles} cycles · pause p50 ${f(gc.pauseP50Ms, 3)} / p99 ${f(gc.pauseP99Ms, 3)} / max ${f(gc.pauseMaxMs, 3)} ms · heap ${f(gc.heapBytes / 1048576)} MB${` · GOMEMLIMIT ${memLimitLabel(gc.goMemLimitBytes)}`}` : "—"}</div>
       ${cmp ? `<table><tr><th>last seen per loop</th><th>within</th><th>p99 ms</th><th>GC p99 ms</th><th>GC cycles</th><th>ticks</th></tr>${cmp}</table>` : ""}
       <div class="dim">Switching the loop needs the admin token (Lab, F1). Reset the window after switching to compare like with like.</div>`;
   }
