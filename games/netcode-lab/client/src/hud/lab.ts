@@ -15,6 +15,8 @@ export interface LabBackend {
   cond?: { up: { delayMs: number; jitterMs: number; lossPct: number }; down: { delayMs: number; jitterMs: number; lossPct: number } } | null;
   setCond?(up: { delayMs: number; jitterMs: number; lossPct: number }, down: { delayMs: number; jitterMs: number; lossPct: number }): void;
   lastError?: string;
+  /** P25 glitch lab (admin only). */
+  sendGlitch?(token: string, kind: "rubberband" | "lossBurst", opts: { on?: boolean; ms?: number; all?: boolean }): void;
   /** P03: send one forged result claim as a "modded client" (admin only). */
   sendForgedClaim?(token: string): string;
   applyPreset(id: string, token: string): void;
@@ -149,6 +151,20 @@ export class LabPanel {
       box.append(btn);
       if (why) box.append(el("span", { class: "dim" }, ` · ${why}`));
       frag.appendChild(box);
+    }
+
+    if (b.sendGlitch) {
+      frag.appendChild(el("h3", {}, "Glitch lab (P25, A.14)"));
+      const rubberOn = typeof b.settings?.speedScale === "number" && b.settings.speedScale < 1;
+      const row = el("div", { class: "preset" });
+      row.style.flexWrap = "wrap";
+      const rb = el("button", { id: "glitch-rubberband" }, rubberOn ? "Stop rubber-banding" : "Rubber-band (server-only speed ×0.6)");
+      rb.addEventListener("click", () => b.sendGlitch!(this.token, "rubberband", { on: !rubberOn }));
+      const lb = el("button", { id: "glitch-lossburst" }, "Teleport: 400 ms loss burst (everyone)");
+      lb.addEventListener("click", () => b.sendGlitch!(this.token, "lossBurst", { ms: 400, all: true }));
+      for (const x of [rb, lb]) { x.disabled = !canAdmin; row.appendChild(x); }
+      frag.appendChild(row);
+      if (!canAdmin) frag.appendChild(el("div", { class: "dim" }, b.connected ? "presenter only: enter the admin token" : "server not connected"));
     }
 
     let group = "";

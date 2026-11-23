@@ -91,3 +91,5 @@ body.hurt canvas#view { box-shadow: inset 0 0 120px rgba(220,38,38,.7); outline:
 #start .ctl { display:flex; align-items:center; gap:3px; font-size:12px; }
 #start .ctl span { margin-left:6px; color:var(--dim); }
 #start .ctl img { opacity:.9; }
+#glitchbox { left:50%; top:140px; transform:translateX(-50%); max-width:min(560px,60vw); border-color:#b45309; text-align:center; font-size:12px; }
+#glitchbox b { color:#fbbf24; font-size:14px; }

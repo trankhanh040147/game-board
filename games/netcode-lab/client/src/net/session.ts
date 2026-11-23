@@ -37,6 +37,8 @@ export class Session implements LabBackend {
   onClaimRejected: (m: ClaimRejectedMsg, now: number) => void = () => {};
   onHistory: (m: HistoryMsg) => void = () => {};
   round: RoundMsg | null = null;
+  /** P25: the last glitch the server announced (name and explain come from the server). */
+  glitch: { kind: string; name: string; explain: string; on?: boolean; ms?: number; at: number } | null = null;
   scoreRows: ScoreRow[] | null = null;
   /** Snapshot events the codec did not know (counted, never dropped silently). */
   unknownEvents = 0;
@@ -150,6 +152,7 @@ export class Session implements LabBackend {
       case "kill": this.onKill(m, performance.now()); break;
       case "claimRejected": this.onClaimRejected(m, performance.now()); break;
       case "history": this.onHistory(m); break;
+      case "glitch": this.glitch = { kind: m.kind, name: m.name, explain: m.explain, on: m.on, ms: m.ms, at: performance.now() }; break;
       case "debugpos": if (m.data?.own) this.debugFrom.set(m.from, { at: performance.now(), data: m.data }); break;
       case "error": this.lastError = m.msg; break;
     }
@@ -380,6 +383,10 @@ export class Session implements LabBackend {
     return `forged headshot claim on ${enemy[1].name} sent`;
   }
   requestHistory() { this.t.sendControl({ t: "history" }); }
+  /** P25 (admin): server-only speed modifier, or a downlink loss burst longer than the interpolation buffer. */
+  sendGlitch(token: string, kind: "rubberband" | "lossBurst", opts: { on?: boolean; ms?: number; all?: boolean }) {
+    this.t.sendControl({ t: "glitch", token, kind, ...opts });
+  }
   setCond(up: Partial<CondDir>, down: Partial<CondDir>) { this.t.sendControl({ t: "cond", up, down }); }
   close() { this.t.close(); }
 }

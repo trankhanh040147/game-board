@@ -142,6 +142,33 @@ try {
   // Leave the server at the defaults for whoever runs next.
   if (enabled.includes("P01")) await A.click(`#lab [data-preset="P01"]`);
 
+  // 4b. P25 glitch lab: each glitch is named on screen and its effect is measured.
+  {
+    const lab = async (open) => { for (let i = 0; i < 5 && (await A.locator("#lab.open").isVisible()) !== open; i++) { await A.keyboard.press("F1"); await A.waitForTimeout(150); } };
+    await lab(true);
+    await A.click("#glitch-rubberband");
+    await A.waitForFunction(() => window.__netlab.session.settings.speedScale < 1, null, { timeout: 3000 });
+    await lab(false);
+    if (await A.locator("#start").isVisible()) await A.click("#start button");
+    await A.waitForFunction(() => window.__netlab.input.active, null, { timeout: 3000 });
+    const c0 = await A.evaluate(() => window.__netlab.session.predictorInfo().corrections);
+    await A.keyboard.down("KeyS"); await A.waitForTimeout(900); await A.keyboard.up("KeyS"); await A.waitForTimeout(400);
+    const c1 = await A.evaluate(() => window.__netlab.session.predictorInfo().corrections);
+    const box1 = await A.locator("#glitchbox").innerText().catch(() => "");
+    check("P25 rubber-band: named on screen and the client's prediction gets corrected", /Rubber-banding/.test(box1) && c1 > c0, `${c1 - c0} corrections while moving · "${box1.split("\n")[0]}"`);
+    await lab(true);
+    await A.click("#glitch-rubberband");
+    await A.waitForFunction(() => window.__netlab.session.settings.speedScale === 1, null, { timeout: 3000 });
+    await A.click("#glitch-lossburst");
+    await A.waitForFunction(() => /Teleporting/.test(document.getElementById("glitchbox").innerText), null, { timeout: 3000 }).catch(() => {});
+    const box2 = await A.locator("#glitchbox").innerText().catch(() => "");
+    let gap = 0; // the net graph's max gap is per 1 s window: sample it across the burst
+    for (let i = 0; i < 10; i++) { await A.waitForTimeout(200); gap = Math.max(gap, await A.evaluate(() => window.__netlab.session.meas.maxSnapGapMs)); }
+    check("P25 loss burst: named on screen, snapshots stop for longer than the 100 ms buffer", /Teleporting/.test(box2) && gap >= 300,
+      `"${box2.split("\n")[0]}" · max measured snapshot gap ${gap.toFixed(0)} ms`);
+    await lab(false);
+  }
+
   // 5. Presenter view
   await A.keyboard.press("F1");
   await A.keyboard.press("F2");

@@ -142,6 +142,9 @@ async function boot() {
   let deathRespawnTick: number | null = null;
   const overlay = link.sim ? new HitboxOverlay(world.scene, { body: link.sim.PLAYER.body, head: link.sim.PLAYER.head }) : null;
   const replay = new DeathReplay(hud, courtyard);
+  const glitchBox = el("div", { id: "glitchbox", class: "hud box" });
+  glitchBox.style.display = "none";
+  hud.appendChild(glitchBox);
   const shotReason = el("div", { id: "shotreason", class: "hud box" });
   shotReason.style.display = "none";
   hud.appendChild(shotReason);
@@ -475,6 +478,17 @@ async function boot() {
     } : null;
     scorecard.render(mode, st && !s.isBuilt("lagcomp") ? { fair: "lag compensation not built yet" } : st && st.lagcomp && st.favorVictimRttMs > 0 ? { fair: `lag compensation (none above ${st.favorVictimRttMs} ms RTT)` } : {});
 
+    // P25: name the active glitch on screen (text from the server), with the measured effect next to it.
+    const g = s.glitch;
+    const rubberOn = typeof st?.speedScale === "number" && st.speedScale < 1;
+    const burstLive = g?.kind === "lossBurst" && now - g.at < (g.ms ?? 400) + 2000;
+    if (rubberOn || burstLive) {
+      const name = rubberOn ? (g?.kind === "rubberband" ? g.name : "Rubber-banding") : g!.name;
+      const explain = rubberOn ? (g?.kind === "rubberband" ? g.explain : `server-only speed ×${st!.speedScale}`) : g!.explain;
+      const effect = rubberOn ? `corrections since last Lab change: ${pi ? pi.corrections - s.correctionsBase : "—"} (measured)` : `max snapshot gap: ${m.maxSnapGapMs.toFixed(0)} ms (measured, last 1 s)`;
+      glitchBox.innerHTML = `<b>Glitch: ${name}</b><br>${explain}<br><span class="dim">${effect}</span>`;
+      glitchBox.style.display = "";
+    } else glitchBox.style.display = "none";
     const serverNow = est.ready ? est.serverTimeMs : null;
     combat.round(s.round, serverNow);
     if (s.round && s.round.state !== lastPhase) {
