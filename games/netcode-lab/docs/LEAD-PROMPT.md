@@ -11,7 +11,7 @@ Done when
 - The checks that prove it works (HANDOFF B.9 or better ones you choose) have been run, with real outputs in docs/MEASUREMENTS.md.
 
 Team
-You build and run the team yourself through the agent-fabric-peer MCP server: how many members, their roles, how work is split and reviewed, and in what order. Available targets:
+You build and run the team yourself through the agent-fabric-peer MCP server: how many members, their roles, how work is split and reviewed, and in what order. Use the team tools (team_member_create, team_task_create, team_send, team_wait and the rest) for all member work; do not use peer_fan_out, peer_handoff or peer_ask as a substitute for members. Before anything else, call team_roster: if the agent-fabric-peer server has no team_* tools, stop at once and report that the session is connected to the wrong fabric. Available targets:
 - claude: strongest at hard code and design.
 - hermes: good at logic, research, tests and review; slow, not for UI or bulk work.
 - antigravity: generating art or sound; may be quota-limited (if it fails with RATE_LIMITED, move on without it). Not a reviewer.
