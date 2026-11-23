@@ -134,7 +134,9 @@ func player(o opts, id int, isp, lm string, stop <-chan struct{}, a *agg, logTic
 		// The server sees a WebTransport control stream only once something is written on it.
 		c.SendControl([]byte(`{"t":"hello"}`))
 		ch := make(chan echo, 64)
+		ready := make(chan struct{})
 		go func() {
+			once := false
 			for {
 				m, err := c.Recv(context.Background())
 				if err != nil {
@@ -142,9 +144,18 @@ func player(o opts, id int, isp, lm string, stop <-chan struct{}, a *agg, logTic
 				}
 				if !m.Control {
 					ch <- echo{m.Data, time.Now()}
+				} else if !once {
+					once = true
+					close(ready) // the beacon's {"t":"ready"}: pings sent before it would read as RTT
 				}
 			}
 		}()
+		select {
+		case <-ready:
+		case <-time.After(3 * time.Second):
+			log.Printf("p%d %s: no ready from the beacon", id, rg)
+			return
+		}
 		conns[rg], ins[rg] = c, ch
 	}
 	tk := time.NewTicker(o.every)

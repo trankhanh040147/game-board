@@ -66,7 +66,10 @@ async function open(region: string): Promise<Transport> {
 
 async function pingRegion(region: string) {
   const t = await open(region);
+  // The beacon answers {"t":"ready"} once it is set up; pings sent earlier would wait in a queue and read as RTT.
+  const ready = new Promise<void>((res, rej) => { t.onControl = (m: any) => { if (m?.t === "ready") res(); }; setTimeout(() => rej(new Error("beacon not ready")), 3000); });
   t.sendControl({ t: "hello" }); // a WebTransport control stream exists for the server only once written
+  await ready;
   const sent = new Map<number, number>(), rtts: number[] = [];
   t.onBinary = (b) => { const s = new DataView(b.buffer, b.byteOffset).getUint32(0, true); const at = sent.get(s); if (at !== undefined) { rtts.push(performance.now() - at); sent.delete(s); } };
   const base = (Math.random() * 2 ** 31) | 0;

@@ -220,6 +220,8 @@ func (m *Manager) beacon(region string) func(*http.Request) func(transport.Conn)
 			up := cond.NewLink(p, ordered, seed+1, func(b []byte) { down.Push(b) })
 			defer up.Close()
 			defer down.Close()
+			// Pings sent before this point would wait in the session's queue and read as RTT; clients wait for it.
+			conn.SendControl([]byte(`{"t":"ready"}`))
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			go func() {
