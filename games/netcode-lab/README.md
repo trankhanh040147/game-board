@@ -30,6 +30,8 @@ Ask the host for their IP, then:
 - **Fallback:** if the HTTPS page fails, open `http://<host-ip>:8080`. It plays over WebSocket and shows a banner.
 - **Region:** add `?region=hcm`, `?region=hn` or `?region=sg` to join that region's room over a simulated route
   (optional `&isp=viettel|vnpt|fpt`). The start card then says "region room hcm (simulated route)".
+- **Few players?** The host adds bots: Lab (F1, admin token) → **Fill teams (3v3)**, or starts the server with
+  `-fill -1`. Bot names end in `[bot]`.
 - **Other pages** on the same server: `/duel.html` (duel mini-mode), `/infra.html` (regions, beacons, matchmaker),
   `/concepts.html` (Part A).
 
@@ -145,7 +147,7 @@ Details and evidence: [docs/BLOCKERS.md](docs/BLOCKERS.md).
 
 - **No team playtest yet** (B.9 check 8). The checklist is ready in docs/PLAYTEST.md.
 - **No second machine tested.** LAN joins were checked from the host's own LAN IP.
-- **Check 2 (0 corrections over 5 minutes) is not met on this shared, loaded host**; see MEASUREMENTS.md.
+- **Checks 2 and 5 are not met on this shared, loaded host, and the fast budget case (128 Hz + 144 FPS) needs a 144 Hz display**; see BLOCKERS.md.
 - **Fixed ports in some targets:** `make bots` uses `ws://127.0.0.1:8080/ws`; the Vite dev proxy defaults to
   `localhost:8080`; `make duel-run` and `make infra-run` use their built-in defaults. Run the binaries with flags to
   use other ports.

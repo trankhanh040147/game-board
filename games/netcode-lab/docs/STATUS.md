@@ -1,8 +1,49 @@
 # Status
 
-Updated 2026-11-23 (after aa01c11) by scribe, from the lead's board. Read this first after a context compaction. Blockers with evidence: [BLOCKERS.md](BLOCKERS.md).
+Final state written 2026-11-23 by scribe at `d982f18`, from the lead's board. Read this first after a context
+compaction. Blockers with evidence: [BLOCKERS.md](BLOCKERS.md).
 
-## Members
+## Final state
+
+**Presets: 29 / 29 built** (`server/settings.go` at HEAD; the page presets P16–P18 and P20–P23 open `infra.html` or
+`duel.html`). What each one shows, and what was seen on screen, is in [DEMO.md](DEMO.md).
+
+**B.9 checks** (from the table at the top of [MEASUREMENTS.md](MEASUREMENTS.md)):
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** (shooter and duel) |
+| 2 | Reconciliation, 0 corrections over 5 min | **not met on this host**: 2 + 2 corrections at load 19–67 after core's fix `18e1e23`; 3 of 4 coincide with host stalls. The speed-modifier half shows corrections as expected |
+| 3 | Lag compensation | **pass** (lagcomp on 1500 / 1500 hits) |
+| 4 | Shot budget | **default pass** (195.9 ms vs 190 est.); **fast case not met** (81.8 ms vs ≈ 71, 144 FPS modelled) |
+| 5 | Tick health, 128 Hz, 10 + 40 bots | **not met on this host** (best: allocating 99.02% / p99 7.57 ms; rerun 97.14% / 95.04% at load 24–61) |
+| 6 | Transport stalls at 5% loss | **pass** (WS 373 stalls vs WT 4, ruling: stalls only) |
+| 7 | Client smoke (Playwright) | **pass** (55 / 0 / 0) |
+| 8 | Team playtest, 4+ people | **not run: needs humans** |
+
+**Members and their last commits**
+
+| Member | Target | Last commit |
+|---|---|---|
+| core | claude | `18e1e23` server: one tick of grace for a late input (DECISIONS 57) |
+| client | claude | `8c4c1e1` client: page presets open their own page; fill-bot Lab buttons |
+| bots | claude | `1fc9cf5` bot: server input-buffer counters; `d982f18` MEASUREMENTS check 2 after `18e1e23` |
+| duel | claude | `3a5b620` client: perf panel GOMEMLIMIT label (D3/D4 panel, M7 deploy and M8 duel before it) |
+| art | antigravity | `dd393e2` replace corrupted kill_icon and headshot with valid CC0 PNGs |
+| scribe | claude | this STATUS update (docs: README, DEMO, PLAYTEST, BLOCKERS, AUDIT-A16, CONCEPTS, presets.json) |
+| review | hermes | reports only (V1–V20), no commits |
+| research | hermes | reports only (R1–R8), no commits |
+
+**What a human must do next**
+
+1. Run the team playtest (B.9 check 8) with 4+ people, using [PLAYTEST.md](PLAYTEST.md); include a second physical
+   machine accepting the certificate.
+2. Rerun checks 2 and 5 on an idle machine or a Linux box: `scripts/check2-reconcile.sh ws|wt 5m` and the check 5
+   step of `scripts/quiet-window.sh` (both loops).
+3. Measure the fast budget case (128 Hz + 144 FPS) in a browser on a 144 Hz display (F3 panel, P11 / P15).
+4. Stop the two non-team servers (PIDs 18141 and 20847) if they are not needed.
+
+## Members (history below)
 
 core (claude), client (claude), review (hermes), research (hermes), art (antigravity), bots (claude), duel (claude), scribe (claude).
 

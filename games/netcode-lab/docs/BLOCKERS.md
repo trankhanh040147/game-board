@@ -1,7 +1,7 @@
 # Blockers
 
 One entry per thing the team could not make work on this machine, with evidence. Numbers are copied from
-[MEASUREMENTS.md](MEASUREMENTS.md); the B.9 status table is at its top. Written 2026-11-23 by scribe at `18e1e23`.
+[MEASUREMENTS.md](MEASUREMENTS.md); the B.9 status table is at its top. Written 2026-11-23 by scribe; last updated at `d982f18`.
 
 ## 1. B.9 check 5 — tick health at 128 Hz (≥ 99% of ticks within budget, p99 under budget)
 
@@ -58,14 +58,24 @@ machine joining and accepting the certificate warning** in a visible browser.
 
 ## 4. B.9 check 2 — 0 corrections over 5 minutes
 
-**Status:** in progress (lead will update).
+**Status:** not met on this host. The code cause is fixed.
 
-**Evidence:** quiet window ([section](MEASUREMENTS.md#check-2-5-min-1-bot-per-transport-defaults-load-5384)), load 5.3–8.4:
-**1 correction** each on WebSocket and WebTransport, both about 6 s after join, with no late tick and no probe pause.
-They come from the lead-mode pacer's probe-down (one starvation per session). Core's fix `18e1e23` (DECISIONS 57:
-hold one tick for a late input instead of repeating) is committed and not yet re-measured.
+**Evidence** ([section](MEASUREMENTS.md#check-2-after-cores-late-input-grace-18e1e23-decisions-57--2026-11-23-21552203-bots-loaded-host)):
+- Quiet window ([section](MEASUREMENTS.md#check-2-5-min-1-bot-per-transport-defaults-load-5384)), load 5.3–8.4: 1
+  correction each on WebSocket and WebTransport, about 6 s after join, from the lead-mode pacer's probe-down.
+- Core's fix `18e1e23` (DECISIONS 57: hold a late input for one tick instead of repeating it) removed that start-up
+  correction: `heldLate` 10 / 9 shows the grace tick absorbing those late inputs.
+- Rerun at `1fc9cf5` (load 19–67; the servers logged 238 / 253 late ticks over 3 periods): **2 corrections on WS and 2
+  on WT** in 5 minutes. 3 of the 4 coincide with host stalls (WT 21:56:06.4, WS 21:59:46.1, WT 21:59:46.5); **1 is
+  unexplained** (WS 21:59:36.3, no logged stall within ±2 s).
+- Second half of check 2: with the server-only `speedScale` 0.8, 2397 of 2399 snapshots corrected the prediction, as
+  B.9 #2 expects. Smoothing is drawn by the browser (P25 rubber-band).
 
-**What a human must do:** nothing yet; bots rerun check 2 on core's fix.
+**Why blocked:** the remaining corrections match repeated inputs during host stalls on a shared, loaded laptop; a
+pass/fail needs a quiet host.
+
+**What a human must do:** rerun `scripts/check2-reconcile.sh ws 5m` and `… wt 5m` on an idle machine and record the
+result in MEASUREMENTS.md.
 
 ## 5. Background processes not owned by the team
 
