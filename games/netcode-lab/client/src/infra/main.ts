@@ -23,7 +23,7 @@ document.body.innerHTML = `<main>
   Last mile <select id="lm"><option>good</option><option>wifi</option><option>bad</option></select></div>
   <div class="row">Route <select id="route"><option value="direct">direct</option><option value="relay-public">relay: public</option><option value="relay-backbone">relay: backbone</option></select>
   <span class="dim">(P18)</span></div>
-  <div class="row"><button id="ping">Ping beacons (10× each)</button><span id="pingStatus" class="dim"></span></div>
+  <div class="row"><button id="ping">Ping beacons (10× each)</button><label><input type="checkbox" id="keep"> keep pinging</label><span id="pingStatus" class="dim"></span></div>
   <table id="rtt"></table>
   <div class="dim" id="tr"></div>
 </section>
@@ -36,6 +36,12 @@ document.body.innerHTML = `<main>
   <div id="cutState" class="dim"></div>
   <div class="dim">The cut adds delay, jitter and loss to routes to sg only (simulated). Ping again to see it; the alert "p95 of one ISP &gt; 150 ms for 1 min" fires in Prometheus/Grafana (deploy/).</div>
 </section>
+<section style="grid-column:1/-1"><h2>Budget by route (P18) <span class="tag">est.</span></h2>
+  <div class="dim">A.11 shot budget for a player and a target on the measured route to the best region: uplink + downlink = this browser's
+  median RTT, plus the late-packet allowance (p95 − median, which the interpolation buffer must absorb), plus fixed A.11 values
+  (64 Hz, 20 snapshots/s, 100 ms buffer, 60 FPS). Route settings are simulated; the RTTs are measured here. Ping once per route to compare.</div>
+  <div id="budget"></div></section>
+<section style="grid-column:1/-1"><h2>Ping history <span class="tag">routes simulated</span></h2><table id="hist"></table></section>
 <section style="grid-column:1/-1"><h2>Route table <span class="tag">simulated</span></h2><table id="routes"></table>
   <div class="dim">Game rooms: <code>/r/{region}/ws</code> · beacons: <code>/beacon/{region}/ws|wt</code> · <a href="./duel.html">duel mini-mode</a> · <a href="/metrics">/metrics</a></div></section>
 </main>`;
@@ -47,7 +53,7 @@ let rttMap: Record<string, number> = {};
 let info: any = null;
 
 const median = (a: number[]) => { if (!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
-const f = (v: number) => (Number.isFinite(v) ? v.toFixed(1) : "—");
+const f = (v: number, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "—");
 
 async function open(region: string): Promise<Transport> {
   const q = `?isp=${sel("isp")}&lm=${sel("lm")}&route=${sel("route")}&platform=browser`;
@@ -74,21 +80,72 @@ async function pingRegion(region: string) {
   return { rtts, lost: 10 - rtts.length, kind: t.kind };
 }
 
-$("ping").addEventListener("click", async () => {
+interface Round { id: number; at: string; route: string; cut: boolean; isp: string; lm: string; region: string; median: number; p95: number; jitter: number; lost: number; kind: string }
+const history: Round[] = [];
+let roundNo = 0;
+const pct = (a: number[], p: number) => { if (!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)]; };
+const jit = (a: number[]) => (a.length < 2 ? NaN : a.slice(1).reduce((x, v, i) => x + Math.abs(v - a[i]), 0) / (a.length - 1));
+
+async function round() {
   $("pingStatus").textContent = "pinging…";
+  const cut = (await (await fetch("./api/regions", { cache: "no-store" })).json()).cableCut as boolean;
   const rows: string[] = [];
   let kind = "";
+  const id = ++roundNo;
   for (const rg of REGIONS) {
     try {
       const r = await pingRegion(rg);
       kind = r.kind;
       rttMap[rg] = median(r.rtts);
       const s = [...r.rtts].sort((a, b) => a - b);
-      rows.push(`<tr><td>${rg}</td><td><b>${f(rttMap[rg])}</b></td><td>${f(s[0])}</td><td>${f(s[s.length - 1])}</td><td>${r.lost}/10</td></tr>`);
-    } catch (e) { rows.push(`<tr><td>${rg}</td><td colspan="4" class="bad">${(e as Error).message}</td></tr>`); }
+      history.push({ id, at: new Date().toLocaleTimeString(), route: sel("route"), cut, isp: sel("isp"), lm: sel("lm"), region: rg, median: rttMap[rg], p95: pct(r.rtts, 95), jitter: jit(r.rtts), lost: r.lost, kind });
+      rows.push(`<tr><td>${rg}</td><td><b>${f(rttMap[rg])}</b></td><td>${f(s[0])}</td><td>${f(s[s.length - 1])}</td><td>${f(jit(r.rtts))}</td><td>${r.lost}/10</td></tr>`);
+    } catch (e) { rows.push(`<tr><td>${rg}</td><td colspan="5" class="bad">${(e as Error).message}</td></tr>`); }
   }
-  $("rtt").innerHTML = `<tr><th>region</th><th>median ms</th><th>min</th><th>max</th><th>lost</th></tr>` + rows.join("");
-  $("pingStatus").textContent = `measured by this browser over ${kind === "wt" ? "WebTransport datagrams" : "WebSocket (TCP: loss shows as delay)"}`;
+  if (history.length > 300) history.splice(0, history.length - 300);
+  $("rtt").innerHTML = `<tr><th>region</th><th>median ms</th><th>min</th><th>max</th><th>jitter</th><th>lost</th></tr>` + rows.join("");
+  $("pingStatus").textContent = `measured by this browser over ${kind === "wt" ? "WebTransport datagrams" : "WebSocket (TCP: loss shows as delay)"} · cable cut ${cut ? "ON" : "off"} (simulated)`;
+  drawHistory(); drawBudget();
+}
+
+function drawHistory() {
+  const last = history.slice(-30).reverse();
+  $("hist").innerHTML = `<tr><th>time</th><th>route</th><th>cable cut</th><th>ISP · last mile</th><th>region</th><th>median</th><th>p95</th><th>jitter</th><th>lost</th><th>via</th></tr>` +
+    last.map((h) => `<tr><td>${h.at}</td><td>${h.route}</td><td class="${h.cut ? "bad" : ""}">${h.cut ? "ON" : "off"}</td><td>${h.isp} · ${h.lm}</td><td>${h.region}</td><td>${f(h.median)}</td><td>${f(h.p95)}</td><td>${f(h.jitter)}</td><td>${h.lost}/10</td><td>${h.kind}</td></tr>`).join("");
+}
+
+// A.11 fixed parts at the defaults (est.): half a frame at 60 FPS each side, half a 64 Hz tick, half a 20/s send interval, 100 ms buffer.
+const FIXED = { shooterFrame: 1000 / 60 / 2, tickWait: 1000 / 64 / 2, snapshotWait: 1000 / 20 / 2, interp: 100, targetFrame: 1000 / 60 / 2 };
+const PARTS = [["shooterFrame", "shooter frame", "#60a5fa"], ["uplink", "uplink (½ RTT)", "#a78bfa"], ["tickWait", "tick wait", "#f472b6"], ["snapshotWait", "snapshot wait", "#fbbf24"],
+  ["downlink", "downlink (½ RTT)", "#34d399"], ["late", "late-packet allowance (p95 − median)", "#f87171"], ["interp", "interpolation buffer", "#22d3ee"], ["targetFrame", "target frame", "#94a3b8"]] as const;
+
+function drawBudget() {
+  // Latest round per (route, cable cut, ISP, last mile); the best region of that round.
+  const latestId = new Map<string, number>();
+  for (const h of history) latestId.set(`${h.route}|${h.cut}|${h.isp}|${h.lm}`, h.id);
+  const latest = new Map<string, Round[]>();
+  for (const [k, id] of latestId) latest.set(k, history.filter((h) => h.id === id));
+  const bars = [...latest.values()].map((g) => {
+    const best = g.filter((x) => Number.isFinite(x.median)).sort((a, b) => a.median - b.median)[0];
+    if (!best) return null;
+    const v: Record<string, number> = { ...FIXED, uplink: best.median / 2, downlink: best.median / 2, late: Math.max(0, best.p95 - best.median) };
+    return { best, v, total: PARTS.reduce((a, [k]) => a + v[k], 0) };
+  }).filter((x) => x !== null) as { best: Round; v: Record<string, number>; total: number }[];
+  if (!bars.length) { $("budget").innerHTML = `<div class="dim">Ping first.</div>`; return; }
+  const scale = Math.max(...bars.map((b) => b.total));
+  $("budget").innerHTML = bars.map(({ best, v, total }) => `<div class="row" style="justify-content:space-between"><span>${best.route} · cable cut ${best.cut ? "<b class=bad>ON</b>" : "off"} · ${best.isp} · ${best.lm} → ${best.region} (median ${f(best.median)}, p95 ${f(best.p95)}, jitter ${f(best.jitter)} ms, lost ${best.lost}/10)</span><b>${f(total, 0)} ms est.</b></div>
+    <div style="display:flex;height:14px;border-radius:3px;overflow:hidden;background:#111827">${PARTS.map(([k, label, c]) => `<div title="${label}: ${f(v[k])} ms" style="width:${(100 * v[k]) / scale}%;background:${c}"></div>`).join("")}</div>`).join("") +
+    `<div class="dim" style="margin-top:4px">${PARTS.map(([, label, c]) => `<span style="display:inline-block;width:8px;height:8px;background:${c};margin:0 3px 0 8px"></span>${label}`).join("")}</div>`;
+}
+
+let keepTimer = 0;
+$("ping").addEventListener("click", () => round());
+$("keep").addEventListener("change", async (e) => {
+  const on = (e.target as HTMLInputElement).checked;
+  if (!on) { clearTimeout(keepTimer); return; }
+  // Keep beacon traffic flowing (P20): Prometheus rates need samples in every 1-minute window, or series go stale.
+  const loop = async () => { if (!$<HTMLInputElement>("keep").checked) return; await round().catch(() => {}); keepTimer = window.setTimeout(loop, 1000); };
+  loop();
 });
 
 $("mm").addEventListener("click", async () => {

@@ -1,12 +1,27 @@
 # A.12: "A sudden p95 jump on one ISP is often the first signal of a cable incident, so alert on it."
 # RTTs are measured by clients (beacon pings) over simulated routes.
+#
+# Every rule divides or takes a quantile over rate(...[1m]). With no new samples in the window the rate is 0 and
+# 0/0 is NaN, which Grafana draws as nothing. So each rule keeps only series with traffic (count rate > 0): no
+# traffic gives no series rather than NaN. Keep beacon traffic flowing (scripts/cable-cut-drill.sh or the
+# infra page's "keep pinging") or the alert resolves, which is the correct reading of "no data".
 groups:
   - name: netcode-lab
     rules:
-      - record: netlab:rtt_ms:p95_1m
-        expr: histogram_quantile(0.95, sum by (le, region, isp) (rate(netlab_client_rtt_ms_bucket[1m])))
+      - record: netlab:rtt_ms:rate_count_1m
+        expr: sum by (region, isp) (rate(netlab_client_rtt_ms_count[1m])) > 0
       - record: netlab:rtt_ms:mean_1m
-        expr: sum by (region, isp) (rate(netlab_client_rtt_ms_sum[1m])) / sum by (region, isp) (rate(netlab_client_rtt_ms_count[1m]))
+        expr: |
+          sum by (region, isp) (rate(netlab_client_rtt_ms_sum[1m]))
+            / on (region, isp) netlab:rtt_ms:rate_count_1m
+      - record: netlab:rtt_ms:p95_1m
+        expr: |
+          histogram_quantile(0.95, sum by (le, region, isp) (rate(netlab_client_rtt_ms_bucket[1m])))
+            and on (region, isp) netlab:rtt_ms:rate_count_1m
+      - record: netlab:rtt_ms:p99_1m
+        expr: |
+          histogram_quantile(0.99, sum by (le, region, isp) (rate(netlab_client_rtt_ms_bucket[1m])))
+            and on (region, isp) netlab:rtt_ms:rate_count_1m
       - alert: ISPRouteP95High
         expr: netlab:rtt_ms:p95_1m > 150
         for: 1m

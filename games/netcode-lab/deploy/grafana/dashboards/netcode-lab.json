@@ -2,7 +2,7 @@
  "uid": "netcode-lab",
  "title": "Netcode Lab \u00b7 regions",
  "schemaVersion": 39,
- "version": 1,
+ "version": 2,
  "refresh": "5s",
  "time": {
   "from": "now-15m",
@@ -36,7 +36,7 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "histogram_quantile(0.5, sum by (le, region, isp) (rate(netlab_client_rtt_ms_bucket[1m])))",
+     "expr": "histogram_quantile(0.5, sum by (le, region, isp) (rate(netlab_client_rtt_ms_bucket[1m]))) and on (region, isp) netlab:rtt_ms:rate_count_1m",
      "legendFormat": "p50 {{region}} {{isp}}",
      "datasource": {
       "type": "prometheus",
@@ -54,7 +54,7 @@
     },
     {
      "refId": "C",
-     "expr": "histogram_quantile(0.99, sum by (le, region, isp) (rate(netlab_client_rtt_ms_bucket[1m])))",
+     "expr": "netlab:rtt_ms:p99_1m",
      "legendFormat": "p99 {{region}} {{isp}}",
      "datasource": {
       "type": "prometheus",
@@ -95,14 +95,15 @@
     },
     {
      "refId": "B",
-     "expr": "histogram_quantile(0.99, sum by (le, region, isp) (rate(netlab_client_rtt_ms_bucket[1m])))",
+     "expr": "netlab:rtt_ms:p99_1m",
      "legendFormat": "p99 {{region}} {{isp}}",
      "datasource": {
       "type": "prometheus",
       "uid": "prom"
      }
     }
-   ]
+   ],
+   "description": "P20: the mean looks fine while p99 does not. Needs beacon traffic in the last minute (no traffic = no line, not NaN)."
   },
   {
    "id": 3,
@@ -127,7 +128,7 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "100 * sum by (region, isp) (rate(netlab_client_probes_lost_total[1m])) / sum by (region, isp) (rate(netlab_client_probes_total[1m]))",
+     "expr": "100 * sum by (region, isp) (rate(netlab_client_probes_lost_total[1m])) / (sum by (region, isp) (rate(netlab_client_probes_total[1m])) > 0)",
      "legendFormat": "{{region}} {{isp}}",
      "datasource": {
       "type": "prometheus",

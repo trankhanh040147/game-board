@@ -24,6 +24,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"netcodelab/net/transport"
@@ -34,11 +35,22 @@ var (
 	isps    = []string{"viettel", "vnpt", "fpt"}
 )
 
+// cutNow mirrors the server's cable-cut state (polled), so every sample is filed under the state it was taken in.
+var cutNow atomic.Bool
+
+func cutKey() string {
+	if cutNow.Load() {
+		return "cut"
+	}
+	return "normal"
+}
+
 type agg struct {
 	mu      sync.Mutex
 	samples map[string][]float64 // "region/isp" -> rtts
 	sent    map[string]int
 	lost    map[string]int
+	jit     map[string][2]float64 // sum of per-round jitter, rounds (one player's 10 pings = one round)
 }
 
 func pct(s []float64, p float64) float64 {
@@ -143,10 +155,14 @@ func player(o opts, id int, isp, lm string, stop <-chan struct{}, a *agg, logTic
 		for _, rg := range regions {
 			rtts, lost := ping(conns[rg], ins[rg], 10)
 			rttMap[rg] = median(rtts)
-			k := rg + "/" + isp
+			k := rg + "/" + isp + "/" + cutKey()
 			a.mu.Lock()
 			a.samples[k] = append(a.samples[k], rtts...)
 			a.sent[k] += 10
+			if len(rtts) > 1 {
+				j := a.jit[k]
+				a.jit[k] = [2]float64{j[0] + jitter(rtts), j[1] + 1}
+			}
 			a.lost[k] += lost
 			a.mu.Unlock()
 			body, _ := json.Marshal(map[string]any{"region": rg, "isp": isp, "platform": "bot", "rtts": rtts, "sent": 10, "lost": lost})
@@ -218,7 +234,7 @@ func main() {
 		o.useWT, o.wtBase = true, *wt
 	}
 	rng := rand.New(rand.NewPCG(*seed, 7))
-	a := &agg{samples: map[string][]float64{}, sent: map[string]int{}, lost: map[string]int{}}
+	a := &agg{samples: map[string][]float64{}, sent: map[string]int{}, lost: map[string]int{}, jit: map[string][2]float64{}}
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 	mix := map[string]int{}
@@ -252,27 +268,61 @@ func main() {
 			time.AfterFunc(*cutAt+*cutFor, func() { cut(false) })
 		}
 	}
+	go func() {
+		for {
+			if r, err := http.Get(o.base + "/api/regions"); err == nil {
+				var v struct {
+					CableCut bool `json:"cableCut"`
+				}
+				json.NewDecoder(r.Body).Decode(&v)
+				r.Body.Close()
+				cutNow.Store(v.CableCut)
+			}
+			select {
+			case <-stop:
+				return
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+	}()
 	time.Sleep(*d)
 	close(stop)
 	wg.Wait()
 	fmt.Fprintf(os.Stderr, "player mix (isp/last mile): %v\n", mix)
 	enc := json.NewEncoder(os.Stdout)
-	for _, rg := range regions {
-		for _, isp := range isps {
-			k := rg + "/" + isp
-			s := a.samples[k]
-			var sum float64
-			for _, v := range s {
-				sum += v
+	for _, cs := range []string{"normal", "cut"} {
+		for _, rg := range regions {
+			for _, isp := range isps {
+				k := rg + "/" + isp + "/" + cs
+				s := a.samples[k]
+				if len(s) == 0 {
+					continue
+				}
+				var sum float64
+				for _, v := range s {
+					sum += v
+				}
+				mean := 0.0
+				if len(s) > 0 {
+					mean = sum / float64(len(s))
+				}
+				enc.Encode(map[string]any{"region": rg, "isp": isp, "route": o.route, "cableCut": cs == "cut", "transport": map[bool]string{true: "wt", false: "ws"}[o.useWT], "samples": len(s), "meanMs": round(mean), "p50Ms": round(pct(s, 50)),
+					"p95Ms": round(pct(s, 95)), "p99Ms": round(pct(s, 99)), "jitterMs": round(a.jit[k][0] / max(1, a.jit[k][1])), "lossPct": round(100 * float64(a.lost[k]) / float64(max(1, a.sent[k])))})
 			}
-			mean := 0.0
-			if len(s) > 0 {
-				mean = sum / float64(len(s))
-			}
-			enc.Encode(map[string]any{"region": rg, "isp": isp, "samples": len(s), "meanMs": round(mean), "p50Ms": round(pct(s, 50)),
-				"p95Ms": round(pct(s, 95)), "p99Ms": round(pct(s, 99)), "lossPct": round(100 * float64(a.lost[k]) / float64(max(1, a.sent[k])))})
 		}
 	}
+}
+
+// jitter: mean |difference| between consecutive pings of one round (the definition /api/infra/report uses).
+func jitter(s []float64) float64 {
+	if len(s) < 2 {
+		return 0
+	}
+	var j float64
+	for i := 1; i < len(s); i++ {
+		j += math.Abs(s[i] - s[i-1])
+	}
+	return j / float64(len(s)-1)
 }
 
 func round(v float64) float64 { return math.Round(v*10) / 10 }
