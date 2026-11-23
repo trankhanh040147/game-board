@@ -5,6 +5,8 @@
 export interface InputIntent {
   forward: boolean; back: boolean; left: boolean; right: boolean;
   jump: boolean; fire: boolean;
+  /** performance.now() of the first fire press since the previous sample (null = held, or no press). */
+  fireAt: number | null;
   yaw: number;   // radians, 0 faces -Z, positive turns left (counter-clockwise seen from above)
   pitch: number; // radians, clamped to ±89°
 }
@@ -25,6 +27,7 @@ export class InputCapture {
   private skipMove = false;
   /** Fire presses since the last tick, so a click shorter than a tick is not lost. */
   private firePresses = 0;
+  private firstPressAt: number | null = null;
   /** performance.now() of the last movement-key press, for the input → motion probe. */
   lastMoveKeyAt = -1;
   /** Called when play starts or stops (lock gained/lost, drag mode entered/left). */
@@ -59,6 +62,7 @@ export class InputCapture {
       if (e.button !== 0) return;
       this.fireHeld = true;
       this.firePresses++;
+      if (this.firstPressAt === null) this.firstPressAt = performance.now();
       this.onFirePress?.();
     };
     document.addEventListener("mousedown", down);
@@ -114,11 +118,13 @@ export class InputCapture {
 
   sample(): InputIntent {
     const fire = this.fireHeld || this.firePresses > 0;
+    const fireAt = this.firstPressAt;
     this.firePresses = 0;
+    this.firstPressAt = null;
     return {
       forward: this.keys.has("KeyW"), back: this.keys.has("KeyS"),
       left: this.keys.has("KeyA"), right: this.keys.has("KeyD"),
-      jump: this.keys.has("Space"), fire,
+      jump: this.keys.has("Space"), fire, fireAt,
       yaw: this.yaw, pitch: this.pitch,
     };
   }

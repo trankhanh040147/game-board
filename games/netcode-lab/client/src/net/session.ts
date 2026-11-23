@@ -64,6 +64,9 @@ export class Session implements LabBackend {
   ownServer: SimState | null = null;
   ownInfo: Snapshot["own"] | null = null;
   lastSnapshotTick = 0;
+  /** Encoding bits of the newest snapshot (S.ENC) and how many arrived delta-encoded against an acked baseline (P27). */
+  lastEncoding = 0;
+  deltaSnaps = 0;
 
   private conn: number;
   private clock: number;
@@ -183,6 +186,8 @@ export class Session implements LabBackend {
     this.lastSnapAt = now;
     this.win.snaps++;
     this.lastSnapshotTick = s.serverTick;
+    this.lastEncoding = s.encoding;
+    if (s.encoding & this.sim.ENC.delta) this.deltaSnaps++;
     this.ownServer = s.own.state;
     this.ownInfo = s.own;
     this.sim.pacerFeedback(this.pacer, s.own.starved, now);
@@ -223,7 +228,8 @@ export class Session implements LabBackend {
     }
     if (this.seenShots.size > 512) this.seenShots = new Set([...this.seenShots].slice(-256));
     if (this.seenDamage.size > 512) this.seenDamage = new Set([...this.seenDamage].slice(-256));
-    this.t.sendBinary(this.sim.encodeSnapshotAck(this.conn, s.baselineId, s.serverTick, now));
+    // v3: ack the snapshot's own id; the server deltas against what we ack (P27).
+    this.t.sendBinary(this.sim.encodeSnapshotAck(this.conn, s.snapId, s.serverTick, now));
   }
 
   /** Called every render frame. Runs the fixed ticks the pacer says are due; never passes frame dt to the sim. */
@@ -254,9 +260,11 @@ export class Session implements LabBackend {
       const cmd: any = { seq: ++this.seq, clientTick, buttons, yaw: this.sim.angleFromRadians(i.yaw), pitch: this.sim.angleFromRadians(i.pitch) };
       let claim: { victimId: number; hitbox: number } | null = null;
       if (i.fire) {
-        const rt = this.renderServerTick(now);
-        if (rt !== null) { cmd.renderTick = Math.floor(rt); cmd.renderFrac = Math.floor((rt % 1) * 65536); }
-        cmd.subtickFrac = 0;
+        // v3: stamp what we were drawing at the click, and where in its input tick the click fell (P26 sub-tick).
+        const at = i.fireAt ?? now;
+        const rt = this.renderServerTick(at);
+        if (rt !== null) { cmd.renderTick = Math.floor(rt); cmd.renderFrac = Math.min(65535, Math.floor((rt % 1) * 65536)); }
+        cmd.subtickFrac = Math.min(65535, Math.floor(this.inputTickPhase(at) * 65536));
         claim = onFire(cmd.seq, clientTick) || null;
       }
       this.prevPred = this.curPred;
@@ -283,6 +291,14 @@ export class Session implements LabBackend {
    * tick T due once serverTick(now) + RTT/2 + margin passes T − 1 (net/clock TargetClientTick), so this is the real
    * accumulator remainder, not "time since the frame that happened to run the tick".
    */
+  /** Fraction (0..1) of the pacer's input tick at time t: frac of serverTick(t) + RTT/2 + margin (net/clock). */
+  private inputTickPhase(t: number): number {
+    const e = this.sim.clockEstimate(this.clock, t);
+    if (!e.ready) return 0;
+    const x = e.serverTick + (e.rttMs / 2) * (e.tickRate / 1000) + this.sim.pacerInfo(this.pacer).marginTicks;
+    return x - Math.floor(x);
+  }
+
   private tickPhase(now: number): number {
     const e = this.sim.clockEstimate(this.clock, now);
     if (!e.ready || !this.lastClientTick) return 1;

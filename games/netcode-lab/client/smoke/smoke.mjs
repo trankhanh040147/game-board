@@ -71,6 +71,11 @@ try {
     check("join over HTTPS page: WebTransport datagrams, no fallback banner", hKind === "wt" && !/WebSocket fallback/.test(hBanner), `${httpsBase} → ${hKind}`);
     await tls.close();
   } else skip("join over HTTPS page", "server reports no WebTransport (/api/info wt = null)");
+  await A.evaluate((tok) => window.__netlab.session.setSetting("compDelta", true, tok), TOKEN);
+  await A.waitForTimeout(1500);
+  const delta = await A.evaluate(() => { const s = window.__netlab.session; return { deltaSnaps: s.deltaSnaps, enc: s.lastEncoding, compDelta: s.settings.compDelta, err: s.lastError }; });
+  check("v3 ack by snapId: with compDelta on, snapshots arrive delta-encoded against the acked one (P27)", delta.compDelta === true && delta.deltaSnaps > 0, JSON.stringify(delta));
+  await A.evaluate((tok) => window.__netlab.session.applyPreset("P01", tok), TOKEN);
   const bannerOk = await B.waitForFunction(() => /WebSocket fallback/.test(document.getElementById("banner")?.innerText ?? ""), null, { timeout: 3000 }).then(() => true, () => false);
   check("WebSocket fallback banner visible and says the stall is simulated", bannerOk && /simulated/.test(await B.locator("#banner").innerText()));
   const graph = await A.locator("#netgraph").innerText();
@@ -179,11 +184,12 @@ try {
     // Aim at the target as this client draws it (interpolated), after mouse-down so the press cannot move the aim.
     const aimAndFire = async () => {
       await A.evaluate(() => { window.__shot = null; const s = window.__netlab.session; if (!s.__wrapped) { const prev = s.onSnapEvent; s.onSnapEvent = (e, now) => { prev(e, now); if (e.type === "shot") { window.__shot = e; window.__marker = getComputedStyle(document.getElementById("hitmarker")).display; } }; s.__wrapped = true; } });
-      await A.mouse.move(640, 380); await A.mouse.down();
-      await A.evaluate((tid) => {
+      const aim = () => A.evaluate((tid) => {
         const n = window.__netlab, e = n.drawn().get(tid), m = n.session.ownView(performance.now());
         const dx = e.x - m.x, dz = e.z - m.z; n.input.yaw = Math.atan2(-dx, -dz); n.input.pitch = Math.atan2(((e.y ?? 0) + 1.0) - (m.y + 1.6), Math.hypot(dx, dz));
       }, t.id);
+      // Aim before the press (the first fire tick may be sampled right after it) and again after it.
+      await A.mouse.move(640, 380); await aim(); await A.mouse.down(); await aim();
       await A.waitForTimeout(30); await A.mouse.up();
       await A.waitForFunction(() => window.__shot, null, { timeout: 5000 }).catch(() => {});
       await A.waitForTimeout(200);

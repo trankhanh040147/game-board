@@ -10,6 +10,7 @@ export interface ShotEvent {
   flags: number; lagcomp: boolean; clamped: boolean; favoured: boolean; killed: boolean; trust: boolean;
   hitId: number; hitbox: number; damage: number; victimHp: number;
   seenId: number; seenHitbox: number; movedCm: number; seenPos: Fx3; usedPos: Fx3; wallDistM: number; recvMs: number; tickStartMs: number;
+  subtickFrac: number; timingErrMs: number;
 }
 /** Snapshot event to the victim. */
 export interface DamageEvent { type: "damage"; shotSeq: number; shooterId: number; hitbox: number; damage: number; health: number; resolveTick: number; flags: number; killed: boolean }

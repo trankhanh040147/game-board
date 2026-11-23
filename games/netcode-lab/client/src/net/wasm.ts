@@ -6,7 +6,7 @@ export interface Entity { id: number; team: number; x: number; y: number; z: num
 export interface Snapshot {
   type: "snapshot"; dup: boolean; serverTick: number; serverTimeMs: number; lastProcessedInputSeq: number;
   own: { state: SimState; health: number; inputBuffer: number; starved: number; inputLead: number; dead: boolean; life: number };
-  baselineId: number; entities: Entity[]; events: SnapEvent[];
+  snapId: number; baselineId: number; encoding: number; entities: Entity[]; events: SnapEvent[];
 }
 export interface Pong { type: "pong"; dup: boolean; clientSendMs: number; serverRecvMs: number; serverSendMs: number; serverTick: number; tickFrac: number; tickRate: number }
 export interface Debug { type: "debug"; dup: boolean; serverTick: number; players: { id: number; x: number; y: number; z: number }[] }
@@ -19,6 +19,7 @@ export interface NetcodeSim {
   BTN: { forward: number; back: number; left: number; right: number; jump: number; fire: number };
   ANIM: { onGround: number; moving: number; dead: number };
   HIT: { none: number; body: number; head: number };
+  ENC: { quant: number; bitpack: number; delta: number };
   PLAYER: { halfWidth: number; height: number; eyeHeight: number; body: { half: number; top: number }; head: { half: number; bottom: number; top: number } };
   dtForRate(rate: number): number;
   angleFromRadians(r: number): number;
@@ -49,7 +50,7 @@ export interface NetcodeSim {
   free(h: number): void;
 }
 
-const EXPECTED_API = 2;
+const EXPECTED_API = 3;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
