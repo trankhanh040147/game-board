@@ -48,7 +48,7 @@ func TestLagCompRewindHitsWhatTheShooterSaw(t *testing.T) {
 	}
 	s := DefaultSettings()
 	// Shot at tick 108; the shooter was rendering tick 100 (100 ms + downlink ago).
-	shot := fire{cmd: sim.Cmd{Seq: 50, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 100}, state: shooter.state}
+	shot := fire{cmd: sim.Cmd{Seq: 50, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 100}, prev: shooter.state, state: shooter.state}
 
 	s.LagComp = false
 	r.resolveFire(shooter, shot, 108, 0, s)
@@ -101,7 +101,7 @@ func TestWallBlocksShot(t *testing.T) {
 	shooter := testClient(r, 1, 0, [3]sim.Fx{0, 0, f(3)})
 	testClient(r, 2, 1, [3]sim.Fx{0, 0, f(-3)})
 	r.hist.record(10, 0, r.clients, false)
-	r.resolveFire(shooter, fire{cmd: sim.Cmd{Seq: 1, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 10}, state: shooter.state}, 10, 0, DefaultSettings())
+	r.resolveFire(shooter, fire{cmd: sim.Cmd{Seq: 1, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 10}, prev: shooter.state, state: shooter.state}, 10, 0, DefaultSettings())
 	sr := lastShot(t, shooter)
 	if sr.HitID != 0 || sr.WallDistCm < 250 || sr.WallDistCm > 270 {
 		t.Fatalf("wall at 2.6 m must stop the shot: %+v", sr)
@@ -115,7 +115,7 @@ func TestHeadshotKillsAndRespawns(t *testing.T) {
 	target := testClient(r, 2, 1, [3]sim.Fx{0, 0, f(-20)})
 	r.hist.record(5, 0, r.clients, false)
 	// Aim at the head: eye 1.6 m, head centre ~1.62 m, 10 m away: pitch ~0.
-	r.resolveFire(shooter, fire{cmd: sim.Cmd{Seq: 1, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 5}, state: shooter.state}, 5, 0, DefaultSettings())
+	r.resolveFire(shooter, fire{cmd: sim.Cmd{Seq: 1, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 5}, prev: shooter.state, state: shooter.state}, 5, 0, DefaultSettings())
 	sr := lastShot(t, shooter)
 	if sr.Hitbox != sim.HitHead || sr.Damage != DamageHead || sr.Flags&codec.ShotKilled == 0 {
 		t.Fatalf("%+v", sr)
@@ -151,5 +151,35 @@ func TestClaimsRejectedUnlessTrust(t *testing.T) {
 	r.processClaims(c, claim, 2, s)
 	if v.alive || v.health != 0 {
 		t.Fatal("trust mode relays the claimed headshot")
+	}
+}
+
+// P26: quantised shots are timed at the tick end, (1 - subtickFrac) ticks
+// after the click; sub-tick shots use the click itself.
+func TestSubtickTimingError(t *testing.T) {
+	r := NewRoom(slog.New(slog.NewTextHandler(io.Discard, nil)), "x")
+	f := sim.FromFloat
+	shooter := testClient(r, 1, 0, [3]sim.Fx{0, 0, f(-10)})
+	testClient(r, 2, 1, [3]sim.Fx{0, 0, f(-20)})
+	for tick := uint32(100); tick <= 108; tick++ {
+		r.hist.record(tick, 0, r.clients, false)
+	}
+	shot := fire{cmd: sim.Cmd{Seq: 1, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 100, SubtickFrac: 16384}, prev: shooter.state, state: shooter.state}
+	s := DefaultSettings()
+	r.resolveFire(shooter, shot, 108, 0, s)
+	on := lastShot(t, shooter)
+	if on.TimingErrUs != 0 || on.RewoundTick != 100 || on.RewoundFrac != 0 {
+		t.Fatalf("sub-tick on: %+v", on)
+	}
+	s.Subtick = false
+	shot.cmd.Seq = 20
+	r.resolveFire(shooter, shot, 108, 0, s)
+	off := lastShot(t, shooter)
+	// click at 1/4 of the tick -> used 3/4 tick later = 11.72 ms at 64 Hz
+	if off.TimingErrUs < 11700 || off.TimingErrUs > 11740 || off.RewoundTick != 100 || off.RewoundFrac < 49000 || off.RewoundFrac > 49200 {
+		t.Fatalf("quantised: %+v", off)
+	}
+	if st := r.timingOff.stats(); st.Samples != 1 || st.MaxMs < 11.7 {
+		t.Fatalf("histogram %+v", st)
 	}
 }

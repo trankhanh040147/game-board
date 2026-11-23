@@ -165,7 +165,8 @@ func decodeEvent(e codec.Event) any {
 				"hitId": int(v.HitID), "hitbox": int(v.Hitbox), "damage": int(v.Damage), "victimHp": int(v.VictimHP),
 				"seenId": int(v.SeenID), "seenHitbox": int(v.SeenHitbox), "movedCm": int(v.MovedCm),
 				"seenPos": pos3(v.SeenPos), "usedPos": pos3(v.UsedPos), "wallDistM": float64(v.WallDistCm) / 100,
-				"recvMs": v.RecvMs, "tickStartMs": v.TickStartMs}
+				"recvMs": v.RecvMs, "tickStartMs": v.TickStartMs,
+				"subtickFrac": int(v.SubtickFrac), "timingErrMs": float64(v.TimingErrUs) / 1000}
 		}
 	case codec.EvDamage:
 		var v codec.Damage

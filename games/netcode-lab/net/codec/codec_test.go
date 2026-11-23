@@ -169,7 +169,7 @@ func TestSeqGreaterWraps(t *testing.T) {
 func TestEventsAndClaimRoundTrip(t *testing.T) {
 	sr := ShotResult{ShotSeq: 41, ResolveTick: 1000, RenderTick: 990, RenderFrac: 123, RewoundTick: 990, RewoundFrac: 123,
 		Flags: ShotLagComp | ShotKilled, HitID: 3, Hitbox: 2, Damage: 100, VictimHP: 0, SeenID: 3, SeenHitbox: 2, MovedCm: 77,
-		SeenPos: [3]int32{1, 2, 3}, UsedPos: [3]int32{-4, 5, -6}, WallDistCm: 4321, RecvMs: 12.5, TickStartMs: 13.25}
+		SeenPos: [3]int32{1, 2, 3}, UsedPos: [3]int32{-4, 5, -6}, WallDistCm: 4321, RecvMs: 12.5, TickStartMs: 13.25, SubtickFrac: 999, TimingErrUs: 7812}
 	r := &Reader{B: sr.Append(nil)}
 	var sr2 ShotResult
 	sr2.Read(r)

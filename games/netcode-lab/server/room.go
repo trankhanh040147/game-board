@@ -62,6 +62,8 @@ type Room struct {
 	ents      []codec.Entity // zero-alloc loop scratch
 	dbg       codec.Debug
 	snap      codec.Snapshot
+	timingOn  hist // P26 shot timing error with sub-tick on
+	timingOff hist // ... and quantised to the tick
 	tickHist  hist // whole-window tick processing time
 	lateHist  hist // whole-window tick start lateness
 	round     roundState
@@ -274,6 +276,7 @@ func (c *Client) apply(cmd sim.Cmd, dt sim.Fx, set Settings, real bool) {
 		delete(c.recvMs, cmd.Seq)
 		return
 	}
+	prev := c.state
 	sim.Step(r.m, &c.state, cmd.In, dt, &r.params)
 	if !real || cmd.In.Buttons&sim.BtnFire == 0 {
 		return
@@ -284,7 +287,7 @@ func (c *Client) apply(cmd sim.Cmd, dt sim.Fx, set Settings, real bool) {
 		return
 	}
 	c.lastFireSeq = cmd.Seq
-	c.fires = append(c.fires, fire{cmd: cmd, state: c.state, recvMs: recv})
+	c.fires = append(c.fires, fire{cmd: cmd, prev: prev, state: c.state, recvMs: recv})
 }
 
 // simulate consumes this tick's input(s) from the playout buffer (B.4 rule 3).
@@ -860,6 +863,8 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 		}
 		r.tickHist.reset()
 		r.lateHist.reset()
+		r.timingOn.reset()
+		r.timingOff.reset()
 		r.send(c, map[string]any{"t": "statsReset", "serverTimeMs": r.NowMs()})
 	case "shotSeen":
 		// P11: the target's client reports when it received and drew a shot's
@@ -988,7 +993,9 @@ func (r *Room) sendStats() {
 	r.mu.Unlock()
 	// Whole window since start or the last {t:"statsReset"}: tick time and
 	// start lateness kept separate (slow tick vs late scheduler), plus GC.
-	window := map[string]any{"tickMs": r.tickHist.stats(), "startLateMs": r.lateHist.stats(), "gc": readGC()}
+	window := map[string]any{"tickMs": r.tickHist.stats(), "startLateMs": r.lateHist.stats(), "gc": readGC(),
+		"shotTimingErrMs": map[string]any{"subtickOn": r.timingOn.stats(), "quantised": r.timingOff.stats(),
+			"note": "|time the server used for the shot - click time|; over budget = more than one tick"}}
 	// Cost meters (P12): per-client rates first, then the room total.
 	nowMs := r.NowMs()
 	rates := make(map[uint8]map[string]float64, len(cs))

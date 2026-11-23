@@ -41,6 +41,8 @@ type ShotResult struct {
 	WallDistCm  uint32   // distance to the first map box along the ray (tracer end)
 	RecvMs      float64  // server time the fire input arrived (after the uplink conditioner)
 	TickStartMs float64  // server time the resolving tick started
+	SubtickFrac uint16   // as sent: where in its tick the click happened (/65536)
+	TimingErrUs uint16   // |time used for the shot - click time| in µs (P26); 0 with sub-tick on
 }
 
 func (e *ShotResult) Append(b []byte) []byte {
@@ -68,6 +70,8 @@ func (e *ShotResult) Append(b []byte) []byte {
 	w.U32(e.WallDistCm)
 	w.F64(e.RecvMs)
 	w.F64(e.TickStartMs)
+	w.U16(e.SubtickFrac)
+	w.U16(e.TimingErrUs)
 	return w.B
 }
 
@@ -95,6 +99,8 @@ func (e *ShotResult) Read(r *Reader) {
 	e.WallDistCm = r.U32()
 	e.RecvMs = r.F64()
 	e.TickStartMs = r.F64()
+	e.SubtickFrac = r.U16()
+	e.TimingErrUs = r.U16()
 }
 
 // Damage tells the victim it was hit.

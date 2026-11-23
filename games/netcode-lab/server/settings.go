@@ -37,6 +37,9 @@ type Settings struct {
 	Loop string `json:"loop"`
 	// GoMemLimitMB sets runtime/debug.SetMemoryLimit (0 = no limit).
 	GoMemLimitMB int `json:"goMemLimitMB"`
+	// Subtick (P26): use the click's position inside the tick (subtickFrac)
+	// instead of quantising the shot to the tick.
+	Subtick bool `json:"subtick"`
 }
 
 // DefaultSettings match A.1 / B.4.
@@ -46,7 +49,7 @@ func DefaultSettings() Settings {
 		InterpMs: 100, InterpAuto: true, InterpK: 2,
 		LagComp: true, HistoryMs: 1000,
 		TickRate: 64, SendRate: 20, FPSCap: 60,
-		Transport: "wt", SpeedScale: 1, Loop: "zeroalloc",
+		Transport: "wt", SpeedScale: 1, Loop: "zeroalloc", Subtick: true,
 	}
 }
 
@@ -82,6 +85,7 @@ func SupportedSettings() []SettingInfo {
 		{Key: "historyMs", Kind: "int", Min: 0, Max: 1000, Built: true, Note: "lag-comp rewind cap"},
 		{Key: "favorVictimRttMs", Kind: "int", Min: 0, Max: 300, Built: true, Note: "0 = off; no rewind for shooters above this RTT (P24)"},
 		{Key: "loop", Kind: "enum", Allowed: []string{"zeroalloc", "naive"}, Built: true, Note: "P19: allocating vs zero-alloc server loop, same bytes on the wire"},
+		{Key: "subtick", Kind: "bool", Built: true, Note: "P26: shot timed at the click inside the tick vs quantised to the tick end"},
 		{Key: "goMemLimitMB", Kind: "int", Min: 0, Max: 65536, Built: true, Note: "GOMEMLIMIT via runtime/debug.SetMemoryLimit; 0 = no limit"},
 		{Key: "speedScale", Kind: "float", Min: 0.25, Max: 2, Built: true, Note: "server-only movement modifier, not known to clients (rubber-band, P25)"},
 		{Key: "tickRate", Kind: "enum", Allowed: allowedTick, Built: true},
@@ -258,7 +262,12 @@ func Presets() []Preset {
 			},
 			Banner: "Rewind is fair to the shooter, so the target can die after reaching cover on its own screen. RTT is raised to 100 ms (simulated) to make it visible."},
 		{ID: "P25", Title: "Glitch lab", Section: "A.14"},
-		{ID: "P26", Title: "Sub-tick", Section: "A.15"},
+		{ID: "P26", Title: "Sub-tick", Section: "A.15", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.Subtick = false
+			},
+			Banner: "Shots quantised to the tick: the server times every shot at the tick end, up to one tick (15.6 ms at 64 Hz) after the click. Toggle sub-tick to compare the timing-error histogram. Sub-tick is not the same as 128 Hz."},
 		{ID: "P27", Title: "Compression", Section: "A.15"},
 		{ID: "P28", Title: "Interest management", Section: "A.15"},
 		{ID: "P29", Title: "Transport", Section: "A.15"},

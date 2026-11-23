@@ -129,6 +129,7 @@ func (c *Client) queueEvent(t uint8, data []byte, nowMs float64) {
 
 type fire struct {
 	cmd    sim.Cmd
+	prev   sim.State // shooter state before the fire input (sub-tick origin)
 	state  sim.State // shooter state after applying the fire input
 	recvMs float64
 }
@@ -171,6 +172,21 @@ func (r *Room) resolveFire(c *Client, f fire, tick uint32, tickStartMs float64, 
 	if renderT > now {
 		renderT, flags = now, flags|codec.ShotClamped
 	}
+	// P26. The click happened at subtickFrac inside the input's tick. Classic
+	// (quantised) handling acts as if it happened when the tick's input was
+	// sampled, at the tick's end: the render time is later by (1 - frac)
+	// ticks and the ray starts at the end-of-tick position. Sub-tick uses the
+	// click time itself and interpolates the shooter's position.
+	frac := float64(f.cmd.SubtickFrac) / 65536
+	clickT := renderT
+	origin := sim.EyePos(f.state.Pos)
+	if s.Subtick {
+		prev, cur := sim.EyePos(f.prev.Pos), sim.EyePos(f.state.Pos)
+		origin = prev.Add(cur.Sub(prev).Scale(frac))
+	} else if f.cmd.RenderTick != 0 {
+		renderT = min(renderT+(1-frac), now)
+	}
+	timingErrMs := (renderT - clickT) * 1000 / rate
 	usedT := now
 	if s.LagComp {
 		if s.FavorVictimRttMs > 0 && c.rttMs() > float64(s.FavorVictimRttMs) {
@@ -179,7 +195,7 @@ func (r *Room) resolveFire(c *Client, f fire, tick uint32, tickStartMs float64, 
 			usedT, flags = renderT, flags|codec.ShotLagComp
 		}
 	}
-	o := sim.EyePos(f.state.Pos)
+	o := origin
 	d := sim.AimDir(f.cmd.In.Yaw, f.cmd.In.Pitch)
 	wall := sim.TraceMap(r.m, o, d, traceMaxDist)
 	hitID, hitPart, _ := r.hitAt(c, o, d, wall, usedT)
@@ -190,6 +206,14 @@ func (r *Room) resolveFire(c *Client, f fire, tick uint32, tickStartMs float64, 
 		RewoundTick: uint32(math.Floor(usedT)), RewoundFrac: uint16((usedT - math.Floor(usedT)) * 65535),
 		Flags: flags, HitID: hitID, Hitbox: hitPart, SeenID: seenID, SeenHitbox: seenPart,
 		WallDistCm: uint32(wall * 100), RecvMs: f.recvMs, TickStartMs: tickStartMs,
+		SubtickFrac: f.cmd.SubtickFrac, TimingErrUs: uint16(min(65535, math.Round(math.Abs(timingErrMs)*1000))),
+	}
+	if f.cmd.RenderTick != 0 {
+		if s.Subtick {
+			r.timingOn.add(math.Abs(timingErrMs), 1000/rate)
+		} else {
+			r.timingOff.add(math.Abs(timingErrMs), 1000/rate)
+		}
 	}
 	subject := seenID
 	if subject == 0 {
