@@ -87,6 +87,7 @@ func (r *statsRecorder) report(bots int) map[string]any {
 	rates := map[int]int{}
 	minPl, maxPl := 1<<30, 0
 	lateMaxSinceStart := -1.0
+	lateSecondsOver1 := 0
 	for _, m := range r.kept {
 		p50s = append(p50s, m.Tick.P50Ms)
 		p99s = append(p99s, m.Tick.P99Ms)
@@ -97,6 +98,9 @@ func (r *statsRecorder) report(bots int) map[string]any {
 		minPl, maxPl = min(minPl, m.Players), max(maxPl, m.Players)
 		if m.TickStartLate != nil {
 			lateP99s = append(lateP99s, m.TickStartLate.P99Ms)
+			if m.TickStartLate.MaxMs > m.Tick.BudgetMs {
+				lateSecondsOver1++
+			}
 			lateMaxSinceStart = m.TickStartLate.MaxSinceStartMs
 		}
 	}
@@ -120,6 +124,7 @@ func (r *statsRecorder) report(bots int) map[string]any {
 		slices.Sort(lateP99s)
 		out["tickStartLateP99Ms"] = map[string]float64{"median": round3(pct(lateP99s, 0.5)), "max": round3(lateP99s[len(lateP99s)-1])}
 		out["tickStartLateMaxSinceServerStartMs"] = round3(lateMaxSinceStart)
+		out["secondsWithATickStartLateOver1Period"] = lateSecondsOver1
 	}
 	return out
 }
@@ -171,6 +176,51 @@ func setTickRate(ctx context.Context, url, token string, hz int) error {
 				return nil
 			}
 		case "error":
+			return fmt.Errorf("server: %s", c.Msg)
+		}
+	}
+}
+
+// applyLab joins as a short-lived admin client, sends one Lab change and waits
+// for the server's settings broadcast (or its error).
+func applyLab(ctx context.Context, url, token string, settings map[string]any) error {
+	if token == "" {
+		return fmt.Errorf("no admin token (-token or NETLAB_ADMIN_TOKEN)")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	conn, err := dial(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer conn.Close("admin done")
+	join, _ := json.Marshal(map[string]string{"t": "join", "name": "harness-admin"})
+	if err := conn.SendControl(join); err != nil {
+		return err
+	}
+	sent := false
+	for {
+		m, err := conn.Recv(ctx)
+		if err != nil {
+			return err
+		}
+		if !m.Control {
+			continue
+		}
+		var c ctrl
+		if json.Unmarshal(m.Data, &c) != nil {
+			continue
+		}
+		switch {
+		case c.T == "welcome" && !sent:
+			lab, _ := json.Marshal(map[string]any{"t": "lab", "token": token, "settings": settings})
+			if err := conn.SendControl(lab); err != nil {
+				return err
+			}
+			sent = true
+		case c.T == "settings" && sent:
+			return nil
+		case c.T == "error":
 			return fmt.Errorf("server: %s", c.Msg)
 		}
 	}

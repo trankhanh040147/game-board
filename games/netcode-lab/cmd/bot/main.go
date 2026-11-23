@@ -63,6 +63,7 @@ type Summary struct {
 	PacerRaises      int             `json:"pacerRaises"`
 	Cond             json.RawMessage `json:"condAtWelcome,omitempty"`
 	TickRate         int             `json:"tickRate"`
+	CorrectionTimes  []string        `json:"correctionTimes,omitempty"`
 	Errors           []string        `json:"errors,omitempty"`
 }
 
@@ -88,6 +89,7 @@ type bot struct {
 	dist     float64
 	lastPos  [3]sim.Fx
 	cond     json.RawMessage
+	corrAt   []string       // wall-clock time of each correction (first 500)
 	rec      *statsRecorder // non-nil on the bot that records server stats
 }
 
@@ -168,7 +170,11 @@ func (b *bot) readLoop(ctx context.Context) {
 			b.starved = snap.Own.Starved
 			b.pacer.OnServerFeedback(snap.Own.Starved, now)
 			if snap.LastProcessedInputSeq > 0 {
-				b.pred.Reconcile(snap.Own.State, snap.LastProcessedInputSeq, sim.DtForRate(b.set.TickRate), b.set.Reconcile)
+				before := b.pred.Corrections
+				b.pred.ReconcileLife(snap.Own.State, snap.LastProcessedInputSeq, sim.DtForRate(b.set.TickRate), b.set.Reconcile, snap.Own.Life, snap.Own.Dead)
+				if b.pred.Corrections != before && len(b.corrAt) < 500 {
+					b.corrAt = append(b.corrAt, time.Now().Format("15:04:05.000"))
+				}
 			}
 			w.B = w.B[:0]
 			codec.AppendSnapshotAck(&w, b.ep.NextHeader(codec.TSnapshotAck, now), &codec.SnapshotAck{BaselineID: snap.BaselineID, ServerTick: snap.ServerTick})
@@ -299,7 +305,7 @@ loop:
 		Corrections:     b.pred.Corrections, Replayed: b.pred.Replayed,
 		ServerStarved: b.starved, RTTMedianMs: round2(e.RTTMs), RTTMinMs: round2(e.MinRTTMs), JitterMs: round2(e.JitterMs),
 		AckRTTMs: round2(es.RTTMs), LostUp: es.Lost, DistanceM: math.Round(b.dist), MaxSnapGapMs: round2(b.maxGap), PacerMarginTicks: b.pacer.Margin, PacerRaises: b.pacer.Adjustments,
-		Cond: b.cond, TickRate: b.set.TickRate,
+		Cond: b.cond, TickRate: b.set.TickRate, CorrectionTimes: b.corrAt,
 		Errors: append(sum.Errors, b.errs...),
 	}
 	if b.snaps > 0 {
@@ -340,15 +346,17 @@ func main() {
 	url := flag.String("url", "ws://127.0.0.1:8080/ws", "server URL: ws://host:8080/ws (WebSocket) or https://host:8443/wt (WebTransport)")
 	n := flag.Int("n", 1, "number of bots")
 	dur := flag.Duration("d", 30*time.Second, "how long to run (0 = until Ctrl-C)")
-	kind := flag.String("kind", "walker", "bot behaviour (walker)")
+	kind := flag.String("kind", "walker", "walker = bots; probe = no-network control that sleeps on the server's tick schedule and reports late wake-ups (check 2)")
+	probeHz := flag.Int("hz", 64, "with -kind probe: tick rate to sleep on")
 	tick := flag.Int("tick", 0, "set the server tick rate (20/30/64/128) through the Lab before the bots join; needs -token")
+	lab := flag.String("lab", "", `extra Lab settings to apply before the bots join, as JSON (e.g. '{"speedScale":0.8}'); needs -token`)
 	token := flag.String("token", os.Getenv("NETLAB_ADMIN_TOKEN"), "admin token for -tick (default $NETLAB_ADMIN_TOKEN)")
 	stats := flag.Bool("stats", false, "record the server's 1 Hz tick stats (via bot 1) and print a load report")
 	warmup := flag.Duration("warmup", 10*time.Second, "with -stats: stats received in the first warmup after the last bot joined are not counted")
 	perBot := flag.Bool("perbot", true, "print one summary per bot (false: totals only)")
 	flag.Parse()
-	if *kind != "walker" {
-		log.Fatalf("unknown -kind %q (built: walker)", *kind)
+	if *kind != "walker" && *kind != "probe" {
+		log.Fatalf("unknown -kind %q (built: walker, probe)", *kind)
 	}
 	ctx := context.Background()
 	var cancel context.CancelFunc
@@ -356,9 +364,22 @@ func main() {
 		ctx, cancel = context.WithTimeout(ctx, *dur)
 		defer cancel()
 	}
+	if *kind == "probe" {
+		runProbe(ctx, *probeHz)
+		return
+	}
 	if *tick > 0 {
 		if err := setTickRate(ctx, *url, *token, *tick); err != nil {
 			log.Fatalf("-tick %d: %v", *tick, err)
+		}
+	}
+	if *lab != "" {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(*lab), &m); err != nil {
+			log.Fatalf("-lab: %v", err)
+		}
+		if err := applyLab(ctx, *url, *token, m); err != nil {
+			log.Fatalf("-lab %s: %v", *lab, err)
 		}
 	}
 	var rec *statsRecorder
