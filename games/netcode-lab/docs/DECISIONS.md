@@ -36,3 +36,13 @@
 4. **FPS cap above the display refresh runs on a MessageChannel/setTimeout loop**, because requestAnimationFrame is
    vsync-bound. The net graph shows the measured FPS, so a cap the display cannot present is visible as such.
 5. **Client unit tests use `node --test`** (Node ≥ 23 strips TS types natively), so the client has no test-framework dependency.
+
+## 2026-11-23 — lead: transport (adopts R1)
+
+1. **LAN WebTransport over HTTPS with certificate-hash pinning, one port.** The server mints an ECDSA P-256 cert at
+   start (≤ 14 days, SANs = host LAN IPs) and serves the page over HTTPS (TCP) and WebTransport (UDP) on the same port
+   number; the client pins it with `serverCertificateHashes`. Reason: plain `http://<LAN IP>` is not a secure context,
+   so `new WebTransport()` throws there. Cost: one certificate click per teammate.
+2. **Plain-HTTP WebSocket fallback with a visible banner** when WebTransport is not available.
+3. **gc-WASM, not TinyGo**, plus a native-vs-WASM sim hash test.
+4. **In-process conditioner first.** `tc netem` is Linux-only and the host is macOS; netem.sh stays CI-only.
