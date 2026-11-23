@@ -111,13 +111,21 @@ async function boot() {
   if (s) s.onChange = () => lab.refresh();
 
   const row = (ok: boolean, name: string, note: string) => `<div class="row"><span class="${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"}</span> ${name} <span class="dim">${note}</span></div>`;
-  card.innerHTML = `<h1>Netcode Lab</h1>
+  const keyRow = (icons: string[], text: string) => `<div class="ctl">${icons.map((i) => `<img src="./ui/keys/${i}.svg" alt="" width="28" height="28">`).join("")}<span>${text}</span></div>`;
+  const controls = `<div class="controls">
+    ${keyRow(["w", "a", "s", "d"], "move")}${keyRow(["space"], "jump")}
+    ${keyRow(["mouse_move"], "look")}${keyRow(["mouse_left"], "fire")}
+    ${keyRow(["tab"], "scoreboard")}${keyRow(["f1"], "Lab panel")}
+    ${keyRow(["f2"], "presenter view")}${keyRow(["esc"], "release mouse")}
+  </div>`;
+  card.innerHTML = `<h1><img class="logo" src="./ui/logo.svg" alt="Netcode Lab" width="280" height="64"></h1>
     ${row(courtyard !== null, "Courtyard map", courtyard ? "shared/map.json" : "shared/map.json missing")}
     ${row(link.sim !== null, "Shared sim (WASM)", link.sim ? `api v${link.sim.apiVersion}` : "")}
     ${row(s !== null, "Game server", s ? `connected over ${s.t.kind === "wt" ? "WebTransport" : "WebSocket"}` : "")}
     ${link.problems.map((p) => `<div class="bad">${p}</div>`).join("")}
     ${assets.failures.length ? `<div class="bad">Assets using primitive fallback: ${assets.failures.join("; ")}</div>` : ""}
-    <p class="dim">${s && new URLSearchParams(location.search).get("spectate") === "1" ? "Presenter: you join without a player. F2 toggles the top-down view; outside it, drag to look and WASD to fly." : s ? "Click to play: mouse look, WASD, Space jump, left click fire." : "Offline: spectator camera only (WASD fly, Space up, Shift down); not the game's movement rules."} F1 opens the Lab panel. Esc releases the mouse.</p>`;
+    ${controls}
+    <p class="dim">${s && new URLSearchParams(location.search).get("spectate") === "1" ? "Presenter: you join without a player. F2 toggles the top-down view; outside it, drag to look and WASD to fly." : s ? "Click Play to join your team." : "Offline: spectator camera only (WASD fly, Space up, Shift down); not the game's movement rules."}</p>`;
   const go = el("button", {}, s ? "Play" : "Enter spectator view");
   (go as HTMLButtonElement).disabled = !courtyard;
   card.appendChild(go);
