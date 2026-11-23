@@ -17,7 +17,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default within ±15%: bots 211.5 ± 9.7 ms, browser 214.4 / 206.6 / 211.0 ms (loaded host). 128 Hz + 144 FPS: 90.4 ms vs ≈ 71 (not met), frame segments modelled at 144 FPS (display cannot do 144); named gap: playout buffer from the pacer lead (bots then on the old pacer). Quiet-window repeat owed | [bots](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots), [browser](#check-4-in-the-browser--first-in-browser-shot-budget-forwarded-from-duel-d3-d8ffe39) |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met / inconclusive** | 40 bots, current loop (load ~15): tick p99 1.52 ms, 99.81% within budget. P19 with 50 bots at load 36–64: zero-alloc p99 22.1 ms, naive 8.4 ms, neither ≥ 99%; host-dominated. Zero-alloc allocates 37% less (1117 vs 1780 MB) but not zero | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots), [P19](#check-5--p19--zero-alloc-vs-allocating-loop-50-bots-at-128-hz-2026-11-23-20152019-bots-inconclusive-on-timing) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | **partial (loaded host)** | Lead ruling: gaps > 150 ms classified by snapshot ids, judged on stalls. Stalls in 6 bot-minutes: WS 379 (0 loss gaps), WT 11 (10 overlap host stalls, 1 does not) + 10 loss gaps. Quiet-window run decides | [classified](#check-6--p29-classified-stalls-vs-loss-gaps-lead-ruling-decisions-b9-check-6-counts-stalls-2026-11-23-20462051-bots-loaded-host) |
-| 7 | Client smoke (Playwright) | **pass** | 39/0/0 four runs in a row at `c3361b2` (client): P27 delta, 16 presets, P09 rewound hit, P08 miss reason, P24 kill + replay, P03 rejected claim and trust kills, no console errors. Earlier: 36/0/0 ×2, 35/0/1 (V12), 36/1/1 (V16, since fixed) | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review-pass) |
+| 7 | Client smoke (Playwright) | **pass** | 44/0/0 three runs in a row at `25c6b27` (client), adding the P25 glitch legs, P26–P28 and region join; P08 flake fixed in `baf0cc5`. Earlier: 39/0/0 ×4 at `c3361b2`, 36/0/0 ×2, 35/0/1 (V12), 36/1/1 (V16, since fixed) | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review-pass) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
 
 ## Check 1 — Determinism: native vs WASM (B.9 #1)
@@ -716,6 +716,7 @@ Where the difference comes from:
 | HEAD at the time | review's own server | **35 passed, 0 failed, 1 skipped** | review V12, independently |
 | `9e1923d` | review's own server (:18330, PID recorded, alive the whole run) | **36 passed, 1 failed, 1 skipped**; the failure is a `#forged-claim` click timeout (mechanical, client is fixing it); a real P24 headshot kill and death replay passed | review V16 |
 | `c3361b2` | built from `2bba01d` | **39 passed, 0 failed, 0 skipped**, four runs in a row | client |
+| `25c6b27` | client's own server | **44 passed, 0 failed, 0 skipped**, three runs in a row | client |
 
 The client run applied 16 enabled presets. It included a real P09 hit confirm, the P08 miss reason, and a P27 delta
 check (28 delta snapshots with `compDelta` on). Client `npm test`: 18/18. The smoke checks that presets P12, P13,
@@ -729,6 +730,9 @@ The `c3361b2` runs cover:
 - A P24 headshot kill plus the death replay.
 - P03: the rejected claim, and kills in trust mode.
 - No console errors.
+
+The `25c6b27` runs cover everything above, plus the P25 glitch legs, P26–P28 and joining a region room. A P08
+flake was fixed in `baf0cc5` with a stricter assertion: 5 of 5 runs, then 11 more passing runs.
 
 Status: **pass**. Verbatim output is with the client member.
 
