@@ -1,5 +1,6 @@
 // Renders docs/CONCEPTS.md (HANDOFF Part A with <a id="aN"> anchors) so Lab banners can link to concepts.html#aN.
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 
 const docs = import.meta.glob<string>("../../docs/CONCEPTS.md", { eager: true, query: "?raw", import: "default" });
 const md = Object.values(docs)[0];
@@ -14,5 +15,6 @@ style.textContent = `
   :target + h2 { color:#fbbf24; }`;
 document.head.appendChild(style);
 const main = document.getElementById("doc")!;
-main.innerHTML = md ? (marked.parse(md) as string) : "<p>docs/CONCEPTS.md was not found at build time.</p>";
+// The doc is ours, but any HTML in it would run here: sanitize (keeps the <a id> anchors, drops scripts, handlers, javascript: links).
+main.innerHTML = md ? DOMPurify.sanitize(marked.parse(md) as string) : "<p>docs/CONCEPTS.md was not found at build time.</p>";
 if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
