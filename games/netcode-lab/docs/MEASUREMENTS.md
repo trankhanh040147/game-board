@@ -959,12 +959,19 @@ and the top 5 processes by CPU, from `host.log`):
 
 | Step (time) | Load avg 1 min, start → end | Top CPU processes at the end of the step |
 |---|---|---|
-| check 2 (21:30–21:35) | 7.73 → 7.72 (min 5.34, max 8.36) | Chrome helpers 56.8% / 36.7% / 11.0%; two `./bin/bot` processes that are not this harness's (8.0% / 7.2%; mine run as `bin/bot`) |
+| check 2 (21:30–21:35) | 7.73 → 7.72 (min 5.34, max 8.36) | Chrome helpers 56.8% / 36.7% / 11.0%; `./bin/bot` PIDs 68100 / 14067 (background, not the team's: 8.0% / 7.2%) |
 | check 4 default (21:35–21:37) | 7.26 → 4.08 | Chrome 59.9%, `cc-same` 48.7%, Chrome 40.0%, WindowServer 34.7%, Claude renderer 23.2% |
 | check 4 fast (21:37–21:39) | 5.12 → **15.66** | Chrome 58.0% / 38.3%, **new Chrome helpers 89289 (29.2%) and 53257 (21.0%)**, camerad 15.9% |
 | check 5 zero-alloc (21:39–21:41) | 16.48 → **27.27** | Chrome 66.8% / 48.0% (89289) / 45.1%, WindowServer 34.1%, Chrome 31.1% (53257) |
 | check 5 naive (21:41–21:42) | 29.29 → 28.15 | Chrome 59.9% / 40.5% / 31.3% / 21.2%, camerad 12.9% |
 | check 6 (21:42–21:47) | 26.13 → 29.74 | **`node` 138.2%**, Chrome 64.3% / 44.5% / 43.4%, XprotectService 32.0% |
+
+Background load from processes that are not the team's (per the lead, probably the owner's own sessions), left alone:
+- **Servers:** PID 18141 (:18780, started 20:35), PID 20847 (:18080, started 21:13), PID 31337 (:18083).
+- **Bots:** PID 14067 (walker ×2 → :18780) and PID 68100 (fill ×2 → :18083, started 21:28). These are the two
+  `./bin/bot` rows in the check 2 snapshot, at 8–9% CPU each.
+- **Still running at 21:50:** 18141 and 20847; the other three had exited.
+`host.log` carries the same note.
 
 So the window was quiet (load 4–8) only for check 2 and check 4 default. From 21:39 the owner's new Chrome activity
 and a `node` process outside the team raised the load to 15–30.
