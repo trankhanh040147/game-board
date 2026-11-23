@@ -76,7 +76,7 @@ holds the player instead and counts `heldOnStall` (stats); see DECISIONS 22. A s
 | own.health | u8 | |
 | own.inputBuffer | u8 | inputs queued at the server after this tick |
 | own.starved | u16 | cumulative ticks the server repeated an input (wraps) |
-| own.inputLead | i8 | newest received clientTick − server tick at arrival |
+| own.inputLead | i8 | smallest (clientTick − server tick at arrival) of the inputs that arrived since the previous snapshot; 1 = just in time; **127 = no input arrived** (pass it to `pacerFeedback`, which ignores 127) |
 | own.ownFlags | u8 | bit 0 dead (v2) |
 | own.life | u8 | +1 on every respawn (v2). A changed life = teleport, not a misprediction |
 | snapId | u8 | this snapshot's id, 1..255 then wraps (v3). The client acks it |
@@ -193,6 +193,7 @@ Client → server:
 | `report` | `rttMs, jitterMs, lossPct, fps` (1 Hz, client-measured) | – (scoreboard ping/loss/FPS, favour-victim RTT) |
 | `history` | – | – → reply `history` |
 | `statsReset` | `token` | admin token (resets the whole-window histograms) |
+| `glitch` | `token, kind: "rubberband", on` (server-only speed ×0.6) or `token, kind: "lossBurst", ms?(400, max 3000), target?, all?` (100 % downlink loss for ms) | admin token (P25); broadcast back as `glitch` |
 | `debugpos` | `{t:"debugpos", tick, serverMs, own:{x,y,z}, others:[{id,x,y,z}]}`: the client's predicted self and interpolated others (Q16.16), sent at the top level of the message | relayed to spectators while `truthGhost` is on, wrapped as `{t:"debugpos", from, data:<the whole message>}` |
 | `shotSeen` | `shooterId, shotSeq, recvServerMs, interpMs, frameServerMs` (P11 target half, server-clock ms) | – → relayed to the shooter as `shotTrace` |
 
@@ -200,7 +201,7 @@ Server → client:
 
 | `t` | Fields |
 |---|---|
-| `welcome` | `protocolVersion, id, name, team, transport, settings, presetId, banner, supportedSettings[{key,kind,allowed,min,max,built,note}], presets[{id,title,section,banner,built}], cond{up,down}, tick, tickRate, serverTimeMs, spawn{x,y,z,vx,vy,vz,onGround,yaw,pitch}, map, adminTokenRequired`; v2 adds `spectator, scorecard{instant,smooth,fair,cheatProof}, round, life, fireCooldownTicks, rules{damageBody,damageHead,respawnMs,roundMs,intermissionMs,rpm,historyKeepMs}` |
+| `welcome` | `protocolVersion, id, name, team, transport, settings, presetId, banner, supportedSettings[{key,kind,allowed,min,max,built,note}], presets[{id,title,section,banner,built,page?}]` (`page` = the preset lives on `/infra.html` or `/duel.html`)`, cond{up,down}, tick, tickRate, serverTimeMs, spawn{x,y,z,vx,vy,vz,onGround,yaw,pitch}, map, adminTokenRequired`; v2 adds `spectator, scorecard{instant,smooth,fair,cheatProof}, round, life, fireCooldownTicks, rules{damageBody,damageHead,respawnMs,roundMs,intermissionMs,rpm,historyKeepMs}` |
 | `players` | `players[{id,name,team}]` on every join/leave |
 | `settings` | `settings, presetId, banner, scorecard, fireCooldownTicks` broadcast on every Lab change |
 | `round` | `no, state ("playing"\|"ended"), endsAtServerMs, scores{blue,orange}` on every change (2 min rounds, 5 s intermission) |
@@ -209,6 +210,7 @@ Server → client:
 | `scoreboard` | 1 Hz: round fields + `players[{id,name,team,kills,deaths,alive,pingMs,pingSource,lossPct,fps,shots,hits,rejectedClaims}]` |
 | `history` | `tickRate, ticks[{tick, serverTimeMs, players[{id,team,x,y,z,yaw,pitch,alive}]}]` (last 2 s, Q16.16) |
 | `debugpos` | `from, data` (relayed) |
+| `glitch` | `kind, name ("Rubber-banding" \| "Teleporting"), explain, serverTimeMs`, plus `on, speedScale` or `ms, targets`: show the name on screen (P25) |
 | `shotTrace` | `shotSeq, targetId, targetRecvServerMs, targetInterpMs, targetFrameServerMs` (P11) |
 | `cond` | `cond{up,down}, by` to the affected client |
 | `stats` | 1 Hz: `serverTick, serverTimeMs, tickRate, sendRate, tick{samples,budgetMs,p50Ms,p99Ms,maxMs,withinBudgetPct}, players, tickStartLate{p50Ms,p99Ms,maxMs,maxSinceStartMs,catchUpTicks,scheduleResets}, window{tickMs, startLateMs: {samples,meanMs,p50Ms,p95Ms,p99Ms (null < 100 samples),p999Ms (null < 1000),maxMs,overBudget,withinBudgetPct}, gc{cycles,pauseP50Ms,pauseP99Ms,pauseMaxMs,pauseCount,heapBytes,allocBytesTotal,goMemLimitBytes,goroutines}}, cost{tickMsP50, tickMsP99, totalEgressBps, totalIngressBps, totalEgressKbps, clients, note}, youCost{downDatagramBps, downControlBps, upDatagramBps, upControlBps, snapshotsPerSec, downKbps, upKbps}, budgetEst{segments[{key,label,ms}], totalMs, label:"est.", note} (A.11 formula, P15), window.shotTimingErrMs{subtickOn, quantised} (P26), you{entitiesPerSnapshot (P28), entityBytes{rawBps, quantBps, quantBitpackBps, deltaBps} (P27), inputBuffer, starved, heldOnStall, skippedInputs, redundantInputs, lastProcessedInputSeq, inputLead, ackedSnapshotTick, upLossPct, serverAckRttMs, downSent, downAcked, downLost, cond, condStats{up,down}}` |
