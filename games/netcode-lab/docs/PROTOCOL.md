@@ -201,7 +201,7 @@ Server → client:
 
 | `t` | Fields |
 |---|---|
-| `welcome` | `protocolVersion, id, name, team, transport, settings, presetId, banner, supportedSettings[{key,kind,allowed,min,max,built,note}], presets[{id,title,section,banner,built,page?}]` (`page` = the preset lives on `/infra.html` or `/duel.html`)`, cond{up,down}, tick, tickRate, serverTimeMs, spawn{x,y,z,vx,vy,vz,onGround,yaw,pitch}, map, adminTokenRequired`; v2 adds `spectator, scorecard{instant,smooth,fair,cheatProof}, round, life, fireCooldownTicks, rules{damageBody,damageHead,respawnMs,roundMs,intermissionMs,rpm,historyKeepMs}` |
+| `welcome` | `protocolVersion, id, name, team, transport, settings, presetId, banner, supportedSettings[{key,kind,allowed,min,max,built,note}], presets[{id,title,section,banner,built,page?}], cond{up,down}, tick, tickRate, serverTimeMs, spawn{x,y,z,vx,vy,vz,onGround,yaw,pitch}, map, adminTokenRequired`; v2 adds `spectator, scorecard{instant,smooth,fair,cheatProof}, round, life, fireCooldownTicks, rules{damageBody,damageHead,respawnMs,roundMs,intermissionMs,rpm,historyKeepMs}`. A preset's `page` (`/infra.html`, `/duel.html`) says it lives on that page, not in this room's Lab |
 | `players` | `players[{id,name,team}]` on every join/leave |
 | `settings` | `settings, presetId, banner, scorecard, fireCooldownTicks` broadcast on every Lab change |
 | `round` | `no, state ("playing"\|"ended"), endsAtServerMs, scores{blue,orange}` on every change (2 min rounds, 5 s intermission) |
