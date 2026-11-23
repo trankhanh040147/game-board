@@ -322,7 +322,6 @@ func (l *Link) run() {
 				wait = l.q[0].at.Sub(now)
 			}
 		}
-		l.stats.Delivered += uint64(len(due))
 		l.mu.Unlock()
 		for i := range due {
 			l.Deliver(due[i].data)
@@ -330,6 +329,12 @@ func (l *Link) run() {
 				l.release(due[i].data)
 			}
 			due[i] = item{}
+		}
+		if len(due) > 0 {
+			// Counted after the callbacks, so Delivered never runs ahead of them.
+			l.mu.Lock()
+			l.stats.Delivered += uint64(len(due))
+			l.mu.Unlock()
 		}
 		l.due = due[:0]
 		if len(due) > 0 {

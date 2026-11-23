@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"netcodelab/net/codec"
 	"netcodelab/net/transport"
 	"netcodelab/sim"
 )
@@ -216,5 +217,22 @@ func TestScheduledPlay(t *testing.T) {
 	c.simulate(dt, false, s, 104) // its slot was used by the repeat; the next is for 105: wait, no starvation
 	if c.starved != 1 {
 		t.Fatalf("not-yet-due input counted as starvation: %d", c.starved)
+	}
+}
+
+// review V14: a snapshot window with no input arrivals reports LeadNone, not the old lead.
+func TestInputLeadNotStale(t *testing.T) {
+	r := NewRoom(slog.New(slog.NewTextHandler(io.Discard, nil)), "x")
+	c := testClient(r, 1, 0, [3]sim.Fx{})
+	c.minLead, c.haveMinLead = 2, true
+	var s codec.Snapshot
+	r.fillSnapshot(c, &s, 1, 0, nil, DefaultSettings())
+	if s.Own.InputLead != 2 {
+		t.Fatalf("lead %d want 2", s.Own.InputLead)
+	}
+	s = codec.Snapshot{}
+	r.fillSnapshot(c, &s, 2, 0, nil, DefaultSettings())
+	if s.Own.InputLead != codec.LeadNone {
+		t.Fatalf("empty window reported %d, want LeadNone", s.Own.InputLead)
 	}
 }

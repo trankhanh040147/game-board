@@ -29,7 +29,7 @@ func TestDelayAndOrder(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		l.Push(pkt(i))
 	}
-	time.Sleep(80 * time.Millisecond)
+	settle(t, l, 50)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.got) != 50 {
@@ -52,8 +52,7 @@ func TestDatagramLossDropsAndReorders(t *testing.T) {
 	for i := 0; i < 2000; i++ {
 		l.Push(pkt(i))
 	}
-	time.Sleep(100 * time.Millisecond)
-	st := l.Stats()
+	st := settle(t, l, 2000)
 	if st.Dropped < 300 || st.Dropped > 500 || st.Reordered == 0 {
 		t.Fatalf("stats %+v", st)
 	}
@@ -74,7 +73,7 @@ func TestOrderedLossStalls(t *testing.T) {
 	l.Push(pkt(0))
 	l.SetParams(Params{DelayMs: 1})
 	l.Push(pkt(1))
-	time.Sleep(260 * time.Millisecond)
+	settle(t, l, 2)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.got) != 2 || s.got[0] != 0 || s.got[1] != 1 {
@@ -99,7 +98,7 @@ func TestOrderedFastRetransmitBeatsRTO(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		l.Push(pkt(i))
 	}
-	time.Sleep(150 * time.Millisecond)
+	settle(t, l, 5)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.got) != 5 || s.got[0] != 0 || s.got[4] != 4 {
@@ -129,12 +128,38 @@ func TestReleaseOncePerPush(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		l.Push(pkt(i))
 	}
-	time.Sleep(50 * time.Millisecond)
+	settle(t, l, 500)
 	l.Close()
-	time.Sleep(20 * time.Millisecond)
+	for i := 0; i < 5000; i++ { // Release runs on the link goroutine
+		mu.Lock()
+		done := rel == 500
+		mu.Unlock()
+		if done {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if rel != 500 {
 		t.Fatalf("released %d of 500", rel)
+	}
+}
+
+// settle waits until every pushed packet is delivered or dropped (no fixed
+// sleeps: a loaded host can be slower than any sleep, review V15).
+func settle(t *testing.T, l *Link, pushed uint64) Stats {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		st := l.Stats()
+		// Each duplicate adds one delivery beyond the pushed packet.
+		if st.In == pushed && st.Delivered+st.Dropped >= pushed+st.Duplicated {
+			return st
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("packets still in flight after 10 s: %+v", st)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

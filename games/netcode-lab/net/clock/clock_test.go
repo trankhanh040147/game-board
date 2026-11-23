@@ -138,3 +138,15 @@ func TestPacerLeadNeedsSlack(t *testing.T) {
 	}
 	t.Logf("settled at margin %v (lead %v), %d raises after 30 s", p.Margin, p.Margin+1, raises)
 }
+
+// A snapshot window with no arrivals reports lead 127; it must not count as slack.
+func TestPacerLeadIgnoresNoNews(t *testing.T) {
+	p := NewPacer()
+	p.Margin = 3
+	for now := 0.0; now < 30000; now += 50 {
+		p.OnServerLead(0, 127, now)
+	}
+	if p.Margin != 3 {
+		t.Fatalf("margin drained on no news: %v", p.Margin)
+	}
+}

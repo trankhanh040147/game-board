@@ -23,6 +23,9 @@ const (
 
 const HeaderSize = 9
 
+// LeadNone in OwnState.InputLead means no input arrived since the previous snapshot.
+const LeadNone int8 = 127
+
 // MaxCmds is the current input plus up to 3 redundant unacked inputs (B.4 rule 4).
 const MaxCmds = 4
 
@@ -169,7 +172,7 @@ type OwnState struct {
 	Health      uint8
 	InputBuffer uint8  // inputs waiting in the server's buffer for this client
 	Starved     uint16 // ticks the server repeated the last input (wraps)
-	InputLead   int8   // clientTick of the newest input minus server tick at arrival
+	InputLead   int8   // smallest (clientTick - server tick at arrival) of inputs since the previous snapshot; LeadNone = none arrived
 	Dead        bool   // flags bit 0
 	Life        uint8  // +1 on every respawn: a teleport, not a misprediction
 }

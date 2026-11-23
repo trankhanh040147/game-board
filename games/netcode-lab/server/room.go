@@ -463,8 +463,11 @@ func (r *Room) fillSnapshot(c *Client, snap *codec.Snapshot, tick uint32, now fl
 	starved, lead, acked, ackedSnap := c.starved, c.inputLead, c.ackedTick, c.ackedBaseline
 	// The snapshot reports the smallest lead of the inputs that arrived since
 	// the previous snapshot: the pacer's "how much slack is left" signal.
+	// No input arrived in this window: report 127 ("no news") instead of the
+	// previous window's lead, so the pacer never acts on stale data.
+	lead = codec.LeadNone
 	if c.haveMinLead {
-		lead = int8(max(-128, min(127, c.minLead)))
+		lead = int8(max(-128, min(126, c.minLead)))
 		c.haveMinLead = false
 	}
 	c.mu.Unlock()

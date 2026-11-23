@@ -109,7 +109,7 @@ const LeadMinMargin = -4
 func (p *Pacer) OnServerLead(starved uint16, lead int8, nowMs float64) {
 	if !p.haveStarved {
 		p.haveStarved, p.lastStarved, p.calmSince = true, starved, nowMs
-		p.leadWinStart, p.leadWinMin = nowMs, int(lead)
+		p.leadWinStart, p.leadWinMin = nowMs, 127
 		return
 	}
 	if starved != p.lastStarved {
@@ -124,10 +124,12 @@ func (p *Pacer) OnServerLead(starved uint16, lead int8, nowMs float64) {
 			p.raisedAt = nowMs
 		}
 		p.calmSince = nowMs
-		p.leadWinStart, p.leadWinMin = nowMs, int(lead)
+		p.leadWinStart, p.leadWinMin = nowMs, 127
 		return
 	}
-	p.leadWinMin = min(p.leadWinMin, int(lead))
+	if lead != 127 { // 127 = no input arrived in that snapshot window: no news
+		p.leadWinMin = min(p.leadWinMin, int(lead))
+	}
 	if nowMs-p.leadWinStart < 2000 || nowMs-p.calmSince < 2000 {
 		return
 	}
@@ -135,10 +137,11 @@ func (p *Pacer) OnServerLead(starved uint16, lead int8, nowMs float64) {
 	if nowMs < p.floorUntil {
 		low = max(low, p.floor)
 	}
-	if p.leadWinMin >= 2 && p.Margin > low {
+	// A window with no news (127 throughout) is not evidence of slack.
+	if p.leadWinMin >= 2 && p.leadWinMin != 127 && p.Margin > low {
 		p.Margin = max(low, p.Margin-1)
 		p.drainedAt, p.drainedTo = nowMs, p.Margin
 		p.calmSince = nowMs // let the new margin show in the leads before the next step
 	}
-	p.leadWinStart, p.leadWinMin = nowMs, int(lead)
+	p.leadWinStart, p.leadWinMin = nowMs, 127
 }
