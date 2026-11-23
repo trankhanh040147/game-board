@@ -14,10 +14,10 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** | Identical state hashes on every tick at 20/30/64/128 Hz | [section](#check-1--determinism-native-vs-wasm-b9-1) |
 | 2 | Reconciliation, 0 corrections over 5 min | **fail** (on this shared host) | At HEAD (`91b61db` build): 20 corrections (WS), 25 (WT) in 5 min, load avg mean 18; most line up with host stalls also seen by a no-game-code probe. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s (they appear; smoothing is a client render property) | [at HEAD](#check-2-at-head--5-minutes-1-bot-defaults-2026-11-23-18361841-bots), [speed modifier](#check-2-second-half--server-only-speed-modifier-on-2026-11-23-18481850-bots) |
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
-| 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default 211.5 ± 9.7 ms (+11%, within ±15%: pass). 128 Hz + 144 FPS (modelled frames): 90.4 ± 6.2 ms vs ≈ 71 (+27%: not met); the input playout wait (pacer lead) is the main gap | [section](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots) |
+| 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default within ±15%: bots 211.5 ± 9.7 ms, browser 214.4 / 206.6 / 211.0 ms (loaded host). 128 Hz + 144 FPS (modelled): 90.4 ms vs ≈ 71 (not met); quiet-window repeat owed | [bots](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots), [browser](#check-4-in-the-browser--first-in-browser-shot-budget-forwarded-from-duel-d3-d8ffe39) |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met / inconclusive** | 40 bots, current loop (load ~15): tick p99 1.52 ms, 99.81% within budget. P19 with 50 bots at load 36–64: zero-alloc p99 22.1 ms, naive 8.4 ms, neither ≥ 99%; host-dominated. Zero-alloc allocates 37% less (1117 vs 1780 MB) but not zero | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots), [P19](#check-5--p19--zero-alloc-vs-allocating-loop-50-bots-at-128-hz-2026-11-23-20152019-bots-inconclusive-on-timing) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | **partial** | Gaps > 3× send interval per bot in 2 min: WS 106–119, WT 4–5 (expected ≈ 0.3 from loss alone; load avg up to 36, no gap timestamps yet) | [section](#check-6--p29--snapshot-inter-arrival-websocket-vs-webtransport-datagrams-at-5-loss-2026-11-23-bots) |
-| 7 | Client smoke (Playwright) | **partial** | 18/0/1 at `6db531d` (review: 18/1 independently), 20/0/1 at `082b412` with WT; shoot skipped: shooting not testable until M3 | [section](#check-7--client-smoke-playwright-b9-7-partial-shooting-not-testable-until-m3) |
+| 7 | Client smoke (Playwright) | **pass** | v3: 36/0/0 twice at `078053b` (client), 35/0/1 (review V12), real P09/P08 shots; earlier 18/0/1 and 20/0/1 | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
 
 ## Check 1 — Determinism: native vs WASM (B.9 #1)
@@ -260,6 +260,8 @@ Skipped: shoot. When these runs were taken the server had no hitscan. Status: **
 The server-side shooting landed later (`a2afd2d`), but no smoke run with shooting is recorded yet.
 
 ## Duel (P21–P23, P25)
+
+**Superseded** by "Duel re-run under the PID/port rule (D3)" below. The rows in this section are kept for the record.
 
 Forwarded verbatim from member "duel" (it cannot write here). Real runs on 2026-11-23, M1 Pro. **Server lifetime
 unverified**: these runs predate the PID/port rule, so the relay's lifetime is not shown. They are to be re-run
@@ -552,10 +554,10 @@ HTTP_PORT=18660 sh scripts/p14-peek.sh default 20
 HTTP_PORT=18670 sh scripts/p14-peek.sh bad 20      # Bad route: 40 ms each way, jitter 15 ms, loss 1% (client Lab profile)
 ```
 
-| Profile | Crossings | **Advantage, mean ± sd (min–max)** | t_peekerSees − t_expose | t_holderSees − t_expose | RTT median (holder / peeker) | Peeker corrections |
+| Profile | Crossings started / complete | **Advantage, mean ± sd (min–max)** | t_peekerSees − t_expose | t_holderSees − t_expose | RTT median (holder / peeker) | Corrections (holder / peeker) |
 |---|---|---|---|---|---|---|
-| Default (40 ms RTT) | 20 / 20 | **160.83 ± 9.67 ms** (149.91–183.07) | −42.73 ± 8.23 ms | 118.09 ± 5.02 ms | 40.86 / 41.95 ms | 9 |
-| Bad route (≈ 88 ms RTT measured) | 20 / 20 | **186.01 ± 16.51 ms** (146.94–216.69) | −58.14 ± 11.86 ms | 127.86 ± 9.50 ms | 87.86 / 88.68 ms | 69 |
+| Default (40 ms RTT) | 20 / 20 | **160.83 ± 9.67 ms** (149.91–183.07) | −42.73 ± 8.23 ms | 118.09 ± 5.02 ms | 40.86 / 41.95 ms | 0 / 9 |
+| Bad route (≈ 88 ms RTT measured) | 20 / 20 | **186.01 ± 16.51 ms** (146.94–216.69) | −58.14 ± 11.86 ms | 127.86 ± 9.50 ms | 87.86 / 88.68 ms | 0 / 69 |
 
 Label: **our measurement**. Riot's figures (A.11: about 141 → 101 → 71 ms) are a `ref` only and a different
 measurement.
@@ -698,3 +700,51 @@ Where the difference comes from:
    - At 128/s the snapshot goes out in the same tick (0.06 ms).
    - At 20/s the snapshot wait averages 18 ms, not 25. Shots fire every 7 ticks while snapshots go every 3–4 ticks,
      so not every phase is sampled.
+
+## Check 7 — client smoke on protocol v3 (forwarded by lead from client and review)
+
+| Client commit | Server | Result | Run by |
+|---|---|---|---|
+| `078053b` (v3) | built from `9be4b0e` | **36 passed, 0 failed, 0 skipped**, run twice | client |
+| HEAD at the time | review's own server | **35 passed, 0 failed, 1 skipped** | review V12, independently |
+
+The client run applied 16 enabled presets. It included a real P09 hit confirm, the P08 miss reason, and a P27 delta
+check (28 delta snapshots with `compDelta` on). Client `npm test`: 18/18. The smoke checks that presets P12, P13,
+P19, P27 and P28 apply and broadcast; their measured effects are in "Preset effects" below. Status: **pass** (the
+shooting step is now exercised). Verbatim output is with the client member.
+
+## Check 4 in the browser — first in-browser shot budget (forwarded from duel D3, `d8ffe39`)
+
+Two headless Chromium pages at 60.5 fps, `smoke/perf.mjs`, duel's own server on :18760, defaults (64 Hz, 20/s,
+40 ms conditioner). 12 real hits, all 12 traced with the target half. **Loaded host.**
+
+| Segment | est. | measured (ms) |
+|---|---|---|
+| Shooter frame | 8.3 | 10.4 |
+| Uplink | 20.0 | 25.4 |
+| Server tick wait | 7.8 | 48.6 (the server holds about 2 inputs; the half-tick formula ignores this) |
+| Snapshot wait | 25.0 | 22.5 |
+| Downlink | 20.0 | 21.3 |
+| Target interp | 100.0 | 77.0 |
+| Target frame | 8.3 | 9.3 |
+| **Total** | **189.5** | **214.4** (+13%) |
+
+Two earlier runs gave 206.6 and 211.0 ms. Status: **check 4 default: within tolerance (3 runs, loaded host)**.
+This agrees with the bots' 211.5 ms above. The quiet-window repeat and the 128 Hz + 144 FPS case are still owed;
+144 FPS cannot be honestly reached on this 60/120 Hz display.
+
+## Duel re-run under the PID/port rule (D3, forwarded from duel)
+
+The relay's PID stayed alive for all 48 runs; 0 desyncs. WebTransport. Raw data: `bin/duel-measure-v2.jsonl`.
+Caveat: the run overlapped M7 builds, so the Bad route D=1 row may be perturbed.
+
+| Profile | Mode | Result |
+|---|---|---|
+| Default | rollback D=0/1/2/3 | 8.8 / 9.3 / 9.3 / 0.8 rollbacks/s; 28.6 / 19.8 / 9.4 / 0.8 frames rolled back/s |
+| Default | lockstep auto D=4 | 0.67 stall frames/s |
+| Default | lockstep D=2 | 15.3 stall frames/s at 44.8 fps |
+| Bad route | rollback D=0–3 | 7.5 rollbacks/s each; 43.7 / 35.9 / 27.1 / 19.4 frames rolled back/s |
+| Bad route | lockstep auto D=6 | 5.1 stall frames/s at 54.8 fps |
+| Bad route | lockstep D=2 | 33.8 stall frames/s at 26.1 fps |
+| Bad route, WebSocket | all modes | 13–22 stall frames/s at 38–46 fps |
+
