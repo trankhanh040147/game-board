@@ -52,3 +52,11 @@ test("render time before the oldest snapshot holds at the oldest (single snapsho
   b.push(150, 1050, e(9));
   assert.equal(b.sample(50)!.entities.get(1)!.x, 7);
 });
+
+test("interpolated entities keep extra fields such as team", () => {
+  const b = new InterpBuffer();
+  const t = (x: number) => new Map([[2, { x, y: 0, z: 0, yaw: 0, alive: true, team: 1 } as any]]);
+  b.push(0, 1000, t(0));
+  b.push(50, 1050, t(4));
+  assert.equal((b.sample(25)!.entities.get(2) as any).team, 1);
+});

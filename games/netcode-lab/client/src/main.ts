@@ -11,6 +11,7 @@ import { loadSim, type NetcodeSim } from "./net/wasm";
 import { fetchInfo, WsTransport, WtTransport, webTransportPossible, type Transport } from "./net/transport";
 import { Session } from "./net/session";
 import { loadAssets } from "./render/assets";
+import { PresenterView } from "./hud/presenter";
 
 const hud = document.body;
 const offlineBackend: LabBackend = { connected: false, builtPresets: new Set(), settings: null, activePreset: null, applyPreset() {}, setSetting() {} };
@@ -107,6 +108,7 @@ async function boot() {
   if (!courtyard) return;
 
   const world = new World(canvas, courtyard, assets);
+  const presenter = new PresenterView(hud, courtyard);
   const input = new InputCapture(canvas);
   const fps = new FpsMeter();
   const probe = new MotionProbe();
@@ -127,6 +129,7 @@ async function boot() {
   canvas.addEventListener("click", () => { if (!input.locked && !lab.open) input.lock(); });
   input.onLockChange = (locked) => { start.style.display = locked || lab.open ? "none" : "flex"; };
   if (!s) input.onFirePress = () => world.rifle.fire(performance.now());
+  presenter.onToggle = (open) => { if (open && input.locked) document.exitPointerLock(); };
   lab.onToggle = (open) => {
     if (open && input.locked) document.exitPointerLock();
     start.style.display = open || input.locked ? "none" : "flex";
@@ -159,6 +162,7 @@ async function boot() {
           world.setView(v.x, v.y + dims.eyeHeight, v.z, input.yaw, input.pitch);
         }
         drawOthers(now);
+        recordPresenter(now, v);
       } else {
         world.setView(cam.x, cam.y, cam.z, input.yaw, input.pitch);
       }
@@ -168,12 +172,35 @@ async function boot() {
     },
   });
 
+  function recordPresenter(now: number, v: { x: number; y: number; z: number } | null) {
+    if (!s) return;
+    const F = s.sim.FX;
+    const r = s.renderServerMs(now);
+    const est = s.clockEstimate(now);
+    const teamOf = (id: number) => id === s.id ? (s.team === "orange" ? 1 : 0) : ((s.interp.latest()?.entities.get(id) as any)?.team ?? 0);
+    const drawn: { id: number; team: number; x: number; z: number }[] = [];
+    for (const [id, e] of lastDrawn) drawn.push({ id, team: (e as any).team ?? 0, x: e.x, z: e.z });
+    presenter.record({
+      t: now,
+      serverNowMs: est.ready ? est.serverTimeMs : null,
+      renderServerMs: r,
+      truth: s.ghost && s.setting("truthGhost", false) ? s.ghost.players.map((p) => ({ id: p.id, team: teamOf(p.id), x: p.x / F, z: p.z / F })) : null,
+      truthTick: s.ghost?.serverTick ?? null,
+      drawn,
+      own: v ? { id: s.id, team: s.team === "orange" ? 1 : 0, x: v.x, z: v.z, yaw: input.yaw } : null,
+      ownServer: s.ownServer ? { x: s.ownServer.x / F, z: s.ownServer.z / F } : null,
+    });
+    presenter.draw();
+  }
+  let lastDrawn = new Map<number, { x: number; z: number }>();
+
   function drawOthers(now: number) {
     if (!s || !dims) return;
     const alive = new Set<number>();
     const r = s.renderServerMs(now);
     const sample = r === null ? null : s.setting("interp", true) ? s.interp.sample(r) : (() => { const l = s.interp.latest(); return l ? { entities: l.entities, held: true } : null; })();
     if (sample) {
+      lastDrawn = sample.entities as Map<number, { x: number; z: number }>;
       for (const [id, e] of sample.entities) {
         alive.add(id);
         const team: Team = (e as any).team === 1 ? "orange" : "blue";
@@ -188,7 +215,7 @@ async function boot() {
   }
 
   // Handle for automated browser checks (Playwright cannot grant pointer lock headless).
-  (window as any).__netlab = { input, session: s, probe };
+  (window as any).__netlab = { input, session: s, probe, presenter };
   lab.local = {
     get fpsCap() { return loop.fpsCap; },
     setFpsCap(v: number) { loop.fpsCap = v as FpsCap; },

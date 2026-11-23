@@ -51,6 +51,7 @@ export class InterpBuffer {
       const ea = a.entities.get(id);
       if (!ea || !ea.alive || !eb.alive) { out.set(id, eb); continue; }
       out.set(id, {
+        ...eb, // keep extra fields (team, moving) from the newer snapshot
         x: ea.x + (eb.x - ea.x) * t, y: ea.y + (eb.y - ea.y) * t, z: ea.z + (eb.z - ea.z) * t,
         yaw: lerpAngle(ea.yaw, eb.yaw, t), alive: true,
       });
