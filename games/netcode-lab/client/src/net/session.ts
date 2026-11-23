@@ -138,6 +138,7 @@ export class Session implements LabBackend {
         break;
       case "settings":
         this.applySettings(m.settings, m.presetId, m.banner);
+        this.lastError = ""; // a successful Lab change clears the previous refusal
         break;
       case "cond": this.cond = m.cond; break;
       case "stats": this.serverStats = m; break;

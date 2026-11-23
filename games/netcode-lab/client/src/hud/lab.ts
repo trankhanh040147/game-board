@@ -35,6 +35,7 @@ export class LabPanel {
   readonly root: HTMLElement;
   private body: HTMLElement;
   private status: HTMLElement;
+  private tokenNote: HTMLElement;
   private token = loadToken();
   open = false;
   onToggle?: (open: boolean) => void;
@@ -53,7 +54,8 @@ export class LabPanel {
       this.refresh();
     });
     tokenRow.appendChild(tokenInput);
-    header.appendChild(tokenRow);
+    this.tokenNote = el("div", { class: "tokennote" });
+    header.append(tokenRow, this.tokenNote);
     this.body = el("div", { class: "scroll" });
     this.status = el("footer", { class: "dim" });
     this.root.append(header, this.body, this.status);
@@ -79,6 +81,13 @@ export class LabPanel {
     const b = this.backend;
     const canAdmin = b.connected && this.token.length > 0;
     const frag = document.createDocumentFragment();
+    this.tokenNote.innerHTML = this.token
+      ? '<span class="dim">Admin token set. The server checks it on each change; a wrong token is reported below.</span>'
+      : '<span class="needtoken">Presenter only: enter the admin token.</span> <span class="dim">Presets and server settings stay disabled until then. Your own network conditioner works without it.</span>';
+    if (b.lastError) {
+      // Server refusals (e.g. "preset: bad admin token") go at the top of the panel, where the click happened.
+      frag.appendChild(el("div", { class: "refusal", role: "alert" }, `Server refused: ${b.lastError.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}`));
+    }
 
     if (this.local) {
       frag.appendChild(el("h3", {}, "This client"));
@@ -152,8 +161,7 @@ export class LabPanel {
       frag.appendChild(row);
     }
     this.body.replaceChildren(frag);
-    if (b.lastError) this.setStatus(b.lastError, true);
-    else this.setStatus(b.activePreset ? `active preset ${b.activePreset}` : "no preset active");
+    this.setStatus(b.activePreset ? `active preset ${b.activePreset}` : "no preset active");
   }
 
   private settingRow(key: string, value: unknown, canAdmin: boolean, d?: { kind: string; allowed?: unknown[]; built: boolean; note?: string }): HTMLElement {

@@ -83,3 +83,6 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 body.hurt canvas#view { box-shadow: inset 0 0 120px rgba(220,38,38,.7); outline: 6px solid rgba(220,38,38,.45); outline-offset:-6px; }
 #killfeed .trust { color:#fbbf24; font-size:10px; margin:0 4px; }
 #killfeed .dmgtaken { color:#f87171; font-weight:700; }
+#lab .tokennote { margin-top:6px; font-size:12px; }
+#lab .needtoken { color:#fbbf24; font-weight:700; }
+#lab .refusal { margin:10px 0 4px; padding:8px; border:1px solid #dc2626; border-radius:4px; background:rgba(220,38,38,.15); color:#fecaca; }
