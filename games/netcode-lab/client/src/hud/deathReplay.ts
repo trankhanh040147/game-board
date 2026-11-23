@@ -15,7 +15,7 @@ export class DeathReplay {
     this.root.id = "deathreplay";
     this.root.className = "hud box";
     this.canvas = document.createElement("canvas");
-    this.canvas.width = 360; this.canvas.height = 240;
+    this.canvas.width = 360; this.canvas.height = 170;
     this.text = document.createElement("div");
     this.root.append(this.canvas, this.text);
     this.root.style.display = "none";

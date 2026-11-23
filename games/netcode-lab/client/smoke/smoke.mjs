@@ -250,6 +250,36 @@ try {
     await T.keyboard.up("KeyA");
     check("P08 (lag comp off, target strafing): your ray hit the target at your render time, the server checked current positions, reason on screen", !!miss.shot && miss.shot.lagcomp === false && miss.shot.seenId === t.id && /lag compensation off/.test(miss.reason),
       miss.shot ? `${miss.shot.hitId ? "hit" : "miss"}, seenId ${miss.shot.seenId}, server MovedCm ${miss.shot.movedCm} · "${miss.reason.split("\n")[0]}"` : "no shot event");
+    // P26/P27/P28 panel (F4): own shot timing histogram with sub-tick on and off; compression and interest meters.
+    {
+      const set = (k, v) => A.evaluate(([k, v, tok]) => window.__netlab.session.setSetting(k, v, tok), [k, v, TOKEN]);
+      await A.keyboard.press("F4");
+      await set("lagcomp", true);
+      for (const sub of [true, false]) {
+        await set("subtick", sub);
+        await A.waitForFunction((sub) => window.__netlab.session.settings.subtick === sub, sub, { timeout: 3000 });
+        await play(A);
+        await aimAndFire(); await A.waitForTimeout(300);
+      }
+      for (const k of ["compQuant", "compBitpack", "compDelta"]) await set(k, true);
+      await A.waitForTimeout(2500); // target standing still: "at rest"
+      await T.keyboard.down("KeyD"); await A.waitForTimeout(1150); await T.keyboard.up("KeyD"); // "while moving", out and back
+      await T.keyboard.down("KeyA"); await A.waitForTimeout(1150); await T.keyboard.up("KeyA");
+      await set("interest", true); await A.waitForTimeout(2300); await set("interest", false); await A.waitForTimeout(2300);
+      const w = await A.locator("#wire").innerText();
+      await A.screenshot({ path: process.env.SMOKE_SHOTS ? process.env.SMOKE_SHOTS + "/wire.png" : "/dev/null" }).catch(() => {});
+      const shotsOn = /sub-tick on\s*(\d+) shots/.exec(w)?.[1], shotsOff = /quantised to the tick\s*(\d+) shots/.exec(w)?.[1];
+      check("P26 panel: timing-error histogram from real shots, sub-tick on and quantised", Number(shotsOn) >= 1 && Number(shotsOff) >= 1 && /does not make the server simulate or send at 128 Hz/.test(w),
+        `own shots on ${shotsOn}, quantised ${shotsOff} · ${(w.match(/All players[^\n]*/) ?? [""])[0].slice(0, 160)}`);
+      const rows = ["now", "last at rest", "last while moving"].map((r) => (new RegExp(`^${r}\\t([^\\n]*)`, "m").exec(w) ?? [])[1] ?? "missing");
+      check("P27 meters: raw / quant / bitpack / delta kbps, now, at rest and while moving", rows.every((r) => /\d/.test(r)), rows.map((r, i) => ["now", "rest", "moving"][i] + ": " + r.replace(/\t/g, " ")).join(" | "));
+      const ints = await A.$$eval("#wire table:last-of-type tr", (trs) => trs.slice(1).map((tr) => [...tr.cells].map((c) => c.innerText.trim())));
+      check("P28: entities and kbps per snapshot with interest off and on", ints.length === 2 && ints.every((r) => r.slice(1).every((c) => /\d/.test(c))),
+        ints.map((r) => `${r[0]}: ${r[1]} entities of ${r[2]} other players, ${r[3]} kbps`).join(" | "));
+      for (const k of ["compQuant", "compBitpack", "compDelta"]) await set(k, false);
+      await A.keyboard.press("F4");
+    }
+
     // P24: a real kill (headshot = 100), then the victim's death replay.
     // Open/close the Lab by state, not by counting F1 presses (an F1 can race the async pointer-lock refusal).
     const labTo = async (open) => {
@@ -264,14 +294,21 @@ try {
       await play(A);
     };
     await preset("P24");
-    await goX(T, 5.5);
+    // A new 2-minute round can start during the smoke and respawns everyone: put both back on the clear line.
+    await goX(A, 5.5); await goX(T, 5.5);
     await A.waitForTimeout(800);
     const kill = await aimAndFire(1.62);
     const replay = await T.waitForFunction(() => { const r = document.getElementById("deathreplay"); return r && getComputedStyle(r).display !== "none" ? r.innerText : null; }, null, { timeout: 4000 })
       .then((h) => h.jsonValue(), () => null);
     const feedA = await A.locator("#killfeed").innerText();
+    if (process.env.SMOKE_SHOTS) {
+      await T.screenshot({ path: process.env.SMOKE_SHOTS + "/deathreplay.png" });
+      const ov = await T.evaluate(() => { const r = (id) => document.getElementById(id)?.getBoundingClientRect(); const a = r("deathreplay"), out = {};
+        for (const id of ["netgraph", "dragnote", "modehud", "scorecard", "killfeed", "roundtimer", "respawn"]) { const b = r(id); if (b && b.width && a && !(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top)) out[id] = true; } return out; });
+      console.log("LAYOUT deathreplay overlaps:", JSON.stringify(ov));
+    }
     check("P24: a real headshot kill shows in the kill feed and opens the victim's death replay", !!kill.shot && kill.shot.hitbox === 2 && /smoke-target/.test(feedA) && !!replay,
-      `${kill.shot ? `hitbox ${kill.shot.hitbox}, damage ${kill.shot.damage}, seenId ${kill.shot.seenId}, lagcomp ${kill.shot.lagcomp}` : "no shot event"} · feed "${feedA.split("\n").pop()}" · replay "${(replay ?? "not shown").split("\n").slice(0, 3).join(" / ")}"`);
+      `${kill.shot ? `hitbox ${kill.shot.hitbox}, damage ${kill.shot.damage}, seenId ${kill.shot.seenId}, lagcomp ${kill.shot.lagcomp}` : "no shot event"}${kill.shot?.hitbox === 2 ? "" : ` · shooter ${JSON.stringify(await who(A))} target ${JSON.stringify(await who(T))}`} · feed "${feedA.split("\n").pop()}" · replay "${(replay ?? "not shown").split("\n").slice(0, 3).join(" / ")}"`);
     // P03: the modded-client button. Server authority rejects the forged claim; trust mode accepts it.
     await T.waitForFunction(() => !window.__netlab.session.dead, null, { timeout: 6000 }).catch(() => {});
     await preset("P01");
