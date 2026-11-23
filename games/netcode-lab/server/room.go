@@ -630,6 +630,11 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 				}
 				s := DefaultSettings()
 				p.apply(&s)
+				cp := DefaultCond()
+				if p.cond != nil {
+					cp = p.cond()
+				}
+				r.setCondAll(cp)
 				r.applySettings(s, p.ID)
 				return
 			}
@@ -689,6 +694,22 @@ func (r *Room) handleCond(c *Client, in ctrlIn) {
 			t.down.SetParams(*in.Down)
 		}
 		r.send(t, map[string]any{"t": "cond", "cond": CondPair{Up: t.up.Params(), Down: t.down.Params()}, "by": c.id})
+	}
+}
+
+// setCondAll applies a conditioner pair to every client and as the default.
+func (r *Room) setCondAll(cp CondPair) {
+	r.mu.Lock()
+	r.defCond = CondPair{Up: cp.Up.Clamp(), Down: cp.Down.Clamp()}
+	cs := make([]*Client, 0, len(r.clients))
+	for _, c := range r.clients {
+		cs = append(cs, c)
+	}
+	r.mu.Unlock()
+	for _, c := range cs {
+		c.up.SetParams(cp.Up)
+		c.down.SetParams(cp.Down)
+		r.send(c, map[string]any{"t": "cond", "cond": CondPair{Up: c.up.Params(), Down: c.down.Params()}, "by": 0})
 	}
 }
 

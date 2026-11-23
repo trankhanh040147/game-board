@@ -131,6 +131,10 @@ type Preset struct {
 	Banner  string `json:"banner"`
 	Built   bool   `json:"built"`
 	apply   func(*Settings)
+	// cond, when set, is applied to every client and becomes the default for
+	// new joins. Presets without it restore DefaultCond, so each preset sets
+	// the whole demo state in one click.
+	cond func() CondPair
 }
 
 func base(s *Settings) { *s = DefaultSettings() }
@@ -156,8 +160,23 @@ func Presets() []Preset {
 			Banner: "Your own movement runs locally at once; without reconciliation each snapshot snaps you back to the past."},
 		{ID: "P05", Title: "Reconciliation", Section: "A.7", Built: true, apply: base,
 			Banner: "Unacknowledged inputs are replayed on top of the server state: same rules, so nothing moves."},
-		{ID: "P06", Title: "Raw snapshots", Section: "A.8"},
-		{ID: "P07", Title: "Interpolation", Section: "A.9"},
+		{ID: "P06", Title: "Raw snapshots", Section: "A.8", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.Interp = false
+			},
+			cond: func() CondPair {
+				c := DefaultCond()
+				c.Down.JitterMs = 15
+				return c
+			},
+			Banner: "Other players are drawn at the latest snapshot: they stand still, then jump every 50 ms, more under jitter."},
+		{ID: "P07", Title: "Interpolation", Section: "A.9", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.Interp, s.InterpAuto, s.InterpK, s.TruthGhost = true, true, 2, true
+			},
+			Banner: "Others are drawn about 100 ms in the past, gliding between two snapshots; the ghost is the server's present."},
 		{ID: "P08", Title: "Three truths", Section: "A.10"},
 		{ID: "P09", Title: "Lag compensation", Section: "A.10"},
 		{ID: "P10", Title: "Scorecard", Section: "A.2"},

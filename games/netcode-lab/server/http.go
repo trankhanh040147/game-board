@@ -45,9 +45,10 @@ func Serve(ctx context.Context, log *slog.Logger, room *Room, cfg Config) error 
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(shared.MapJSON)
 	})
-	httpsPort := ""
+	httpsPort := 0
 	if cfg.HTTPSAddr != "" {
-		_, httpsPort, _ = net.SplitHostPort(cfg.HTTPSAddr)
+		_, ps, _ := net.SplitHostPort(cfg.HTTPSAddr)
+		httpsPort, _ = strconv.Atoi(ps)
 	}
 	certHash := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
