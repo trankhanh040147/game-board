@@ -275,3 +275,22 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
 44. **P11 target half travels as control JSON** (`shotSeen` from the target → `shotTrace` to the shooter). Reason:
     these are measurements after the fact, not game state. The timings themselves were taken on the
     conditioned game path (event in snapshot, receive time on the target's synced clock).
+45. **P19 loop toggle**: `loop: zeroalloc | naive`, same bytes on the wire. The zero-alloc buffer pool is a mutex
+    stack, not `sync.Pool`, because putting a slice into `sync.Pool` boxes it and allocates. Entities are sorted
+    by id so the bytes do not depend on Go map order (also needed for P27 delta).
+46. **P26 default is sub-tick on.** The client stamps the render time at the click, so the default game resolves
+    the shot at the click. The P26 preset turns it off to show the cost of tick quantisation: the shot is timed
+    at the tick end, `(1 − subtickFrac)` ticks after the click, up to 15.6 ms at 64 Hz. The timing error is
+    reported per shot and as whole-window histograms per mode. Banner: sub-tick is not 128 Hz (A.15).
+47. **P28 interest grid**: square cells (default 8 m, `interestCellM`), window = own cell + 8 neighbours, floor
+    division so cells around 0 are not double width. Spectators always get every player. Lag compensation is
+    unaffected (server history).
+48. **P27 compression**: one bit-stream codec with per-mode widths. Quantised: 1/256 m in ±32 m, y as y + 1 m in
+    0..8 m, 8-bit angles. Delta: per-entity change mask (pos / angles / misc), only against the client's acked
+    `snapId`, fewer than 200 snapshots old, sent in the same encoding. A missing baseline is an error, never a
+    guess. Own state stays exact (review guard: reconciliation compares it bit for bit). The meters measure all
+    four encodings for every snapshot, whatever is active, so the presenter compares without switching.
+    Measured in `TestEntityEncodings`, 10 entities, whole packet: raw 266 B, quantised 186 B, quantised +
+    bit-packed 161 B, delta at rest 67 B, delta moving 127 B.
+49. **Presets marked built in C3**: P12, P13 (rates and FPS change, formula ~103 / ~71 ms est.), P26, P27, P28.
+    P11, P15, P19 and P29 stay `built:false`: their server data exists, but nothing shows it on screen yet.

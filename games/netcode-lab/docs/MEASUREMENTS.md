@@ -361,3 +361,18 @@ Observations:
 
 Not run: a quiet host. Raising the server's priority needs root (`nice -n -5` → "Permission denied"), and other
 members' processes cannot be stopped.
+
+## C3 server measurements (2026-11-23, core; `go test` on this Mac)
+
+| Check | Command | Result |
+|---|---|---|
+| P19 allocations per snapshot tick, 20 clients | `go test -run TestLoopModesAllocations -v ./server` | zero-alloc **0.0**, naive **273.0** |
+| P19 same bytes in both loops | `go test -run TestLoopModesSameBytes ./server` | PASS (240 packets, multiset equal) |
+| P27 sizes, 10 entities, whole snapshot packet | `go test -run TestEntityEncodings -v ./net/codec` | raw 266 B, quantised 186 B, quantised + bit-packed 161 B, delta at rest 67 B, delta moving 127 B |
+| P27 delta over WebSocket | `go test -run TestDeltaSnapshotsOverTheWire -v ./server` | 48–49 of 50 snapshots were deltas; 50/50 decoded positions within 1/512 m of server history |
+| P29 TCP model, 20/s stream, RTT 40 ms | `go test -run TestOrderedFastRetransmitBeatsRTO ./net/cond` | lost segment delivered at ~210 ms by fast retransmit (RTO path would be 260 ms); the 3 segments behind it waited |
+| P26 timing error, click at 1/4 tick, 64 Hz | `go test -run TestSubtickTimingError ./server` | sub-tick on 0 µs; quantised 11 719 µs (3/4 tick) |
+| A.11 formula (P15 `est.` column) | `go test -run TestBudgetEstimateMatchesA11 ./server` | 189.6 ms default, ~103 ms at 64/s, ~70 ms at 128 Hz + 144 FPS |
+
+These are unit and wire tests, not live-room measurements. The live P19 run (50 bots, % ticks within budget per
+loop) and the P29 inter-arrival histogram belong to "bots" and the client.

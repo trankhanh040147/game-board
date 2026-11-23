@@ -56,7 +56,7 @@ changes on restart: fetch `/certhash` on every connect.
   are "ordered": loss becomes a retransmit stall (≥ 200 ms RTO) that blocks later
   packets (simulated TCP head-of-line). On WebTransport loss drops the datagram.
 
-## WASM JS API (`globalThis.NetcodeSim`, apiVersion 2)
+## WASM JS API (`globalThis.NetcodeSim`, apiVersion 3)
 
 Load: include `wasm_exec.js`, then
 
@@ -104,7 +104,7 @@ eyeHeight:1.6, body:{half:0.35, top:1.45}, head:{half:0.17, bottom:1.45, top:1.8
 | `encodeInputFromPredictor(conn, pred, nowMs)` | Uint8Array | newest pending cmd + up to 3 earlier unacked |
 | `encodeInput(conn, cmds, nowMs)` | Uint8Array | explicit list, keeps the newest 4 |
 | `encodePing(conn, nowMs)` | Uint8Array | `nowMs = performance.now()` |
-| `encodeSnapshotAck(conn, baselineId, serverTick, nowMs)` | Uint8Array | send for each snapshot |
+| `encodeSnapshotAck(conn, snapId, serverTick, nowMs)` | Uint8Array | send for each snapshot, with **`msg.snapId`** (v3; it was baselineId). The conn handle keeps the delta baselines, so P27 works with no client change other than this |
 | `decode(conn, bytes, nowMs)` | object | updates acks; see below |
 | `connStats(conn)` | `{sent, acked, lost, rttMs, received, duplicates, old, remoteGaps}` | `rttMs` is ack-based (includes the wait for the next packet back) |
 | `encodeClaim(conn, {seq, clientTick, x, y, z, victimId, hitbox}, nowMs)` | Uint8Array | type 7: trust mode (P03) and the "modded client" button |
@@ -122,8 +122,8 @@ eyeHeight:1.6, body:{half:0.35, top:1.45}, head:{half:0.17, bottom:1.45, top:1.8
 
 `decode` result: always `{type, dup, seq, ack, ackBits}`; ignore when `dup`. Plus:
 
-- `type:"snapshot"`: `serverTick, serverTimeMs, lastProcessedInputSeq, own:{state, health, inputBuffer, starved, inputLead, dead, life}, baselineId, entities:[{id, team (0 blue,1 orange), x, y, z, yaw, pitch, health, anim}], events:[...]`. Events are decoded (dedupe them, they repeat until acked):
-  - `{type:"shot", shotSeq, resolveTick, renderTick, renderFrac, rewoundTick, rewoundFrac, flags, lagcomp, clamped, favoured, killed, trust, hitId, hitbox, damage, victimHp, seenId, seenHitbox, movedCm, seenPos:[x,y,z], usedPos:[x,y,z], wallDistM, recvMs, tickStartMs}`: hit marker / damage number only from this (B.3); P08 miss reason = `seenId && !hitId` → "target moved movedCm cm"; P09 red box = `seenPos`, blue box = `usedPos`; P11 S2 = `recvMs`, S3 = `tickStartMs`, S4 = this snapshot's `serverTimeMs`
+- `type:"snapshot"`: `serverTick, serverTimeMs, lastProcessedInputSeq, own:{state, health, inputBuffer, starved, inputLead, dead, life}, snapId, baselineId, encoding (S.ENC bits), entities:[{id, team (0 blue,1 orange), x, y, z, yaw, pitch, health, anim}], events:[...]`. Events are decoded (dedupe them, they repeat until acked):
+  - `{type:"shot", shotSeq, resolveTick, renderTick, renderFrac, rewoundTick, rewoundFrac, flags, lagcomp, clamped, favoured, killed, trust, hitId, hitbox, damage, victimHp, seenId, seenHitbox, movedCm, seenPos:[x,y,z], usedPos:[x,y,z], wallDistM, recvMs, tickStartMs, subtickFrac, timingErrMs}`: hit marker / damage number only from this (B.3); P08 miss reason = `seenId && !hitId` → "target moved movedCm cm"; P09 red box = `seenPos`, blue box = `usedPos`; P11 S2 = `recvMs`, S3 = `tickStartMs`, S4 = this snapshot's `serverTimeMs`
   - `{type:"damage", shotSeq, shooterId, hitbox, damage, health, resolveTick, flags, killed}`
   - `{type:"death", life, shooterId, hitbox, flags, lagcomp, shotSeq, resolveTick, rewoundTick, rewoundFrac, hitPos, nowPos, shooterPos, shooterYaw, shooterPitch, respawnTick}`: P24 replay (`hitPos` = where the server placed you, `nowPos` = where you were)
 - `type:"pong"`: `clientSendMs, serverRecvMs, serverSendMs, serverTick, tickFrac, tickRate`
@@ -174,9 +174,42 @@ yourself and use `encodeInput(conn, last4, now)`.
   from `authority`, `predict`, `reconcile`, `interp`, `lagcomp`). There is no
   `mode` key: dumb = `predict:false`, trust = `authority:"trust"`.
 
+## Client duties added in v3 (M5/M6)
+
+- Fire input: also send `subtickFrac` = how far into the current input tick the click happened (0..65535), and
+  stamp `renderTick/renderFrac` **at the click**. With `settings.subtick` off the server times the shot at the
+  tick end anyway (P26 shows the error).
+- P11: when a `damage` event reaches the target client, it sends `{t:"shotSeen", shooterId, shotSeq,
+  recvServerMs, interpMs, frameServerMs}` (server-clock ms via `clockEstimate`). The shooter receives
+  `{t:"shotTrace", ...}` and joins it on `shotSeq` with its own click/frame/send times and the ShotResult's
+  `recvMs`/`tickStartMs`.
+- P12/P15: `stats.cost`, `stats.youCost` and `stats.budgetEst` (the `est.` column).
+- P27: `stats.you.entityBytes` gives raw/quant/bitpack/delta bytes per second for the meters.
+- P28: `stats.you.entitiesPerSnapshot`.
+
+## Tick health (P19)
+
+- `settings.loop`: `zeroalloc` (default) reuses room-owned scratch (entity list, snapshot, debug feed, encode
+  buffers from `server/pool.go`). The downlink conditioner hands each buffer back through `cond.Link.Release`
+  after it is sent. `naive` allocates a new entity object, entity slice, snapshot and encode buffer per client
+  per tick, and a new history slice each tick. Both send identical bytes (`TestLoopModesSameBytes`).
+  Measured: 0.0 vs 273 allocations per snapshot tick with 20 clients (`TestLoopModesAllocations`).
+- The conditioner heap no longer boxes items into `container/heap` interfaces. The two goroutines per client
+  (one per direction) remain; they are per connection, not per tick.
+- `go build -gcflags=-m ./server ./net/cond ./net/codec` findings (2026-11-23):
+  - `append escapes to heap` in `codec.Writer` and the conditioner: amortized growth of reused buffers. Once
+    capacity is reached nothing allocates, as the 0.0 allocs/tick shows.
+  - `&Link{}`, `rand.New`, `time.NewTimer` escape once per connection.
+  - The `map[string]any` control messages (kill feed, claim rejected, stats) escape. They are per event or 1 Hz,
+    never per tick.
+  - quic-go's `SendDatagram` copies the payload into a fresh slice (quic-go v0.62 `connection.go:3059`). That
+    allocation is in the transport and outside this loop.
+- `settings.goMemLimitMB` calls `runtime/debug.SetMemoryLimit`; 0 restores the limit the process started with
+  (GOMEMLIMIT env). `stats.window.gc` reports cycles, pause p50/p99/max and heap bytes from `runtime/metrics`.
+
 ## Known limits
 
-- One room. Delta compression, interest management, sub-tick and the
-  allocating vs zero-alloc toggle are later milestones (settings `built:false`).
+- One room. P11, P15, P19 and P29 presets stay `built:false` until the client shows their data (the server half is
+  done).
 - WebTransport: verified with the Go bot and by "client" with Chromium 148
   (`https://127.0.0.1:<port>/wt` with `serverCertificateHashes`).
