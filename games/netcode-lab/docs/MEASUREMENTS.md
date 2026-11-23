@@ -12,11 +12,11 @@ Status from the results recorded below only. "not run" = no result in this file 
 | # | Check (HANDOFF B.9) | Status | Recorded result | Section |
 |---|---|---|---|---|
 | 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** | Identical state hashes on every tick at 20/30/64/128 Hz | [section](#check-1--determinism-native-vs-wasm-b9-1) |
-| 2 | Reconciliation, 0 corrections over 5 min | **fail (loaded host)** | Latest at `8a760ac`: 14 (WS) and 14 (WT) at load avg mean 27; 24 of 28 within 2 s of a host stall. Earlier 20/25 at `91b61db`. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s. Quiet-window run owed | [latest](#check-2-rerun-at-8a760ac--pacer-probe-floor-7bcc6de-and-lead-pacer-0b4e1af-loaded-host-2026-11-23-20262031-bots), [speed modifier](#check-2-second-half--server-only-speed-modifier-on-2026-11-23-18481850-bots) |
+| 2 | Reconciliation, 0 corrections over 5 min | **not met: 1 per run (pacer design)** | Quiet window (load 5–8): 1 correction on WS and 1 on WT, both at about 6 s after join, from the lead-mode pacer probing down to its first starvation; none in the remaining 294 s; 0 late ticks. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
-| 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default within ±15%: bots 211.5 ± 9.7 ms, browser 214.4 / 206.6 / 211.0 ms (loaded host). 128 Hz + 144 FPS: 90.4 ms vs ≈ 71 (not met), frame segments modelled at 144 FPS (display cannot do 144); named gap: playout buffer from the pacer lead (bots then on the old pacer). Quiet-window repeat owed | [bots](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots), [browser](#check-4-in-the-browser--first-in-browser-shot-budget-forwarded-from-duel-d3-d8ffe39) |
-| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met / inconclusive** | 40 bots, current loop (load ~15): tick p99 1.52 ms, 99.81% within budget. P19 with 50 bots at load 36–64: zero-alloc p99 22.1 ms, naive 8.4 ms, neither ≥ 99%; host-dominated. Zero-alloc allocates 37% less (1117 vs 1780 MB) but not zero | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots), [P19](#check-5--p19--zero-alloc-vs-allocating-loop-50-bots-at-128-hz-2026-11-23-20152019-bots-inconclusive-on-timing) |
-| 6 | Transport stalls at 5% loss, WS vs datagrams | **partial (loaded host)** | Lead ruling: gaps > 150 ms classified by snapshot ids, judged on stalls. Stalls in 6 bot-minutes: WS 379 (0 loss gaps), WT 11 (10 overlap host stalls, 1 does not) + 10 loss gaps. Quiet-window run decides | [classified](#check-6--p29-classified-stalls-vs-loss-gaps-lead-ruling-decisions-b9-check-6-counts-stalls-2026-11-23-20462051-bots-loaded-host) |
+| 4 | Shot budget vs 190 ms est. / 71 ms | **default pass; fast just outside** | Quiet window: default 195.9 ± 8.8 ms (+3.1%); 128 Hz + 144 FPS modelled 81.8 ± 6.0 ms (+15.2% over ≈ 71), gap = playout buffer 15.7 ms; browser default 214.4 / 206.6 / 211.0 ms (loaded) | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
+| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met (zero-alloc), met narrowly (allocating); host-loaded** | 50 bots, 128 Hz, load 16–29: allocating 99.02% within, p99 7.57 ms; zero-alloc 98.79%, p99 10.44 ms (a 377 ms host pause). Zero-alloc allocates 70% less (279 vs 929 MB). No human players | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
+| 6 | Transport stalls at 5% loss, WS vs datagrams | **pass (ruling: stalls only)** | Quiet window (load 20–30): WS 373 stalls / 0 loss gaps; WT 4 stalls, all during host stalls, + 12 loss gaps | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
 | 7 | Client smoke (Playwright) | **pass** | 52/0/0 ×5 then 55/0/0 ×2 at `8c4c1e1` (22 presets, fill-bot buttons, page presets, P25 burst 436–810 ms). Earlier: 44/0/0 ×3 at `25c6b27`, 39/0/0 ×4, 36/0/0 ×2, 35/0/1 (V12), 36/1/1 (V16, since fixed) | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review-pass) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
 
@@ -944,3 +944,104 @@ From a fresh clone of `feat/netcode-lab` at `25c6b27`:
 - A full round from the LAN IP over WebTransport with 5 fill bots: 121 s, 81 kills, no console errors.
 
 Verbatim output is with the duel member.
+
+## Quiet window — final runs of checks 2, 4, 5, 6 (2026-11-23 21:30–21:47, bots)
+
+The lead paused every other member; no team builds or servers ran. Remaining load: the owner's Chrome and OrbStack,
+and an unowned orphan server (PID 18141, port 18780). Clean worktree build at `dad056d` (includes core's `39ecc75`).
+
+```
+sh scripts/quiet-window.sh <out-dir>     # from games/netcode-lab
+```
+
+Every server PID was alive at the end of its step, and no bot reported errors. Host context per step (`uptime`
+and the top 5 processes by CPU, from `host.log`):
+
+| Step (time) | Load avg 1 min, start → end | Top CPU processes at the end of the step |
+|---|---|---|
+| check 2 (21:30–21:35) | 7.73 → 7.72 (min 5.34, max 8.36) | Chrome helpers 56.8% / 36.7% / 11.0%; two `./bin/bot` processes that are not this harness's (8.0% / 7.2%; mine run as `bin/bot`) |
+| check 4 default (21:35–21:37) | 7.26 → 4.08 | Chrome 59.9%, `cc-same` 48.7%, Chrome 40.0%, WindowServer 34.7%, Claude renderer 23.2% |
+| check 4 fast (21:37–21:39) | 5.12 → **15.66** | Chrome 58.0% / 38.3%, **new Chrome helpers 89289 (29.2%) and 53257 (21.0%)**, camerad 15.9% |
+| check 5 zero-alloc (21:39–21:41) | 16.48 → **27.27** | Chrome 66.8% / 48.0% (89289) / 45.1%, WindowServer 34.1%, Chrome 31.1% (53257) |
+| check 5 naive (21:41–21:42) | 29.29 → 28.15 | Chrome 59.9% / 40.5% / 31.3% / 21.2%, camerad 12.9% |
+| check 6 (21:42–21:47) | 26.13 → 29.74 | **`node` 138.2%**, Chrome 64.3% / 44.5% / 43.4%, XprotectService 32.0% |
+
+So the window was quiet (load 4–8) only for check 2 and check 4 default. From 21:39 the owner's new Chrome activity
+and a `node` process outside the team raised the load to 15–30.
+
+### Check 2 (5 min, 1 bot per transport, defaults; load 5.3–8.4)
+
+| Transport | **Corrections** | Starvations | Pacer raises | Pacer margin at end | RTT / jitter | Max snapshot gap | Server late ticks > 3 periods | Start lateness p99 / max | Probe late max |
+|---|---|---|---|---|---|---|---|---|---|
+| WS (PID 72156) | **1** (21:30:15.517) | 1 | 1 | 0 ticks | 40.46 / 0.15 ms | 95.3 ms | 0 | 0.79 / 21.05 ms | 19.9 ms |
+| WT (PID 72148) | **1** (21:30:15.548) | 1 | 1 | 0 ticks | 40.52 / 0.29 ms | 91.3 ms | 0 | 0.70 / 35.53 ms | 19.9 ms |
+
+**Verdict: not met (1 correction, not 0), and host load does not explain it.** No late tick over 3 periods, and the
+probe never paused over 20 ms. Both corrections came about 6 s after join (join 21:30:09.5), 31 ms apart, in two
+independent servers and bots. They follow from the lead-mode pacer (net/clock/pacer.go `OnServerLead`, DECISIONS
+50/51), whose margin starts at 1 tick:
+- After each calm 2 s window it drains one tick, down to `LeadMinMargin` −4.
+- It stops at the first starvation and sets a floor for 30 s.
+- The probe-down therefore costs exactly one starvation, and one correction, per session.
+- After it, both bots ran 294 s with no starvation and no correction, at a margin of 0 ticks.
+This is a design trade-off in the pacer (reported to core), not a sim mismatch.
+
+### Check 4 (2 min each; frames modelled in the bot)
+
+| Segment (mean ms; sd) | est. default | **default** (64 Hz, 20/s, 60 FPS, buffer 100) | est. fast | **fast** (128 Hz, 128/s, 144 FPS modelled, buffer 15.6) |
+|---|---|---|---|---|
+| Shooter frame | 8 | 8.18; 4.75 | ≈ 3.5 | 3.37; 1.89 |
+| Frame → input sent | — | 7.92; 4.63 | — | 3.67; 1.96 |
+| Uplink | 20 | 20.10; 0.37 | 20 | 20.51; 1.33 |
+| Playout buffer | 8 | **31.67; 3.28** | ≈ 4 | **15.72; 5.67** |
+| Snapshot wait | 25 | 17.10; 14.29 | ≈ 4 | 0.03; 0.08 |
+| Downlink | 20 | 20.91; 0.41 | 20 | 20.39; 0.82 |
+| Target interpolation | 100 | 82.26; 14.27 | ≈ 16 | 15.18; 0.86 |
+| Target frame | 8 | 7.74; 4.84 | ≈ 3.5 | 2.89; 2.05 |
+| **Total** | **≈ 190** | **195.87; 8.77** (p95 211.68), 108 shots | **≈ 71** | **81.76; 5.95** (p95 90.69), 115 shots |
+| Load avg / server late ticks | | 7.26 → 4.08 / 0 | | 5.12 → 15.66 / 296 |
+
+**Verdict:**
+- **Default: pass.** 195.9 ms is +3.1% of 190, well inside ±15%.
+- **128 Hz + 144 FPS: 81.8 ms, +15.2% over ≈ 71: just outside a ±15% reading of "near 71".**
+  - Frame segments are modelled at 144 FPS (this display cannot produce 144 FPS).
+  - The named gap is the playout buffer: 15.7 ms against about 4. Core expects about 8–12 ms at 128 Hz in lead mode.
+  - The load rose from 5 to 16 during this run, with 296 late ticks.
+- **Playout buffer with the new pacer:** at 64 Hz it fell from 45.7 to 31.7 ms (old pacer → `OnServerLead`), but
+  stays above core's 16–23 ms.
+
+### Check 5 / P19 (50 bots, 128 Hz, statsReset after 10 s; loaded again: 16.5 → 29.3)
+
+| | zero-alloc (PID 92255) | allocating (PID 95354) |
+|---|---|---|
+| Load avg 1 min, start → end | 16.48 → 27.27 | 29.29 → 28.15 |
+| Tick time p50 / p95 / **p99** / p999 / max | 0.05 / 1.57 / **10.44** / 377.14 / 377.14 ms | 0.05 / 1.65 / **7.57** / 37.71 / 164.48 ms |
+| Tick time **% within 7.81 ms** | **98.79** | **99.02** |
+| Start lateness p99 / max; % within | 608.75 / 608.75 ms; 92.34 | 43.44 / 227.30 ms; 96.95 |
+| GC cycles; pause p99 / max | 25; 2.62 / 2.62 ms | 63; 4.19 / 4.19 ms |
+| **Total allocated (≈ 88 s window)** | **279 MB** | **929 MB** |
+| Bot corrections (all 50) / RTT median | 601 / 42.14 ms | 492 / 40.23 ms |
+
+**Verdict: not met for zero-alloc; allocating met it narrowly. Host load explains the zero-alloc miss.**
+- **Allocating:** 99.02% within budget and p99 7.57 ms, just under 7.81 ms.
+- **Zero-alloc:** 98.79% and p99 10.44 ms. Its window contains a 377 ms tick and a 609 ms start lateness. These
+  came from host pauses while the load rose from 16 to 27, when the owner's Chrome helpers 89289 and 53257 appeared.
+  Its GC pauses were the smaller of the two (max 2.6 ms), so the slow ticks are not GC.
+- **Allocation:** core's receive-path fix (`c9a800c`) works. Zero-alloc allocated 279 MB against 929 MB (−70%, was
+  −37%), with 25 against 63 GC cycles.
+- **What would settle it:** a pass/fail on both loops needs a window that stays quiet for the 4 minutes of these two
+  runs.
+
+### Check 6 / P29 (5% loss each way, 3 bots × 2 min per transport; load 20–30)
+
+| Transport | Bot | Snapshots | **Stalls** (of them overlapping a host stall) | Loss gaps | Max gap |
+|---|---|---|---|---|---|
+| WS | 1 / 2 / 3 | 2400 / 2397 / 2396 | **127 (13) / 119 (10) / 127 (11)** | 0 / 0 / 0 | 853.7 / 1723.3 / 775.5 ms |
+| WT | 1 / 2 / 3 | 2288 / 2281 / 2280 | **1 (1) / 1 (1) / 2 (2)** | 3 / 5 / 4 | 365.1 / 215.4 / 221.3 ms |
+
+**Verdict: pass under the lead's ruling** (stalls = gaps > 150 ms with no snapshot id missing).
+- **WebSocket:** 373 stalls, 0 loss gaps.
+- **Datagram mode:** 4 stalls, every one of them during a host stall (a server late tick or a probe pause). Datagram
+  mode shows no stall of its own.
+- **Loss gaps:** 12, listed beside the stalls.
+- **Caveat:** the window was loaded (20–30) during this step.
