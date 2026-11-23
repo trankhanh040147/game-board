@@ -103,6 +103,7 @@ type bot struct {
 	lossGaps, stalls int
 	corrAt           []string       // wall-clock time of each correction (first 500)
 	rec              *statsRecorder // non-nil on the bot that records server stats
+	team             uint8          // 0 blue, 1 orange (welcome)
 }
 
 func (b *bot) now() float64 { return float64(time.Since(b.start).Nanoseconds()) / 1e6 }
@@ -124,6 +125,9 @@ func (b *bot) readLoop(ctx context.Context) {
 			switch c.T {
 			case "welcome":
 				b.id = c.ID
+				if c.Team == "orange" {
+					b.team = 1
+				}
 				if c.Settings != nil {
 					b.set = *c.Settings
 				}
@@ -423,8 +427,8 @@ func main() {
 	peekBuf := flag.Int("peekbuf", 100, "with -kind peek: the holder's interpolation buffer (ms), as the client's interpMs")
 	perBot := flag.Bool("perbot", true, "print one summary per bot (false: totals only)")
 	flag.Parse()
-	if *kind != "walker" && *kind != "probe" && *kind != "shootrun" && *kind != "peek" {
-		log.Fatalf("unknown -kind %q (built: walker, probe, shootrun, peek)", *kind)
+	if *kind != "walker" && *kind != "probe" && *kind != "shootrun" && *kind != "peek" && *kind != "fill" {
+		log.Fatalf("unknown -kind %q (built: walker, probe, shootrun, peek, fill)", *kind)
 	}
 	ctx := context.Background()
 	var cancel context.CancelFunc
@@ -458,6 +462,10 @@ func main() {
 		if err := applyLab(ctx, *url, *token, m); err != nil {
 			log.Fatalf("-lab %s: %v", *lab, err)
 		}
+	}
+	if *kind == "fill" {
+		runFill(ctx, *url, *n)
+		return
 	}
 	if *kind == "peek" {
 		// P14: the holder joins first (blue), the peeker second (orange).
