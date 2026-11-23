@@ -87,3 +87,54 @@ func TestPacerDoesNotOscillate(t *testing.T) {
 	}
 	t.Logf("margin %v, %d raises after the first 10 s of 120 s", p.Margin, raisesAfter10s)
 }
+
+// Lead mode on a clean link: inputs arrive margin+1 ticks early (lead = margin
+// + 1 with a 1-tick estimate error). Starting from the ceiling the margin must
+// fall until the lead is 1 tick, and stay there with no starvation.
+func TestPacerLeadSettlesAtMinimum(t *testing.T) {
+	p := NewPacer()
+	p.Margin = 6
+	starved := uint16(0)
+	settledAt := -1.0
+	for now := 0.0; now < 60000; now += 50 {
+		lead := int(p.Margin) + 1
+		if lead < 1 { // arrived late: the server starves
+			starved++
+		}
+		p.OnServerLead(starved, int8(lead), now)
+		if settledAt < 0 && p.Margin == 0 {
+			settledAt = now
+		}
+	}
+	if p.Margin != 0 || starved != 0 {
+		t.Fatalf("margin %v (want 0: lead 1), starvations %d", p.Margin, starved)
+	}
+	if settledAt > 20000 {
+		t.Fatalf("took %.0f ms to settle", settledAt)
+	}
+	t.Logf("margin 6 -> 0 (lead 1 tick) after %.1f s, 0 starvations", settledAt/1000)
+}
+
+// Lead mode with a host that needs 3 ticks of slack (late arrivals whenever the
+// lead is under 3): the margin settles where the lead is >= 3, not at the
+// ceiling, and raises stop.
+func TestPacerLeadNeedsSlack(t *testing.T) {
+	p := NewPacer()
+	starved := uint16(0)
+	raises := 0
+	for now := 0.0; now < 120000; now += 50 {
+		lead := int(p.Margin) + 1
+		if lead < 3 && int(now)%1000 == 0 { // an occasional late burst
+			starved++
+		}
+		before := p.Adjustments
+		p.OnServerLead(starved, int8(lead), now)
+		if now > 30000 && p.Adjustments > before {
+			raises++
+		}
+	}
+	if p.Margin < 2 || p.Margin > 3 || raises > 4 {
+		t.Fatalf("margin %v, raises after 30 s %d", p.Margin, raises)
+	}
+	t.Logf("settled at margin %v (lead %v), %d raises after 30 s", p.Margin, p.Margin+1, raises)
+}

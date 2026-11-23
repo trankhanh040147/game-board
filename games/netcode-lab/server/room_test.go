@@ -131,11 +131,11 @@ func TestCatchUpHoldsOnTimeStarves(t *testing.T) {
 	c := &Client{room: room, inbuf: map[uint32]sim.Cmd{}, recvMs: map[uint32]float64{}, started: true, alive: true, lastInput: sim.Input{Buttons: sim.BtnForward}}
 	c.state = sim.State{Pos: room.m.Spawn("blue", 0), OnGround: true}
 	before := c.state
-	c.simulate(sim.DtForRate(64), true, DefaultSettings())
+	c.simulate(sim.DtForRate(64), true, DefaultSettings(), 1)
 	if c.held != 1 || c.starved != 0 || c.state != before {
 		t.Fatalf("catch-up: held=%d starved=%d moved=%v", c.held, c.starved, c.state != before)
 	}
-	c.simulate(sim.DtForRate(64), false, DefaultSettings())
+	c.simulate(sim.DtForRate(64), false, DefaultSettings(), 2)
 	if c.starved != 1 || c.state == before {
 		t.Fatalf("on-time: starved=%d moved=%v", c.starved, c.state != before)
 	}
@@ -183,5 +183,38 @@ func TestHistResetKeepsMutex(t *testing.T) {
 	h.add(1, 5)
 	if s := h.stats(); s.Samples != 1 || s.OverBudget != 0 || s.MaxMs != 1 {
 		t.Fatalf("%+v", s)
+	}
+}
+
+// DECISIONS 51: an input stamped for a later tick waits; an overdue one is
+// caught up (two per tick); a missing input that is not due yet is not a
+// starvation.
+func TestScheduledPlay(t *testing.T) {
+	room := NewRoom(slog.New(slog.NewTextHandler(io.Discard, nil)), "x")
+	c := &Client{room: room, inbuf: map[uint32]sim.Cmd{}, recvMs: map[uint32]float64{}, started: true, alive: true}
+	c.state = sim.State{Pos: room.m.Spawn("blue", 0), OnGround: true}
+	dt, s := sim.DtForRate(64), DefaultSettings()
+	for seq := uint32(1); seq <= 3; seq++ {
+		c.inbuf[seq] = sim.Cmd{Seq: seq, ClientTick: 100 + seq, In: sim.Input{Buttons: sim.BtnForward}}
+	}
+	c.simulate(dt, false, s, 100) // input 1 is for tick 101: wait
+	if c.lastProcessed != 0 || c.waitedEarly != 1 {
+		t.Fatalf("early input consumed: last=%d waited=%d", c.lastProcessed, c.waitedEarly)
+	}
+	c.simulate(dt, false, s, 101)
+	if c.lastProcessed != 1 {
+		t.Fatalf("due input not consumed: %d", c.lastProcessed)
+	}
+	c.simulate(dt, false, s, 104) // inputs 2 (102) and 3 (103) are overdue: catch up two
+	if c.lastProcessed != 3 || c.starved != 0 {
+		t.Fatalf("catch-up: last=%d starved=%d", c.lastProcessed, c.starved)
+	}
+	c.simulate(dt, false, s, 104) // next input would be for 104: due and missing -> starvation (A.14)
+	if c.starved != 1 {
+		t.Fatalf("starved %d", c.starved)
+	}
+	c.simulate(dt, false, s, 104) // its slot was used by the repeat; the next is for 105: wait, no starvation
+	if c.starved != 1 {
+		t.Fatalf("not-yet-due input counted as starvation: %d", c.starved)
 	}
 }

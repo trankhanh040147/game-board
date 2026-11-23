@@ -352,7 +352,13 @@ func main() {
 			return out
 		}),
 		"pacerFeedback": fn(func(a []js.Value) any {
-			get[*clock.Pacer](a[0]).OnServerFeedback(uint16(a[1].Int()), a[2].Float())
+			p := get[*clock.Pacer](a[0])
+			if len(a) >= 4 && a[3].Type() == js.TypeNumber {
+				// lead mode (DECISIONS 51): pass snapshot.own.inputLead
+				p.OnServerLead(uint16(a[1].Int()), int8(a[3].Int()), a[2].Float())
+			} else {
+				p.OnServerFeedback(uint16(a[1].Int()), a[2].Float())
+			}
 			return nil
 		}),
 		"pacerInfo": fn(func(a []js.Value) any {

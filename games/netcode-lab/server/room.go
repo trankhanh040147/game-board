@@ -110,24 +110,28 @@ type Client struct {
 	up   *cond.Link
 	down *cond.Link
 
-	mu            sync.Mutex // input buffer, written by the up-link goroutine
-	inbuf         map[uint32]sim.Cmd
-	lastProcessed uint32
-	lastInput     sim.Input
-	started       bool
-	starved       uint32
-	held          uint32 // ticks during/just after a host stall with no input: player held, not repeated
-	skipped       uint32 // inputs never received (loss beyond redundancy)
-	redundant     uint64 // input copies that arrived after the original
-	inputLead     int8
-	ackedTick     uint32
-	ackedBaseline uint8
-	recvMs        map[uint32]float64 // arrival time of fire inputs (shot id = input seq), for P11
-	claims        []codec.Claim
-	reportRTT     float64 // client-reported (clock sync) RTT, from {t:"report"}
-	reportFPS     float64
-	reportLoss    float64
-	reportJitter  float64
+	mu             sync.Mutex // input buffer, written by the up-link goroutine
+	inbuf          map[uint32]sim.Cmd
+	lastProcessed  uint32
+	lastInput      sim.Input
+	started        bool
+	starved        uint32
+	held           uint32 // ticks during/just after a host stall with no input: player held, not repeated
+	waitedEarly    uint32 // ticks the next input was stamped for a later tick (scheduled play)
+	lastClientTick uint32
+	minLead        int32 // smallest arrival lead since the last snapshot (ticks)
+	haveMinLead    bool
+	skipped        uint32 // inputs never received (loss beyond redundancy)
+	redundant      uint64 // input copies that arrived after the original
+	inputLead      int8
+	ackedTick      uint32
+	ackedBaseline  uint8
+	recvMs         map[uint32]float64 // arrival time of fire inputs (shot id = input seq), for P11
+	claims         []codec.Claim
+	reportRTT      float64 // client-reported (clock sync) RTT, from {t:"report"}
+	reportFPS      float64
+	reportLoss     float64
+	reportJitter   float64
 
 	bytes    byteCounters
 	comp     [4]atomic.Uint64 // P27 entity-section bytes: raw, quant, quant+bitpack, delta
@@ -225,7 +229,7 @@ func (r *Room) step(lateMs float64) {
 		up := c.up.Params()
 		grace := int64((up.DelayMs+up.JitterMs)*1e6) + 2*period
 		before := c.starved
-		c.simulate(dt, r.lastStallNs > 0 && nowNs-r.lastStallNs <= grace, s)
+		c.simulate(dt, r.lastStallNs > 0 && nowNs-r.lastStallNs <= grace, s, tick)
 		if c.starved != before {
 			r.log.Debug("input starvation", "id", c.id, "tick", tick, "msSinceStall", float64(nowNs-r.lastStallNs)/1e6, "lateMs", lateMs)
 		}
@@ -299,7 +303,7 @@ func (c *Client) apply(cmd sim.Cmd, dt sim.Fx, set Settings, real bool) {
 }
 
 // simulate consumes this tick's input(s) from the playout buffer (B.4 rule 3).
-func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings) {
+func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings, tick uint32) {
 	c.mu.Lock()
 	if !c.started {
 		// Prime the playout buffer: start one input deeper than the target so
@@ -311,11 +315,7 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings) {
 		}
 		c.started = true
 	}
-	n := 1
-	if len(c.inbuf) > TargetInputBuffer+2 {
-		n = 2
-	}
-	for i := 0; i < n; i++ {
+	for i := 0; i < 2; i++ {
 		cmd, ok := c.inbuf[c.lastProcessed+1]
 		if !ok && len(c.inbuf) > 0 {
 			// A gap the redundant copies did not cover: jump to the oldest we have.
@@ -328,7 +328,33 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings) {
 			cmd, ok = c.inbuf[low]
 			c.skipped += low - c.lastProcessed - 1
 		}
-		if !ok && i > 0 {
+		// Schedule (B.4 rule 3, DECISIONS 51): an input stamped for a later
+		// tick waits in the buffer; the pacer's margin is then exactly how
+		// early inputs arrive. Stamps far off (no clock yet, rate change)
+		// fall back to plain sequential play.
+		var due, overdue, scheduled bool
+		if ok {
+			d := int32(cmd.ClientTick - tick)
+			scheduled = cmd.ClientTick != 0 && d >= -8 && d <= 16
+			due = !scheduled || d <= 0
+			overdue = scheduled && d < 0
+		} else if c.lastClientTick != 0 {
+			// Nothing buffered: the next input is meant for lastClientTick+1.
+			d := int32(c.lastClientTick + 1 - tick)
+			if d > 0 && d <= 16 {
+				c.waitedEarly++
+				break // not due yet: no starvation, the player just waits
+			}
+		}
+		if i > 0 {
+			// Second input in one tick only to catch up: overdue scheduled
+			// input, or an unscheduled buffer deeper than target + 2.
+			if !ok || !(overdue || (!scheduled && len(c.inbuf) > TargetInputBuffer+2)) {
+				break
+			}
+		}
+		if ok && !due {
+			c.waitedEarly++
 			break
 		}
 		if !ok && afterStall {
@@ -338,9 +364,12 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings) {
 			break
 		}
 		if !ok {
-			// Buffer empty on an on-time tick: repeat the last input and
-			// count it (A.14). The client will see a correction.
+			// The input this tick needs is missing: repeat the last input
+			// and count it (A.14). The client will see a correction.
 			c.starved++
+			if c.lastClientTick != 0 {
+				c.lastClientTick++ // the repeated input used this tick's slot
+			}
 			in := c.lastInput
 			in.Buttons &^= sim.BtnFire | sim.BtnJump
 			c.apply(sim.Cmd{In: in}, dt, set, false)
@@ -349,6 +378,7 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings) {
 		delete(c.inbuf, cmd.Seq)
 		c.lastProcessed = cmd.Seq
 		c.lastInput = cmd.In
+		c.lastClientTick = cmd.ClientTick
 		c.apply(cmd, dt, set, true)
 	}
 	c.snapLast, c.snapBuf = c.lastProcessed, uint8(min(len(c.inbuf), 255))
@@ -431,6 +461,12 @@ func (r *Room) sendSnapshots(tick uint32, s Settings, now float64) {
 func (r *Room) fillSnapshot(c *Client, snap *codec.Snapshot, tick uint32, now float64, ents []codec.Entity, s Settings) {
 	c.mu.Lock()
 	starved, lead, acked, ackedSnap := c.starved, c.inputLead, c.ackedTick, c.ackedBaseline
+	// The snapshot reports the smallest lead of the inputs that arrived since
+	// the previous snapshot: the pacer's "how much slack is left" signal.
+	if c.haveMinLead {
+		lead = int8(max(-128, min(127, c.minLead)))
+		c.haveMinLead = false
+	}
 	c.mu.Unlock()
 	snap.ServerTick, snap.ServerTimeMs, snap.LastProcessedInputSeq = tick, now, c.snapLast
 	snap.Own = codec.OwnState{State: c.state, Health: c.health, InputBuffer: c.snapBuf, Starved: uint16(starved), InputLead: lead,
@@ -519,6 +555,14 @@ func (c *Client) onDatagram(b []byte) {
 			}
 			if len(c.inbuf) < 128 {
 				c.inbuf[cmd.Seq] = cmd
+				if cmd.ClientTick != 0 {
+					// Lead = ticks between arrival and the tick it is for; the
+					// next tick to run is tick+1, so lead 1 is just in time.
+					l := int32(int64(cmd.ClientTick) - int64(tick))
+					if !c.haveMinLead || l < c.minLead {
+						c.minLead, c.haveMinLead = l, true
+					}
+				}
 				if cmd.In.Buttons&sim.BtnFire != 0 {
 					c.recvMs[cmd.Seq] = now
 				}
@@ -1056,7 +1100,7 @@ func (r *Room) sendStats() {
 		es := c.ep.Snapshot()
 		c.mu.Lock()
 		you := map[string]any{
-			"inputBuffer": len(c.inbuf), "starved": c.starved, "heldOnStall": c.held, "skippedInputs": c.skipped,
+			"inputBuffer": len(c.inbuf), "starved": c.starved, "heldOnStall": c.held, "waitedEarly": c.waitedEarly, "skippedInputs": c.skipped,
 			"redundantInputs": c.redundant, "lastProcessedInputSeq": c.lastProcessed, "inputLead": c.inputLead,
 			"ackedSnapshotTick": c.ackedTick,
 		}
