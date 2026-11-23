@@ -2,9 +2,10 @@
 # B.9 check 5 / P19 / P28 load harness: N walker bots from one process against a
 # fresh server at tick rate HZ; records the server's 1 Hz tick stats after a warmup.
 # Team rule: ports 18600-18699 only; the server is stopped by its PID only.
-# Usage: sh scripts/check5-load.sh [hz=64] [bots=40] [duration=70s] [warmup=10s]   (run from games/netcode-lab)
+# Usage: sh scripts/check5-load.sh [hz=64] [bots=40] [duration=70s] [warmup=10s] [loop=zeroalloc|naive|""]   (run from games/netcode-lab)
+# With a loop given, it is set through the Lab (P19) and the server whole-window stats are reset after the warmup.
 set -eu
-HZ=${1:-64}; N=${2:-40}; D=${3:-70s}; W=${4:-10s}
+HZ=${1:-64}; N=${2:-40}; D=${3:-70s}; W=${4:-10s}; LOOP=${5:-}
 HTTP=127.0.0.1:${HTTP_PORT:-18610}
 TOKEN=load-$$
 OUT=$(mktemp -d)
@@ -15,6 +16,6 @@ SRV=$!; echo "server pid $SRV"; trap 'kill $SRV 2>/dev/null' EXIT
 sleep 1
 if ! kill -0 $SRV 2>/dev/null; then cat "$OUT/server.log"; exit 1; fi
 uptime
-NETLAB_ADMIN_TOKEN=$TOKEN bin/bot -url "ws://$HTTP/ws" -n "$N" -d "$D" -tick "$HZ" -stats -warmup "$W" -perbot=false
+NETLAB_ADMIN_TOKEN=$TOKEN bin/bot -url "ws://$HTTP/ws" -n "$N" -d "$D" -tick "$HZ" -stats -warmup "$W" -perbot=false ${LOOP:+-lab "{\"loop\":\"$LOOP\"}" -statsreset}
 uptime
 kill -0 $SRV && echo "server pid $SRV alive at end" || echo "server pid $SRV DEAD at end"
