@@ -321,7 +321,7 @@ async function boot() {
     const hl: string[] = [];
     if (st) {
       const med = probe.median;
-      hl.push(`input → motion: ${med === null ? "press W from standing still" : `${med.toFixed(0)} ms`} <span class="dim">(measured${simNoteRtt}, median of ${probe.results.length})</span>`);
+      hl.push(`input → motion: ${med === null ? "press W from standing still" : `${med.toFixed(0)} ms`} <span class="dim">(measured${st.predict ? ", prediction on: no network wait" : simNoteRtt}, median of ${probe.results.length})</span>`);
       if (st.predict && pi) {
         const shown = pi.pending.slice(-6).map((n: number) => "#" + n).join(" ");
         hl.push(`pending: ${shown || "none"}${pi.pending.length > 6 ? " …" : ""} · replayed: ${s.lastReplayed} · corrections: ${pi.corrections - s.correctionsBase} <span class="dim">(since last Lab change)</span>${st.reconcile ? "" : " · reconcile OFF (hard snap)"}`);
