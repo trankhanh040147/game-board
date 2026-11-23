@@ -118,3 +118,32 @@ slower ticks interpolate with alpha = how far the pacer clock is past the tick's
 TargetClientTick). Measured key → drawn: P05 1.4–16.4 ms, P04 1.6–16.4 ms, P02 (dumb) 81–115 ms; 20 Hz tick
 2.9–48 ms (the tick wait itself). The HUD probe also checked "standing still" against the frame that already moved; it
 now uses the previous frame and agrees with an independent trace to within 0.7 ms. The metric is unchanged.
+
+## 2026-11-23 — duel: M8 duel mini-mode (P21–P23, duel half of P25)
+
+1. **Own sim, own WASM binary.** `sim/duel` is integer-only (1 px = 256 units, 60 Hz, 53-byte state, FNV-1a 64 over
+   the encoded state as the per-frame checksum). It builds to a separate `duel.wasm` (`wasm/duel`, global
+   `NetcodeDuel`), so core's `wasm/main.go` and the shooter's `sim.wasm` are unchanged.
+2. **Rollback, input delay and lockstep live in Go** (`duel.Session`), shared by the browser (WASM) and `bin/duelbot`.
+   Save ring 600 frames, rollback cap 8 predicted frames (the peer waits at the cap and the HUD counts it),
+   prediction = repeat the opponent's last confirmed input. GGPO-style time sync: every 60 frames a peer that runs
+   ahead waits half the frame-advantage difference (≤ 4 frames), counted as "time-sync waits", not as stalls.
+3. **"Ping" for auto D is the peer-to-peer RTT through the relay**, measured from echoed timestamps in every input
+   packet during a 1 s ping-only warm-up and fixed at frame 0 (A.13: D is not lowered mid-match; it changes only on
+   restart). The conditioner profiles apply per client and direction, like the shooter, so "Default (40 ms)" gives
+   a peer RTT of about 80 ms (D = 0) and "Bad route" about 160 ms (D = 1).
+4. **Lockstep uses D as its playout buffer.** Auto = ceil((RTT/2)/16.67 ms) + 1 frame, not A.13's rollback table,
+   because lockstep must cover the whole one-way trip or it stalls every frame. Manual D overrides both modes.
+5. **P25 duel inject is a seeded one-bit flip inside this peer's step** (bit 8–14 of one fighter's x, a few frames
+   ahead), applied every time that frame is simulated here, including re-simulation, and never on the peer. A flip
+   of the current state would be undone by the next rollback and would not model a nondeterministic sim.
+6. **Relay = new package `server/duelrelay` plus its own binary `cmd/duelrelay`** (HTTP :8090 page + `/duel/ws`,
+   HTTPS/WebTransport :8453 `/duel/wt`). No file in `server/*.go` changed and the shooter's Room and tick loop are not
+   involved. Datagrams are forwarded through the sender's uplink and the receiver's downlink conditioner, with no
+   playout buffer. Control JSON (join, start, restart, cond) bypasses the conditioner, so both peers start a match
+   together. Core can mount the same handler on the game server with two lines; until then the duel runs on its own ports.
+7. **Duel page has its own Vite config** (`client/vite.duel.config.ts`, `duel.html`, `src/duel/`), built to
+   `bin/duel-www` and served by `bin/duelrelay`. The client's `vite.config.ts` and `main.ts` are unchanged; the
+   page reuses `src/net/transport.ts` read-only.
+8. **The sim pump runs from a worker timer** (4 ms), because a hidden tab's timers are throttled to 1 Hz and its peer
+   would then wait at the rollback cap. Rendering stays on requestAnimationFrame. Demo with two windows side by side.
