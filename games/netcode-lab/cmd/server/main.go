@@ -58,6 +58,8 @@ func main() {
 	room := server.NewRoom(log, token)
 	if *botBin != "" {
 		room.SetPeekRunner(peekRunner(*botBin, *httpAddr))
+		room.SetFillBots(*botBin, "ws://"+selfAddr(*httpAddr)+"/ws") // {t:"fill"} (bots' fill bots)
+		defer room.StopFill()
 	}
 	cfg := server.Config{HTTPAddr: *httpAddr, HTTPSAddr: *httpsAddr, DistDir: *dist, AdvertiseHTTPSPort: *advPort}
 	if *extraWWW != "" {
@@ -113,14 +115,7 @@ func peekRunner(bin, httpAddr string) server.PeekRunner {
 		if _, err := os.Stat(bin); err != nil {
 			return nil, fmt.Errorf("bot binary %s not found (make bot)", bin)
 		}
-		host, port, err := net.SplitHostPort(httpAddr)
-		if err != nil {
-			return nil, err
-		}
-		if host == "" || host == "0.0.0.0" || host == "::" {
-			host = "127.0.0.1"
-		}
-		base := net.JoinHostPort(host, port)
+		base := selfAddr(httpAddr)
 		cmd := exec.CommandContext(ctx, bin, "-kind", "peek", "-url", "ws://"+base+"/ws", "-info", "http://"+base,
 			"-crossings", strconv.Itoa(crossings), "-peekbuf", strconv.Itoa(bufferMs),
 			// The bot runs for its whole -d even when the crossings are done:
@@ -138,4 +133,16 @@ func peekRunner(bin, httpAddr string) server.PeekRunner {
 		}
 		return res.Peek, nil
 	}
+}
+
+// selfAddr turns the listen address into one this process can dial.
+func selfAddr(httpAddr string) string {
+	host, port, err := net.SplitHostPort(httpAddr)
+	if err != nil {
+		return httpAddr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
 }

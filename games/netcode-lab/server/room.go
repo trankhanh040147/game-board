@@ -641,6 +641,7 @@ type ctrlIn struct {
 	On        bool            `json:"on,omitempty"`        // glitch rubberband
 	Ms        int             `json:"ms,omitempty"`        // glitch lossBurst
 	Crossings int             `json:"crossings,omitempty"` // peekTest
+	N         *int            `json:"n,omitempty"`         // fill
 	RTTMs     float64         `json:"rttMs,omitempty"`     // report
 	JitterMs  float64         `json:"jitterMs,omitempty"`  // report
 	LossPct   float64         `json:"lossPct,omitempty"`   // report
@@ -967,6 +968,13 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 		c.mu.Lock()
 		c.reportRTT, c.reportJitter, c.reportLoss, c.reportFPS = in.RTTMs, in.JitterMs, in.LossPct, in.FPS
 		c.mu.Unlock()
+	case "fill":
+		// bots' fill bots (server/fill.go): n >= 0 bots, -1 balances the teams, 0 removes them.
+		n := 0
+		if in.N != nil {
+			n = *in.N
+		}
+		r.handleFill(c, in.Token, n)
 	case "peekTest":
 		r.handlePeek(c, in)
 	case "glitch":
