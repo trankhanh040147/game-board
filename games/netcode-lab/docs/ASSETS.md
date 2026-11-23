@@ -50,3 +50,14 @@ All assets used in Netcode Lab are dedicated to the public domain under the Crea
 | File Name | What It Is | Source URL | Original Pack / File Name | Author | Licence |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `sky.png` | Panoramic daytime gradient sky texture (equirectangular environment map, 512x256) | https://kenney.nl/assets/skyboxes | Skyboxes (1.0) / `Skyboxes/skybox-day.png` | Kenney | CC0 |
+
+## 2D Duel Mini-Mode Assets (`games/netcode-lab/client/public/duel/`)
+
+| File Name | What It Is | Source URL | Original Pack / File Name | Author | Licence |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `fighter_blue.png` | Blue team fighter sprite sheet (768×640 px, 8 cols × 5 rows, frames 96×128 px; rows: 0=idle 1f, 1=walk 8f, 2=jump 1f, 3=attack 3f, 4=hit 2f; tinted Blue #2563EB) | https://kenney.nl/assets/toon-characters | Toon Characters 1.0 / `Robot/PNG/Poses/` | Kenney | CC0 |
+| `fighter_orange.png` | Orange team fighter sprite sheet (768×640 px, 8 cols × 5 rows, frames 96×128 px; rows: 0=idle 1f, 1=walk 8f, 2=jump 1f, 3=attack 3f, 4=hit 2f; tinted Orange #EA580C) | https://kenney.nl/assets/toon-characters | Toon Characters 1.0 / `Robot/PNG/Poses/` | Kenney | CC0 |
+| `stage_bg.png` | 2D duel arena stage background (rolling hills, blue sky, clouds; 512×256 px) | https://kenney.nl/assets/platformer-art-deluxe | Platformer Art Deluxe / `Mushroom expansion/Backgrounds/bg_grasslands.png` | Kenney | CC0 |
+| `ground_tile.png` | Seamless arena ground platform tile (grass & earth surface; 70×70 px) | https://kenney.nl/assets/platformer-art-deluxe | Platformer Art Deluxe / `Base pack/Tiles/grassMid.png` | Kenney | CC0 |
+| `punch.ogg` | Punch / melee attack impact sound (0.40s) | https://kenney.nl/assets/impact-sounds | Impact Sounds 1.0 / `Audio/impactPunch_medium_001.ogg` | Kenney | CC0 |
+| `whoosh.ogg` | Fast swing / attack whoosh sound (0.13s) | https://opengameart.org/content/swishes-sound-pack | Swishes Sound Pack / `swish-1.wav` | artisticdude | CC0 |
