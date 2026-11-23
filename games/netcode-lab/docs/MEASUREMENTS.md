@@ -12,7 +12,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | # | Check (HANDOFF B.9) | Status | Recorded result | Section |
 |---|---|---|---|---|
 | 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** | Identical state hashes on every tick at 20/30/64/128 Hz | [section](#check-1--determinism-native-vs-wasm-b9-1) |
-| 2 | Reconciliation, 0 corrections over 5 min | **fail** (on this shared host) | At HEAD (`91b61db` build): 20 corrections (WS), 25 (WT) in 5 min, load avg mean 18; most line up with host stalls also seen by a no-game-code probe. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s (they appear; smoothing is a client render property) | [at HEAD](#check-2-at-head--5-minutes-1-bot-defaults-2026-11-23-18361841-bots), [speed modifier](#check-2-second-half--server-only-speed-modifier-on-2026-11-23-18481850-bots) |
+| 2 | Reconciliation, 0 corrections over 5 min | **fail (loaded host)** | Latest at `8a760ac`: 14 (WS) and 14 (WT) at load avg mean 27; 24 of 28 within 2 s of a host stall. Earlier 20/25 at `91b61db`. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s. Quiet-window run owed | [latest](#check-2-rerun-at-8a760ac--pacer-probe-floor-7bcc6de-and-lead-pacer-0b4e1af-loaded-host-2026-11-23-20262031-bots), [speed modifier](#check-2-second-half--server-only-speed-modifier-on-2026-11-23-18481850-bots) |
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
 | 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default within ±15%: bots 211.5 ± 9.7 ms, browser 214.4 / 206.6 / 211.0 ms (loaded host). 128 Hz + 144 FPS (modelled): 90.4 ms vs ≈ 71 (not met); quiet-window repeat owed | [bots](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots), [browser](#check-4-in-the-browser--first-in-browser-shot-budget-forwarded-from-duel-d3-d8ffe39) |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met / inconclusive** | 40 bots, current loop (load ~15): tick p99 1.52 ms, 99.81% within budget. P19 with 50 bots at load 36–64: zero-alloc p99 22.1 ms, naive 8.4 ms, neither ≥ 99%; host-dominated. Zero-alloc allocates 37% less (1117 vs 1780 MB) but not zero | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots), [P19](#check-5--p19--zero-alloc-vs-allocating-loop-50-bots-at-128-hz-2026-11-23-20152019-bots-inconclusive-on-timing) |
@@ -748,3 +748,31 @@ Caveat: the run overlapped M7 builds, so the Bad route D=1 row may be perturbed.
 | Bad route | lockstep D=2 | 33.8 stall frames/s at 26.1 fps |
 | Bad route, WebSocket | all modes | 13–22 stall frames/s at 38–46 fps |
 
+
+## Check 2 rerun at 8a760ac — pacer probe floor (7bcc6de) and lead pacer (0b4e1af), loaded host (2026-11-23 20:26–20:31, bots)
+
+**Result: check 2 still fails on this host: 14 corrections (WS) and 14 (WT) in 5 minutes. Loaded host:** load
+average 18.0–36.9, mean 27.3. Clean worktree build at `8a760ac`. The bots use `OnServerLead` (DECISIONS 51). Both
+runs ran at the same time, each with its own server.
+
+```
+HTTP_PORT=18600 HTTPS_PORT=18643 sh scripts/check2-reconcile.sh ws 5m
+HTTP_PORT=18620 HTTPS_PORT=18663 sh scripts/check2-reconcile.sh wt 5m
+```
+
+| Transport | **Corrections** | Starvations | Pacer raises | **Pacer margin at end** | RTT / jitter | Server late ticks > 3 periods (max) | Server start lateness p99 / within budget | Probe late > 3 periods (max) | Load avg 1 min first / mean / max / last |
+|---|---|---|---|---|---|---|---|---|---|
+| WS | **14** | 18 | 10 | 2 ticks | 42.55 / 6.89 ms | 107 (493.5 ms) | 27.56 ms / 98.23% | 35 (294.8 ms) | 25.61 / 27.34 / 36.87 / 36.87 |
+| WT | **14** | 19 | 11 | 1 tick | 44.69 / 5.93 ms | 107 (440.1 ms) | 26.66 ms / 98.32% | 30 (294.4 ms) | (same host, same time) |
+
+Server lifetime: PIDs 90655 (WS) and 90616 (WT) were alive at the end; the bots ran 300 s with no errors.
+Server tick processing stayed small: p99 0.24 / 0.25 ms, 99.96% / 99.98% within budget.
+
+Corrections against host stalls: a correction counts as matched when it falls within 2 s of a "tick started late"
+line from either server or a > 3-period probe event. WS: 13 of 14 matched (unmatched: 20:26:32.660). WT: 11 of 14
+matched (unmatched: 20:28:09.026, 20:29:34.117, 20:30:41.272). The worst stall was a 362–494 ms pause of both servers
+at 20:27:45. The no-game-code probe also saw pauses up to 295 ms.
+
+Compared with the run at `91b61db` (20 / 25 corrections at a mean load of 18), corrections fell and the 3.1 s
+repeat pattern after a burst is gone. The load was higher this time, so the two runs are not a controlled
+comparison. A pass or fail on a quiet host is still owed: `sh scripts/quiet-window.sh` runs it.
