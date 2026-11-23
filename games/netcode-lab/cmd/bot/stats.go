@@ -37,6 +37,13 @@ type statsMsg struct {
 	} `json:"tickStartLate"`
 	// Whole window since server start or the last statsReset (core, 6c49cde).
 	Window json.RawMessage `json:"window"`
+	// Cost meters (P12, P27, P28), from the recording bot's view.
+	Cost    map[string]any `json:"cost"`
+	YouCost map[string]any `json:"youCost"`
+	You     struct {
+		EntitiesPerSnapshot float64            `json:"entitiesPerSnapshot"`
+		EntityBytes         map[string]float64 `json:"entityBytes"`
+	} `json:"you"`
 }
 
 type statsRecorder struct {
@@ -144,6 +151,31 @@ func (r *statsRecorder) report(bots int) map[string]any {
 	if len(last.Window) > 0 {
 		out["wholeWindow"] = last.Window // server histograms since the reset (or start), verbatim
 	}
+	// Means over the counted windows of every numeric cost field.
+	mean := map[string]float64{}
+	cnt := map[string]int{}
+	addNum := func(prefix string, m map[string]any) {
+		for k, v := range m {
+			if f, ok := v.(float64); ok {
+				mean[prefix+k] += f
+				cnt[prefix+k]++
+			}
+		}
+	}
+	for _, m := range r.kept {
+		addNum("cost.", m.Cost)
+		addNum("youCost.", m.YouCost)
+		for k, v := range m.You.EntityBytes {
+			mean["you.entityBytes."+k] += v
+			cnt["you.entityBytes."+k]++
+		}
+		mean["you.entitiesPerSnapshot"] += m.You.EntitiesPerSnapshot
+		cnt["you.entitiesPerSnapshot"]++
+	}
+	for k := range mean {
+		mean[k] = round3(mean[k] / float64(cnt[k]))
+	}
+	out["costMeans"] = mean
 	if last.TickStartLate != nil {
 		out["catchUpTicks"] = last.TickStartLate.CatchUpTicks
 		out["scheduleResets"] = last.TickStartLate.ScheduleResets

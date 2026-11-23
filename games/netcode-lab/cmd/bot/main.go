@@ -305,6 +305,8 @@ loop:
 				var c sim.Cmd
 				if b.brain != nil {
 					c = b.brain.cmd(b, now, seq)
+				} else if *idleBots {
+					c.In = sim.Input{Yaw: b.pred.State.Yaw} // at rest (P27)
 				} else {
 					c.In = wk.next(b.rng, t, speed)
 				}
@@ -379,6 +381,8 @@ func dial(ctx context.Context, url string) (transport.Conn, error) {
 	}
 	return transport.DialWT(ctx, url, hash)
 }
+
+var idleBots = flag.Bool("idle", false, "walker bots stand still (P27 'at rest')")
 
 var infoURL = flag.String("info", "http://127.0.0.1:8080", "plain-HTTP base URL serving /certhash (for https:// WebTransport URLs)")
 
