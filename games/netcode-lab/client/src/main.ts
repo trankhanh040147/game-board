@@ -15,6 +15,8 @@ import { PresenterView } from "./hud/presenter";
 import { PRESET_DOCS, conceptUrl } from "./hud/presets";
 import { Sfx } from "./audio";
 import { ShotVfx } from "./render/vfx";
+import { CombatHud } from "./hud/combat";
+import type { ScoreRow } from "./game/events";
 
 // B.3: 600 rpm. Cosmetic cadence only; the server decides which shots exist.
 const FIRE_INTERVAL_MS = 100;
@@ -122,6 +124,33 @@ async function boot() {
   const sfx = new Sfx();
   const vfx = new ShotVfx(world.scene, world.camera, assets.vfx.impact_decal ?? null, () => world.shotTargets());
   let lastShotAt = -Infinity;
+  const combat = new CombatHud(hud, { hit: "./textures/vfx/hit_marker.png", head: null, skull: null } /* headshot.png and kill_icon.png at bfce3d7 are not usable images (reported) */);
+  let deadUntilServerMs: number | null = null;
+  let killerName = "";
+  let lastPhase: string | null = null;
+  if (s) {
+    const nameOf = (id: number) => id === s.id ? `${s.name} (you)` : s.players.get(id)?.name ?? `player ${id}`;
+    const teamOf = (id: number) => id === s.id ? s.team : s.players.get(id)?.team ?? "";
+    s.onGameEvent = (e, now) => {
+      switch (e.kind) {
+        case "hit":
+          if (e.shooter === s.id) { combat.hit(e, now); sfx.play(e.headshot ? "headshot" : "hit_marker"); }
+          break;
+        case "kill":
+          combat.feedKill(e, nameOf, teamOf, now);
+          if (e.killer === s.id && e.victim !== s.id) { combat.killConfirmed(nameOf(e.victim), e.headshot, now); sfx.play("kill_confirm"); }
+          if (e.victim === s.id) sfx.play("player_death");
+          break;
+        case "death":
+          deadUntilServerMs = e.respawnAtServerMs;
+          killerName = nameOf(e.killer);
+          break;
+        case "rejected":
+          sfx.play("rejected_claim");
+          break;
+      }
+    };
+  }
   /** Predicted cosmetics (B.3): flash, tracer, decal and sound play at once; hit feedback waits for the server. */
   const fireCosmetic = (now: number) => {
     if (now - lastShotAt < FIRE_INTERVAL_MS) return false;
@@ -205,6 +234,7 @@ async function boot() {
       }
       world.rifle.update(now, frameMs);
       vfx.update(now);
+      combat.update(now);
       world.animate(frameMs);
       world.render();
     },
@@ -305,6 +335,19 @@ async function boot() {
     } : null;
     scorecard.render(mode, st && !s.isBuilt("lagcomp") ? { fair: "lag compensation not built yet (server: M3)" } : {});
 
+    const serverNow = est.ready ? est.serverTimeMs : null;
+    combat.round(s.round, serverNow);
+    if (s.round && s.round.phase !== lastPhase) {
+      if (lastPhase !== null) sfx.play(s.round.phase === "live" ? "round_start" : "round_end");
+      lastPhase = s.round.phase;
+    }
+    if (deadUntilServerMs !== null && serverNow !== null && serverNow >= deadUntilServerMs) deadUntilServerMs = null;
+    combat.respawnIn(deadUntilServerMs !== null && serverNow !== null ? (deadUntilServerMs - serverNow) / 1000 : null, killerName);
+    const boardRows: ScoreRow[] = s.scoreRows ?? [
+      { id: s.id, name: `${s.name}`, team: s.team, kills: null, deaths: null, pingMs: est.ready ? Math.round(est.rttMs) : null, lossPct: m.downLossPct, fps: fps.fps },
+      ...[...s.players].filter(([id]) => id !== s.id).map(([id, p]) => ({ id, name: p.name, team: p.team as "blue" | "orange", kills: null, deaths: null, pingMs: null, lossPct: null, fps: null })),
+    ];
+    combat.scoreboard(boardRows, s.id, s.scoreRows ? "ping, loss and FPS as reported to the server" : "Kills, deaths and other players' ping/loss/FPS: needs server (scoreboard data is M4). Your own row is measured here.");
     if (s.settingsEpoch !== probeEpoch) { probeEpoch = s.settingsEpoch; probe.results = []; }
     // A.16: the server's conditioner adds simulated delay/jitter/loss to every measured network number.
     const c = s.cond;

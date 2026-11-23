@@ -51,3 +51,26 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 #dragnote { left:50%; bottom:12px; transform:translateX(-50%); font-size:12px; color:#fbbf24; }
 #banner a { pointer-events:auto; color:#93c5fd; }
 #lab a { color:#93c5fd; }
+#hitmarker { left:50%; top:50%; width:40px; height:40px; margin:-20px 0 0 -20px; filter: brightness(4) drop-shadow(0 0 1px #000); }
+#hitmarker.head { filter: brightness(4) sepia(1) saturate(6) hue-rotate(-10deg) drop-shadow(0 0 1px #000); width:52px; height:52px; margin:-26px 0 0 -26px; }
+#headicon { left:50%; top:50%; width:28px; height:28px; margin:-62px 0 0 -14px; }
+#dmgnums { left:0; right:0; top:50%; height:0; }
+#dmgnums .dmg { position:absolute; transform:translateX(-50%); margin-top:-48px; font-weight:700; color:#fff; text-shadow:0 1px 2px #000; animation: dmgup .9s ease-out forwards; }
+#dmgnums .dmg.head { color:#fbbf24; font-size:16px; }
+@keyframes dmgup { to { margin-top:-90px; opacity:0; } }
+#killconfirm { left:50%; top:58%; transform:translateX(-50%); font-weight:700; text-shadow:0 1px 2px #000; }
+#killconfirm img { width:20px; height:20px; vertical-align:middle; }
+#killconfirm .hs { color:#fbbf24; }
+#killfeed { right:12px; top:220px; text-align:right; font-size:12px; }
+#killfeed div { background:rgba(10,14,22,.7); padding:2px 8px; border-radius:4px; margin-bottom:3px; }
+#killfeed img { width:14px; height:14px; vertical-align:middle; margin:0 4px; }
+.blue { color:#60a5fa; } .orange { color:#fb923c; }
+#roundtimer { left:50%; top:96px; transform:translateX(-50%); font-weight:700; font-size:15px; }
+#respawn { left:50%; top:40%; transform:translateX(-50%); text-align:center; font-size:16px; }
+#scoreboard { left:50%; top:50%; transform:translate(-50%,-50%); min-width:min(720px,94vw); z-index:5; }
+#scoreboard .teams { display:flex; gap:16px; flex-wrap:wrap; }
+#scoreboard table { border-collapse:collapse; flex:1; min-width:300px; }
+#scoreboard th, #scoreboard td { padding:3px 8px; text-align:right; } #scoreboard th:first-child, #scoreboard td:first-child { text-align:left; }
+#scoreboard tr.you td { color:#fde68a; }
+#headicon.txt { width:auto; height:auto; margin:-64px 0 0 0; transform:translateX(-50%); color:#fbbf24; font-weight:700; font-size:12px; text-shadow:0 1px 2px #000; }
+#killfeed .skull, #killconfirm .skull { margin:0 4px; } #killfeed .hs { color:#fbbf24; font-size:10px; margin-right:4px; }

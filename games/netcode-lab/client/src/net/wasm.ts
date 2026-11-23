@@ -6,7 +6,7 @@ export interface Entity { id: number; team: number; x: number; y: number; z: num
 export interface Snapshot {
   type: "snapshot"; dup: boolean; serverTick: number; serverTimeMs: number; lastProcessedInputSeq: number;
   own: { state: SimState; health: number; inputBuffer: number; starved: number; inputLead: number };
-  baselineId: number; entities: Entity[]; events: { type: number; data: Uint8Array }[];
+  baselineId: number; entities: Entity[]; events: unknown[]; // decoded objects with `kind` once core's M3 codec lands; today { type, data }
 }
 export interface Pong { type: "pong"; dup: boolean; clientSendMs: number; serverRecvMs: number; serverSendMs: number; serverTick: number; tickFrac: number; tickRate: number }
 export interface Debug { type: "debug"; dup: boolean; serverTick: number; players: { id: number; x: number; y: number; z: number }[] }

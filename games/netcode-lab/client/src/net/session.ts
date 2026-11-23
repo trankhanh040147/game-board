@@ -3,6 +3,7 @@ import type { Transport } from "./transport";
 import type { InputIntent } from "../game/input";
 import { InterpBuffer, type EntitySample } from "../game/interp";
 import type { LabBackend } from "../hud/lab";
+import { isGameEvent, type GameEvent, type RoundMsg, type ScoreRow } from "../game/events";
 
 export interface SupportedSetting { key: string; kind: string; allowed?: unknown[]; min?: number; max?: number; built: boolean; note?: string }
 export interface PresetDesc { id: string; title: string; section: string; banner?: string; built: boolean }
@@ -30,6 +31,12 @@ export class Session implements LabBackend {
   serverStats: any = null;
   lastError = "";
   onChange: () => void = () => {};
+  /** Server-confirmed game events (M3), as decoded by the WASM codec. */
+  onGameEvent: (e: GameEvent, now: number) => void = () => {};
+  round: RoundMsg | null = null;
+  scoreRows: ScoreRow[] | null = null;
+  /** Snapshot events the codec could not decode into a known kind (shown in the Lab footer, never dropped silently). */
+  unknownEvents = 0;
   /** The server placed us (join; respawn in M4): the view takes the server's yaw/pitch. */
   onSpawn: (yaw: number, pitch: number) => void = () => {};
 
@@ -106,6 +113,8 @@ export class Session implements LabBackend {
         break;
       case "cond": this.cond = m.cond; break;
       case "stats": this.serverStats = m; break;
+      case "round": this.round = m; break;
+      case "scoreboard": this.scoreRows = m.players; break;
       case "error": this.lastError = m.msg; break;
     }
     this.onChange();
@@ -164,6 +173,10 @@ export class Session implements LabBackend {
       ents.set(e.id, { x: e.x / F, y: e.y / F, z: e.z / F, yaw: this.sim.angleToRadians(e.yaw), alive: (e.anim & this.sim.ANIM.dead) === 0, team: e.team, moving: (e.anim & this.sim.ANIM.moving) !== 0 });
     }
     this.interp.push(s.serverTimeMs, now, ents);
+    for (const ev of s.events) {
+      if (isGameEvent(ev)) this.onGameEvent(ev, now);
+      else this.unknownEvents++;
+    }
     this.t.sendBinary(this.sim.encodeSnapshotAck(this.conn, s.baselineId, s.serverTick, now));
   }
 
