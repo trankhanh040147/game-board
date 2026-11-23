@@ -26,6 +26,13 @@ type Config struct {
 	HTTPAddr  string // plain HTTP: page + WebSocket (any LAN browser)
 	HTTPSAddr string // HTTPS (TCP) + WebTransport/HTTP3 (UDP) on the same port; "" disables
 	DistDir   string // built client (client/dist)
+	// ExtraWWW are more built page directories served when a path is not in
+	// DistDir (bin/duel-www holds infra.html and duel.html).
+	ExtraWWW []string
+	// Mount adds more handlers to the HTTP mux (cmd/server mounts the M7
+	// regions, matchmaker and metrics here; package server cannot import
+	// them without an import cycle). wt wraps a handler for WebTransport.
+	Mount func(mux *http.ServeMux, wt func(onConn func(transport.Conn)) http.Handler, certHash func() (b64 string, port int))
 }
 
 // Serve starts the listeners and the tick loop; it blocks until ctx is done.
@@ -83,7 +90,24 @@ func Serve(ctx context.Context, log *slog.Logger, room *Room, cfg Config) error 
 		}
 		json.NewEncoder(w).Encode(info)
 	})
-	mux.Handle("/", staticHandler(cfg.DistDir))
+	if cfg.Mount != nil {
+		wt := func(on func(transport.Conn)) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if wtSrv == nil {
+					http.NotFound(w, r)
+					return
+				}
+				transport.WTHandler(wtSrv, on).ServeHTTP(w, r)
+			})
+		}
+		cfg.Mount(mux, wt, func() (string, int) {
+			if cert == nil {
+				return "", 0
+			}
+			return cert.HashB64, httpsPort
+		})
+	}
+	mux.Handle("/", staticHandler(cfg.DistDir, cfg.ExtraWWW...))
 
 	errc := make(chan error, 3)
 	hs := &http.Server{Addr: cfg.HTTPAddr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
@@ -134,9 +158,25 @@ func Serve(ctx context.Context, log *slog.Logger, room *Room, cfg Config) error 
 }
 
 // staticHandler serves the built client, or a plain page that says how to build it.
-func staticHandler(dir string) http.Handler {
+func staticHandler(dir string, extra ...string) http.Handler {
 	fs := http.FileServer(http.Dir(dir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			// Path missing from the client build: try the extra page dirs.
+			clean := filepath.Clean("/" + r.URL.Path)
+			if _, err := os.Stat(filepath.Join(dir, clean)); err != nil {
+				for _, d := range extra {
+					if _, err := os.Stat(filepath.Join(d, clean)); err == nil {
+						if filepath.Ext(clean) == ".wasm" {
+							w.Header().Set("Content-Type", "application/wasm")
+						}
+						w.Header().Set("Cache-Control", "no-cache")
+						http.FileServer(http.Dir(d)).ServeHTTP(w, r)
+						return
+					}
+				}
+			}
+		}
 		if _, err := os.Stat(filepath.Join(dir, "index.html")); err != nil {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusServiceUnavailable)

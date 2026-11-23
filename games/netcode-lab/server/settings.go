@@ -196,7 +196,10 @@ type Preset struct {
 	Section string `json:"section"` // Part A section, for the banner link to CONCEPTS.md
 	Banner  string `json:"banner"`
 	Built   bool   `json:"built"`
-	apply   func(*Settings)
+	// Page, when set, is where the preset is shown: it lives on another page
+	// (infra.html for A.12, duel.html for A.13), not in this room's Lab.
+	Page  string `json:"page,omitempty"`
+	apply func(*Settings)
 	// cond, when set, is applied to every client and becomes the default for
 	// new joins. Presets without it restore DefaultCond, so each preset sets
 	// the whole demo state in one click.
@@ -277,14 +280,14 @@ func Presets() []Preset {
 			Banner: "128 Hz ticks and snapshots plus 144 FPS clients: both frame waits shrink too (formula ~71 ms, est.)."},
 		{ID: "P14", Title: "Peeker's advantage", Section: "A.11"},
 		{ID: "P15", Title: "Budget table", Section: "A.11"},
-		{ID: "P16", Title: "Regions and fragile cables", Section: "A.12"},
-		{ID: "P17", Title: "Beacons and matchmaking", Section: "A.12"},
-		{ID: "P18", Title: "Relay / backbone", Section: "A.12"},
+		{ID: "P16", Title: "Regions and fragile cables", Section: "A.12", Page: "/infra.html"},
+		{ID: "P17", Title: "Beacons and matchmaking", Section: "A.12", Page: "/infra.html"},
+		{ID: "P18", Title: "Relay / backbone", Section: "A.12", Page: "/infra.html"},
 		{ID: "P19", Title: "Tick health", Section: "A.12"},
-		{ID: "P20", Title: "Percentiles", Section: "A.12"},
-		{ID: "P21", Title: "Rollback", Section: "A.13"},
-		{ID: "P22", Title: "Input delay", Section: "A.13"},
-		{ID: "P23", Title: "Lockstep", Section: "A.13"},
+		{ID: "P20", Title: "Percentiles", Section: "A.12", Page: "/infra.html"},
+		{ID: "P21", Title: "Rollback", Section: "A.13", Page: "/duel.html"},
+		{ID: "P22", Title: "Input delay", Section: "A.13", Page: "/duel.html"},
+		{ID: "P23", Title: "Lockstep", Section: "A.13", Page: "/duel.html"},
 		{ID: "P24", Title: "Died behind the wall", Section: "A.10", Built: true,
 			apply: func(s *Settings) {
 				base(s)

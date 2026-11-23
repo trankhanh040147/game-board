@@ -654,12 +654,13 @@ type presetOut struct {
 	Section string `json:"section"`
 	Banner  string `json:"banner"`
 	Built   bool   `json:"built"`
+	Page    string `json:"page,omitempty"`
 }
 
 func presetList() []presetOut {
 	var out []presetOut
 	for _, p := range Presets() {
-		out = append(out, presetOut{p.ID, p.Title, p.Section, p.Banner, p.Built})
+		out = append(out, presetOut{p.ID, p.Title, p.Section, p.Banner, p.Built, p.Page})
 	}
 	return out
 }
