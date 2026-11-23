@@ -302,3 +302,62 @@ a49b4b920738736c, 0 mismatches. Review V5 and V8 confirmed it independently.
 
 Reproduce: `make duel-run`, then `sh scripts/duel-measure.sh 30`.
 
+
+## Check 2 at HEAD — 5 minutes, 1 bot, defaults (2026-11-23 18:36–18:41, bots)
+
+**Result: check 2 still fails on this host: 20 corrections (WebSocket) and 25 (WebTransport) in 5 minutes.**
+Most of them line up with host stalls; 6 per run have no logged late event next to them (details below).
+
+Server and bot built in a clean worktree of `91b61db` (server code = core's `a8a83a5` catch-up/hold fix,
+`6c49cde` stats, `a2afd2d` M3; no uncommitted edits). Both runs ran at the same time, each with its own server,
+on ports in the bots range. Commands (from `games/netcode-lab`):
+
+```
+HTTP_PORT=18600 HTTPS_PORT=18643 sh scripts/check2-reconcile.sh ws 5m
+HTTP_PORT=18620 HTTPS_PORT=18663 sh scripts/check2-reconcile.sh wt 5m
+```
+
+Server lifetime: both server PIDs (38297 WS, 38298 WT) were alive at the end (`kill -0`), the bots ran 300 s with
+no errors, and each server log has the bot's join and leave. Conditioner at welcome: 20 ms each way, no jitter or loss.
+
+| Transport | **Corrections** | Server starvations | Pacer raises | Pacer margin at end | RTT median / jitter | Max snapshot gap | Server late ticks > 3 periods (max) | Probe late > 3 periods (max) | Load avg 1 min: first / mean / max / last |
+|---|---|---|---|---|---|---|---|---|---|
+| WebSocket | **20** | 27 | 19 | 1 tick | 41.33 / 13.54 ms | 582.19 ms | 108 (242.0 ms) | 18 (239.6 ms) | 10.59 / 18.3 / 26.64 / 21.28 |
+| WebTransport | **25** | 42 | 21 | 1 tick | 43.07 / 12.07 ms | 598.70 ms | 74 (242.0 ms) | 28 (275.9 ms) | (same host, same time) |
+
+The probe is `bin/bot -kind probe -hz 64`: a separate process with no game code that sleeps on the server's tick
+schedule. It stalled as long as the servers did (up to 276 ms), so the stalls come from the host.
+
+Corrections against stalls. Window: ±2 s around a "tick started late" line from either server or a > 3-period
+probe event. "Other run" means the independent run (other transport, other server, other bot) also corrected
+within 1 s:
+
+| Run | Corrections | Near a late tick of its own server | Near any late event on the host | Other run corrected within 1 s | Neither |
+|---|---|---|---|---|---|
+| WebSocket | 20 | 7 | 10 | 11 | 6: 18:36:29.6, 18:36:41.7, 18:36:52.3, 18:38:22.9, 18:39:27.4, 18:39:50.2 |
+| WebTransport | 25 | 13 | 15 | 10 | 6: 18:36:20.8, 18:36:23.9, 18:40:04.3, 18:40:16.2, 18:40:25.6, 18:41:06.4 |
+
+Correction timestamps (bot wall clock):
+- WS: 18:36:29.619, 18:36:41.655, 18:36:52.254, 18:37:10.126, 18:37:10.323, 18:37:33.702, 18:38:13.286,
+  18:38:16.621, 18:38:22.858, 18:38:42.552, 18:38:44.906, 18:39:10.209, 18:39:27.405, 18:39:50.202, 18:39:58.312,
+  18:39:58.314, 18:39:59.204, 18:40:08.608, 18:40:13.500, 18:40:58.805.
+- WT: 18:36:20.825, 18:36:23.943, 18:37:10.077, 18:37:10.160, 18:37:33.632, 18:38:15.872, 18:38:42.133,
+  18:38:44.873, 18:39:58.513, 18:40:02.084, 18:40:04.349, 18:40:05.764, 18:40:07.732, 18:40:07.764, 18:40:09.667,
+  18:40:09.762, 18:40:10.535, 18:40:10.662, 18:40:10.662, 18:40:13.017, 18:40:16.215, 18:40:19.327, 18:40:22.465,
+  18:40:25.574, 18:41:06.378.
+- Server late-tick bursts (both servers): 18:37:10, 18:37:20, 18:38:13 (WS only), 18:39:20 (up to 242 ms),
+  18:39:57–18:40:10 (repeated, up to 213 ms). Full lists are in the raw `server.log` of each run.
+
+Observations:
+1. Corrections that happen within 1 s of each other in two independent processes (18:37:33, 18:38:42, 18:38:44)
+   point to a host-wide pause. Neither server logged a late tick then, so it was probably shorter than 3 periods
+   (the warning threshold) or it hit the bots rather than the servers.
+2. After the 18:39:57–18:40:10 burst, the WT run corrected at 18:40:13.0, 16.2, 19.3, 22.5 and 25.6, about every
+   3.1 s, with no late tick logged. The pacer drains to 1 tick after 2 s calm at 1 tick/s (DECISIONS 40); a
+   1-tick margin while host jitter is high may starve again and repeat. This is a hypothesis for core, not a
+   finding.
+3. The whole-window histograms were not captured in these two runs: the harness commit used for them
+   (`91b61db`) lacked the capture code. It was fixed in `18bfac9`.
+
+Not run: a quiet host. Raising the server's priority needs root (`nice -n -5` → "Permission denied"), and other
+members' processes cannot be stopped.
