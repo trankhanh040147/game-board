@@ -2,29 +2,33 @@
 
 Updated 2026-11-23 by scribe, from the lead's board. Read this first after a context compaction.
 
+## Members
+
+core (claude), client (claude), review, research (hermes), art (antigravity), bots (claude), scribe (claude).
+
 ## Board
 
-| ID | Owner | Task | State | Evidence |
-|----|-------|------|-------|----------|
-| R1 | researcher (hermes) | LAN transport, WASM, macOS limits | **done** | Verdict: HTTPS + certhash on a single port for LAN WebTransport; plain-HTTP WebSocket fallback with a visible banner; gc-WASM (no TinyGo); in-process conditioner first, because macOS has no `tc netem`. |
-| C1 | core (claude) | Go sim, net, server, WASM, bots, tests (M0/M1) | in progress | `131a701`: go.mod, shared/map.json, DECISIONS 1–11 only. The rest was cut by quota. |
-| K1 | client (claude) | Browser client M0–M2 | in progress | `1fb0507`: Vite + TS scaffold only. |
-| A1 | art (antigravity) | CC0 assets | in progress | — |
+| ID | Member | Task | State | Evidence |
+|----|--------|------|-------|----------|
+| R1 | research | LAN transport, WASM, macOS limits | **done** | Verdict: HTTPS + certhash on a single port for LAN WebTransport; plain-HTTP WebSocket fallback with a visible banner; gc-WASM (no TinyGo); in-process conditioner first, because macOS has no `tc netem`. |
+| C1 | core | Go sim, net, server, WASM (M0/M1) | in progress | Done so far: `23fa0b7` sim, `371a5a6` net, `46b3c52` server + WS/WT + walker bot, `0062678` WASM API + determinism check + Makefile, `be08946` WT dial with cert-hash pin for bots. |
+| K1 | client | Browser client | wiring networking now | Done: `3b911b9` loop/input/render/HUD/Lab, `b4a0ac0` unit tests. |
+| V1 | review | Review the commits above and run the tests | in progress | — |
+| R2 | research | Tick-health / zero-alloc proposal (P19, B.9 check 5) | in progress | — |
+| A2 | art | CC0 player and rifle models, map textures | in progress | A1 done earlier: `f169724` CC0 sound effects. |
+| B1 | bots | cmd/bot, load/peek/check harnesses: run B.9 check 2, build the load harness | in progress | — |
 
-### Repo facts at HEAD that the board does not list yet
+### Unreviewed commits
 
-These commits exist at `371a5a6` and are newer than the board. They are not reviewed or verified by the lead.
+Not yet reviewed or verified by the lead. Keep listed until the lead says otherwise.
 
-- `f169724` assets: CC0 sound effects (A1).
-- `23fa0b7` sim: fixed-point movement, swept AABB collision, hitboxes, predictor with reconciliation (C1).
-- `3b911b9` client: fixed-timestep loop, pointer-lock input, Courtyard render, net graph, scorecard, Lab panel, interpolation buffer (K1).
-- `b4a0ac0` client: interpolation and scorecard unit tests, client decisions 1–5 (K1).
-- `371a5a6` net: binary codec with ack header, conditioner, clock sync, WebSocket transport (C1).
+`f169724`, `23fa0b7`, `3b911b9`, `b4a0ac0`, `371a5a6`, `46b3c52`, `0062678`, `be08946`.
 
 ## Lead decisions
 
 - Transport: adopt R1 verdict.
 - claude quota reset 17:00 Asia/Saigon on 2026-11-23 cut core/client/scribe turns; continuations queued.
+- Whenever a member goes idle, give it the next useful task.
 
 ## Open risks
 
