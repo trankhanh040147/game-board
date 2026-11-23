@@ -15,7 +15,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 2 | Reconciliation, 0 corrections over 5 min | **not met: 1 per run (pacer design)** | Quiet window (load 5–8): 1 correction on WS and 1 on WT, both at about 6 s after join, from the lead-mode pacer probing down to its first starvation; none in the remaining 294 s; 0 late ticks. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
 | 4 | Shot budget vs 190 ms est. / 71 ms | **default pass; fast just outside** | Quiet window: default 195.9 ± 8.8 ms (+3.1%); 128 Hz + 144 FPS modelled 81.8 ± 6.0 ms (+15.2% over ≈ 71), gap = playout buffer 15.7 ms; browser default 214.4 / 206.6 / 211.0 ms (loaded) | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
-| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met (zero-alloc), met narrowly (allocating); host-loaded** | 50 bots, 128 Hz, load 16–29: allocating 99.02% within, p99 7.57 ms; zero-alloc 98.79%, p99 10.44 ms (a 377 ms host pause). Zero-alloc allocates 70% less (279 vs 929 MB). No human players | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
+| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met; host-loaded in every run** | Quiet window (load 16–29): allocating 99.02% / p99 7.57 ms, zero-alloc 98.79% / 10.44 ms. Rerun 21:49 (load 24–61 from the owner's Chrome/node): zero-alloc 97.14% / 23.05 ms, allocating 95.04% / 39.67 ms; 82% / 91% of over-budget seconds coincide with host stalls. Zero-alloc allocates 70% less (277 vs 918 MB). No human players | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots), [rerun](#check-5-rerun-both-loops-2026-11-23-21492153-bots-host-not-quiet) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | **pass (ruling: stalls only)** | Quiet window (load 20–30): WS 373 stalls / 0 loss gaps; WT 4 stalls, all during host stalls, + 12 loss gaps | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
 | 7 | Client smoke (Playwright) | **pass** | 52/0/0 ×5 then 55/0/0 ×2 at `8c4c1e1` (22 presets, fill-bot buttons, page presets, P25 burst 436–810 ms). Earlier: 44/0/0 ×3 at `25c6b27`, 39/0/0 ×4, 36/0/0 ×2, 35/0/1 (V12), 36/1/1 (V16, since fixed) | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review-pass) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
@@ -1052,3 +1052,54 @@ This is a design trade-off in the pacer (reported to core), not a sim mismatch.
   mode shows no stall of its own.
 - **Loss gaps:** 12, listed beside the stalls.
 - **Caveat:** the window was loaded (20–30) during this step.
+
+### Check 5 rerun, both loops (2026-11-23 21:49–21:53, bots): host not quiet
+
+The lead asked for this rerun while all team members were idle. Clean worktree build at `bfc7213`. Each loop got a
+fresh server, 50 walker bots (standing in for 10 players + 40 bots) at 128 Hz, and `statsReset` after a 10 s warmup.
+Next to it ran a 128 Hz no-game-code probe (`bin/bot -kind probe -hz 128`), and the server log was kept.
+
+**Matching rule.** The bot now timestamps each 1 Hz stats second that had a tick over budget (`bfc7213`). Such a
+second counts as a host stall when, within the same ~1 s, the server logged a late tick over 3 periods or the probe
+paused over 3 periods.
+
+Commands, per loop L in zeroalloc, naive:
+
+```
+NETLAB_ADMIN_TOKEN=c5 srv -http 127.0.0.1:18610 -https ""
+bin/bot -kind probe -hz 128 -d 100s
+bin/bot -url ws://127.0.0.1:18610/ws -n 50 -d 100s -tick 128 -stats -warmup 10s -statsreset -perbot=false -lab '{"loop":"L"}'
+```
+
+**Host.** Team members were idle, but the owner's processes were not:
+
+| Moment | Load avg 1 min | Top CPU processes |
+|---|---|---|
+| before zero-alloc 21:49:33 | 23.70 | Chrome 62.8%, WindowServer 46.4%, Chrome 43.3%, Chrome 89289 35.7%, cc-same 25.6% |
+| after zero-alloc / before naive 21:51:17 | **47.41** | Chrome 89289 72.4%, Chrome 66.1%, Chrome 47.9%, WebKit WebContent 46.5%, Chrome 98068 44.4% |
+| after naive 21:53:00 | **61.24** | Chrome 89289 83.8%, `node` 76.6%, Chrome 64.6%, Chrome 98068 62.3%, Chrome 45.3% |
+
+| | zero-alloc (PID 16137, alive at end) | allocating (PID 19553, alive at end) |
+|---|---|---|
+| Tick time p50 / p95 / **p99** / p999 / max | 0.06 / 3.70 / **23.05** / 221.39 / 221.39 ms | 0.06 / 7.71 / **39.67** / 462.67 / 462.67 ms |
+| Tick time **% within 7.81 ms** | **97.14** | **95.04** |
+| Start lateness p99 / max; % within | 982.7 / 982.7 ms; 82.04 | 995.7 / 995.7 ms; 71.66 |
+| Catch-up ticks | 2483 | 3294 |
+| GC cycles; pause p99 / max | 24; 58.7 / 58.7 ms | 59; 83.9 / 117.4 ms |
+| Total allocated (~88 s) | **277 MB** | **918 MB** |
+| Probe (no game code) late > 1 / > 3 periods; max | 1036 / 189; 159.7 ms | 1269 / 181; 179.7 ms |
+| **Seconds with a tick over budget** | 60, of which **49 overlap a host stall** | 78, of which **71 overlap a host stall** |
+| Those not overlapping: worst tick in that second | 8.3–18.1 ms (11 seconds) | 8.4–24.7 ms (7 seconds) |
+| Bot corrections (all 50) / RTT median | 791 / 52.08 ms | 1024 / 40.73 ms |
+
+**Verdict: both loops miss B.9 #5 in this run, and host load explains it.**
+- **Host stalls:** 82% (zero-alloc) and 91% (allocating) of the over-budget seconds coincide with a host stall seen
+  by the server's late-tick log or by the separate probe process. The probe alone paused over 3 periods about 185
+  times per run, up to 180 ms, at load average 24–61.
+- **The other seconds:** 11 and 7 seconds had a worst tick of 8–25 ms with no logged stall. The probe's
+  "3 periods" bar is 23 ms at 128 Hz, so shorter host pauses are not flagged. These seconds cannot be pinned on the
+  server's own work either.
+- **What is not host load:** allocation. Zero-alloc allocated 277 MB against 918 MB (−70%, same as the quiet-window
+  run), with 24 against 59 GC cycles.
+- **What would settle it:** a pass/fail on tick time needs a host where the owner's Chrome and `node` are idle too.
+  The best result so far is the quiet-window run: allocating 99.02% / p99 7.57 ms at load 28–29.
