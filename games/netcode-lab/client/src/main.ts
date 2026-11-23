@@ -261,7 +261,7 @@ async function boot() {
     const rows: Row[] = [
       { key: "rtt", label: "RTT", value: est.ready ? f(est.rttMs, 1) : null, unit: "ms", source: "measured" },
       { key: "jitter", label: "jitter", value: est.ready ? f(est.jitterMs, 1) : null, unit: "ms", source: "measured" },
-      { key: "loss", label: "loss up/down", value: m.upLossPct === null && m.downLossPct === null ? null : `${m.upLossPct?.toFixed(1) ?? "—"} / ${m.downLossPct?.toFixed(1) ?? "—"} %`, source: "measured" },
+      { key: "loss", label: `loss up/down (${m.lossWindowS} s)`, value: m.upLossPct === null && m.downLossPct === null ? null : `${m.upLossPct?.toFixed(1) ?? "—"} / ${m.downLossPct?.toFixed(1) ?? "—"} %`, source: "measured" },
       { key: "tick", label: "server tick", value: s.lastSnapshotTick ? `${s.lastSnapshotTick} @ ${s.tickRate} Hz` : null, source: "server" },
       { key: "snap", label: "snapshots", value: m.snapsPerSec === null ? null : `${m.snapsPerSec.toFixed(1)}/s (set ${st?.sendRate ?? "—"})`, source: "measured" },
       { key: "gap", label: "max snapshot gap", value: m.snapsPerSec === null ? null : f(m.maxSnapGapMs, 0), unit: "ms", source: "measured" },

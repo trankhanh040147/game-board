@@ -10,6 +10,7 @@ export interface CondDir { delayMs: number; jitterMs: number; lossPct: number; d
 
 const PING_MS = 250;
 const CORRECTION_TAU_MS = 80;
+export const LOSS_WINDOW_S = 10;
 
 /** One connected game session: clock sync, paced inputs, prediction/reconciliation via WASM, snapshot buffer. */
 export class Session implements LabBackend {
@@ -53,8 +54,11 @@ export class Session implements LabBackend {
 
   // 1 s measurement window
   private win = { at: 0, snaps: 0, up: 0, down: 0, sent: 0, lost: 0, recv: 0, gaps: 0 };
-  meas = { snapsPerSec: null as number | null, kbpsUp: null as number | null, kbpsDown: null as number | null, upLossPct: null as number | null, downLossPct: null as number | null, maxSnapGapMs: 0 };
+  meas = { snapsPerSec: null as number | null, kbpsUp: null as number | null, kbpsDown: null as number | null, upLossPct: null as number | null, downLossPct: null as number | null, lossWindowS: 0, maxSnapGapMs: 0 };
   private snapGapMax = 0;
+  /** Per-second packet counts for the last LOSS_WINDOW_S seconds. Loss at 1% needs a window of hundreds of packets;
+   *  one second holds only ~20 snapshots, where a single drop reads 5% and most seconds read 0%. */
+  private lossWin: { sent: number; lost: number; recv: number; gaps: number }[] = [];
   private lastSnapAt = 0;
 
   constructor(readonly sim: NetcodeSim, readonly t: Transport, name: string) {
@@ -250,13 +254,17 @@ export class Session implements LabBackend {
     const dtMs = now - this.win.at;
     if (dtMs < 1000) return;
     const cs = this.sim.connStats(this.conn);
-    const dSent = cs.sent - this.win.sent, dLost = cs.lost - this.win.lost, dRecv = cs.received - this.win.recv, dGaps = cs.remoteGaps - this.win.gaps;
+    this.lossWin.push({ sent: cs.sent - this.win.sent, lost: cs.lost - this.win.lost, recv: cs.received - this.win.recv, gaps: cs.remoteGaps - this.win.gaps });
+    if (this.lossWin.length > LOSS_WINDOW_S) this.lossWin.shift();
+    const sum = this.lossWin.reduce((a, w) => ({ sent: a.sent + w.sent, lost: a.lost + w.lost, recv: a.recv + w.recv, gaps: a.gaps + w.gaps }), { sent: 0, lost: 0, recv: 0, gaps: 0 });
+    const dSent = sum.sent, dLost = sum.lost, dRecv = sum.recv, dGaps = Math.max(0, sum.gaps);
     this.meas = {
       snapsPerSec: (this.win.snaps * 1000) / dtMs,
       kbpsUp: ((this.t.bytesUp - this.win.up) * 8) / dtMs,
       kbpsDown: ((this.t.bytesDown - this.win.down) * 8) / dtMs,
       upLossPct: dSent > 0 ? (100 * dLost) / dSent : null,
-      downLossPct: dRecv + dGaps > 0 ? (100 * Math.max(0, dGaps)) / (dRecv + Math.max(0, dGaps)) : null,
+      downLossPct: dRecv + dGaps > 0 ? (100 * dGaps) / (dRecv + dGaps) : null,
+      lossWindowS: this.lossWin.length,
       maxSnapGapMs: this.snapGapMax,
     };
     this.snapGapMax = 0;
