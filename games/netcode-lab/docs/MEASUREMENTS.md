@@ -14,7 +14,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** | Identical state hashes on every tick at 20/30/64/128 Hz | [section](#check-1--determinism-native-vs-wasm-b9-1) |
 | 2 | Reconciliation, 0 corrections over 5 min | **fail** (on this shared host) | At HEAD (`91b61db` build): 20 corrections (WS), 25 (WT) in 5 min, load avg mean 18; most line up with host stalls also seen by a no-game-code probe. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s (they appear; smoothing is a client render property) | [at HEAD](#check-2-at-head--5-minutes-1-bot-defaults-2026-11-23-18361841-bots), [speed modifier](#check-2-second-half--server-only-speed-modifier-on-2026-11-23-18481850-bots) |
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
-| 4 | Shot budget vs 190 ms est. / 71 ms | not run | — | — |
+| 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default 211.5 ± 9.7 ms (+11%, within ±15%: pass). 128 Hz + 144 FPS (modelled frames): 90.4 ± 6.2 ms vs ≈ 71 (+27%: not met); the input playout wait (pacer lead) is the main gap | [section](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots) |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met / inconclusive** | 40 bots, current loop (load ~15): tick p99 1.52 ms, 99.81% within budget. P19 with 50 bots at load 36–64: zero-alloc p99 22.1 ms, naive 8.4 ms, neither ≥ 99%; host-dominated. Zero-alloc allocates 37% less (1117 vs 1780 MB) but not zero | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots), [P19](#check-5--p19--zero-alloc-vs-allocating-loop-50-bots-at-128-hz-2026-11-23-20152019-bots-inconclusive-on-timing) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | **partial** | Gaps > 3× send interval per bot in 2 min: WS 106–119, WT 4–5 (expected ≈ 0.3 from loss alone; load avg up to 36, no gap timestamps yet) | [section](#check-6--p29--snapshot-inter-arrival-websocket-vs-webtransport-datagrams-at-5-loss-2026-11-23-bots) |
 | 7 | Client smoke (Playwright) | **partial** | 18/0/1 at `6db531d` (review: 18/1 independently), 20/0/1 at `082b412` with WT; shoot skipped: shooting not testable until M3 | [section](#check-7--client-smoke-playwright-b9-7-partial-shooting-not-testable-until-m3) |
@@ -641,3 +641,60 @@ The old build shows the root cause directly: inputs arrived 3–6 ticks early, y
 margin kept rising. The server drained the buffer, so being early bought nothing. The new build stops at 3. Its
 negative leads are inputs that really arrived late (host stalls, load > 20), and those are counted as starvations.
 This is still not the quiet-host run (load < 5), which remains owed.
+
+## Check 4 / P11 / P15 — measured shot budget vs A.11 (2026-11-23 20:19–20:23, bots)
+
+The shooter/runner bots (`-kind shootrun -fps F -buf B`, cmd/bot/budget.go). Only hits count, because the target
+needs a Damage event. Each segment is a difference of two times mapped to server ms:
+- **Shooter side:** the click is uniform within the frame that sampled it, then the frame and the fire input's
+  send time; these use the shooter's clock sync.
+- **Server side:** `ShotResult.recvMs` and `tickStartMs`.
+- **Target side:** `serverTimeMs` of the first target snapshot carrying the Damage event, and the target's arrival
+  time.
+- **Interpolation and target frame:** render time is the client's arrival-clock model (arrival + buffer), then the
+  next frame.
+
+Frames are **modelled** in the bot: there is no display. 144 FPS was not reached on a real display (research: this
+laptop's display runs 60/120 Hz), so the "fast" row is a model of 144 FPS frame waits.
+
+```
+HTTP_PORT=18690 sh scripts/check4-budget.sh default 2m   # build 7917547
+HTTP_PORT=18690 sh scripts/check4-budget.sh fast 2m      # build 7397f20 (first attempt failed: server not listening after 1 s at load 33; the script now waits for /api/info)
+```
+
+| Segment (mean ms; sd) | A.11 est. default | **Measured default** (64 Hz, 20/s, 60 FPS, buffer 100) | A.11 est. 128 Hz + 144 FPS | **Measured fast** (128 Hz, 128/s, 144 FPS modelled, buffer 15.6) |
+|---|---|---|---|---|
+| Shooter frame wait | 8 | 7.76; 4.62 | ≈ 3.5 | 3.25; 1.88 |
+| Frame → input sent (pacer) | (not in A.11) | 8.68; 4.86 | (not in A.11) | 3.45; 2.05 |
+| Uplink | 20 | 20.76; 2.55 | 20 | 21.06; 2.23 |
+| Wait for server tick | 8 | **45.69; 5.99** | ≈ 4 | **23.43; 5.12** |
+| Wait for snapshot send | 25 | 18.06; 15.11 | ≈ 4 | 0.06; 0.31 |
+| Downlink | 20 | 21.18; 1.81 | 20 | 21.01; 1.61 |
+| Target interpolation | 100 | 81.10; 15.53 | ≈ 16 | 14.65; 1.79 |
+| Target frame wait | 8 | 8.30; 4.80 | ≈ 3.5 | 3.48; 2.08 |
+| **Total** | **≈ 190** | **211.53; 9.71** (p50 210.03, p95 230.27) | **≈ 71** | **90.39; 6.22** (p50 89.32, p95 100.06) |
+| Shots measured | | 109 | | 112 |
+
+Context:
+- Server lifetime: PIDs 68352 (default) and 74836 (fast) were alive at the end; no bot errors.
+- RTT medians were 41.6–44.7 ms.
+- Host load average: default 29.72 → 33.05, fast 28.79 → 25.89.
+- Server late ticks over 3 periods: 41 (default) and 100 (fast).
+
+Verdict against B.9 #4:
+- **Default: pass.** 211.5 ms is +11.3% over the 190 ms estimate, inside the ±15% bar.
+- **128 Hz + 144 FPS: not "near 71".** 90.4 ms is +27%.
+
+Where the difference comes from:
+1. **"Wait for server tick" is the largest gap: 46 ms against 8, and 23 ms against 4.** The pacer sends each input
+   early, by RTT/2 plus a margin (DECISIONS 15, 40, 51), so it waits in the server's playout buffer until its tick.
+   A.11 assumes the input arrives at a random point in the tick. Our design trades this wait for fewer
+   starvations: its cost is about 38 ms at 64 Hz and 19 ms at 128 Hz.
+2. **"Frame → input sent"** (about 9 ms at 60 FPS and 3.5 ms at 144) is a segment A.11 does not have. The client
+   sends inputs on the tick schedule, not every frame.
+3. **Interpolation and snapshot wait.**
+   - Interpolation is shorter than the buffer (81 against 100 ms) because the arrival-clock model counts from
+     arrival, and the snapshot already carries about 20 ms of downlink.
+   - At 128/s the snapshot goes out in the same tick (0.06 ms).
+   - At 20/s the snapshot wait averages 18 ms, not 25. Shots fire every 7 ticks while snapshots go every 3–4 ticks,
+     so not every phase is sampled.
