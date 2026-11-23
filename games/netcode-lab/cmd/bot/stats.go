@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"netcodelab/net/transport"
 )
 
 // statsMsg is the part of the server's 1 Hz control "stats" message the load
@@ -30,10 +32,17 @@ type statsMsg struct {
 		P99Ms           float64 `json:"p99Ms"`
 		MaxMs           float64 `json:"maxMs"`
 		MaxSinceStartMs float64 `json:"maxSinceStartMs"`
+		CatchUpTicks    int     `json:"catchUpTicks"`
+		ScheduleResets  int     `json:"scheduleResets"`
 	} `json:"tickStartLate"`
+	// Whole window since server start or the last statsReset (core, 6c49cde).
+	Window json.RawMessage `json:"window"`
 }
 
 type statsRecorder struct {
+	conn    transport.Conn // the recording bot's connection, for statsReset
+	token   string
+	resetAt time.Time
 	mu      sync.Mutex
 	from    time.Time
 	all     int
@@ -45,6 +54,27 @@ func (r *statsRecorder) setFrom(t time.Time) {
 	r.mu.Lock()
 	r.from = t
 	r.mu.Unlock()
+}
+
+// reset asks the server to restart its whole-window histograms (needs the admin
+// token); stats received in the next 1.1 s still mix the old window and are dropped.
+func (r *statsRecorder) reset() error {
+	r.mu.Lock()
+	c, tok := r.conn, r.token
+	r.mu.Unlock()
+	if c == nil || tok == "" {
+		return fmt.Errorf("statsReset needs the recording bot connected and -token")
+	}
+	b, _ := json.Marshal(map[string]string{"t": "statsReset", "token": tok})
+	if err := c.SendControl(b); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.resetAt = time.Now()
+	r.from = r.resetAt.Add(1100 * time.Millisecond)
+	r.kept = r.kept[:0]
+	r.mu.Unlock()
+	return nil
 }
 
 func (r *statsRecorder) add(raw []byte, at time.Time) {
@@ -108,6 +138,16 @@ func (r *statsRecorder) report(bots int) map[string]any {
 	slices.Sort(p99s)
 	slices.Sort(maxs)
 	first, last := r.kept[0], r.kept[len(r.kept)-1]
+	if !r.resetAt.IsZero() {
+		out["statsResetAt"] = r.resetAt.Format("15:04:05.000")
+	}
+	if len(last.Window) > 0 {
+		out["wholeWindow"] = last.Window // server histograms since the reset (or start), verbatim
+	}
+	if last.TickStartLate != nil {
+		out["catchUpTicks"] = last.TickStartLate.CatchUpTicks
+		out["scheduleResets"] = last.TickStartLate.ScheduleResets
+	}
 	out["tickRates"] = rates
 	out["sendRate"] = last.SendRate
 	out["players"] = fmt.Sprintf("%d..%d", minPl, maxPl)

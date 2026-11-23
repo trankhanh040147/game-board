@@ -29,6 +29,8 @@ type settings struct {
 	TickRate  int  `json:"tickRate"`
 	SendRate  int  `json:"sendRate"`
 	Reconcile bool `json:"reconcile"`
+	InterpMs  int  `json:"interpMs"`
+	LagComp   bool `json:"lagcomp"`
 }
 
 type ctrl struct {
@@ -64,6 +66,7 @@ type Summary struct {
 	Cond             json.RawMessage `json:"condAtWelcome,omitempty"`
 	TickRate         int             `json:"tickRate"`
 	CorrectionTimes  []string        `json:"correctionTimes,omitempty"`
+	Brain            any             `json:"shots,omitempty"`
 	Errors           []string        `json:"errors,omitempty"`
 }
 
@@ -89,6 +92,7 @@ type bot struct {
 	dist     float64
 	lastPos  [3]sim.Fx
 	cond     json.RawMessage
+	brain    brain
 	corrAt   []string       // wall-clock time of each correction (first 500)
 	rec      *statsRecorder // non-nil on the bot that records server stats
 }
@@ -169,6 +173,9 @@ func (b *bot) readLoop(ctx context.Context) {
 			b.snaps++
 			b.starved = snap.Own.Starved
 			b.pacer.OnServerFeedback(snap.Own.Starved, now)
+			if b.brain != nil {
+				b.brain.onSnapshot(b, &snap, now)
+			}
 			if snap.LastProcessedInputSeq > 0 {
 				before := b.pred.Corrections
 				b.pred.ReconcileLife(snap.Own.State, snap.LastProcessedInputSeq, sim.DtForRate(b.set.TickRate), b.set.Reconcile, snap.Own.Life, snap.Own.Dead)
@@ -217,9 +224,9 @@ func (wk *walker) next(rng *rand.Rand, now time.Time, speed float64) sim.Input {
 	return sim.Input{Buttons: btn, Yaw: sim.AngleFromRadians(wk.yaw)}
 }
 
-func run(ctx context.Context, url, name string, seed uint64, rec *statsRecorder) Summary {
+func run(ctx context.Context, url, name string, seed uint64, rec *statsRecorder, br brain) Summary {
 	b := &bot{name: name, start: time.Now(), rng: rand.New(rand.NewPCG(seed, seed*7+1)),
-		pred: sim.NewPredictor(sim.Courtyard(), sim.State{}), pacer: clock.NewPacer(), welcomed: make(chan struct{}), rec: rec}
+		pred: sim.NewPredictor(sim.Courtyard(), sim.State{}), pacer: clock.NewPacer(), welcomed: make(chan struct{}), rec: rec, brain: br}
 	sum := Summary{Name: name}
 	conn, err := dial(ctx, url)
 	if err != nil {
@@ -228,6 +235,11 @@ func run(ctx context.Context, url, name string, seed uint64, rec *statsRecorder)
 	}
 	b.conn = conn
 	defer conn.Close("bot done")
+	if rec != nil {
+		rec.mu.Lock()
+		rec.conn = conn
+		rec.mu.Unlock()
+	}
 	join, _ := json.Marshal(map[string]string{"t": "join", "name": name})
 	if err := conn.SendControl(join); err != nil {
 		sum.Errors = append(sum.Errors, err.Error())
@@ -275,9 +287,15 @@ loop:
 				if seq < 10 {
 					speed = 1 // do not "turn when stuck" before moving
 				}
-				in := wk.next(b.rng, t, speed)
 				seq++
-				st := b.pred.Predict(sim.Cmd{Seq: seq, ClientTick: ct, In: in}, sim.DtForRate(b.set.TickRate))
+				var c sim.Cmd
+				if b.brain != nil {
+					c = b.brain.cmd(b, now, seq)
+				} else {
+					c.In = wk.next(b.rng, t, speed)
+				}
+				c.Seq, c.ClientTick = seq, ct
+				st := b.pred.Predict(c, sim.DtForRate(b.set.TickRate))
 				b.dist += sim.ToFloat(sim.Length2(st.Pos[0]-b.lastPos[0], st.Pos[2]-b.lastPos[2]))
 				b.lastPos = st.Pos
 				pending := b.pred.Pending()
@@ -288,7 +306,9 @@ loop:
 			b.mu.Unlock()
 			for _, out := range outs {
 				if err := conn.SendDatagram(out); err != nil {
-					sum.Errors = append(sum.Errors, err.Error())
+					if ctx.Err() == nil { // after the deadline the transport closes itself: not a run error
+						sum.Errors = append(sum.Errors, err.Error())
+					}
 					break loop
 				}
 			}
@@ -307,6 +327,9 @@ loop:
 		AckRTTMs: round2(es.RTTMs), LostUp: es.Lost, DistanceM: math.Round(b.dist), MaxSnapGapMs: round2(b.maxGap), PacerMarginTicks: b.pacer.Margin, PacerRaises: b.pacer.Adjustments,
 		Cond: b.cond, TickRate: b.set.TickRate, CorrectionTimes: b.corrAt,
 		Errors: append(sum.Errors, b.errs...),
+	}
+	if b.brain != nil {
+		sum.Brain = b.brain.report()
 	}
 	if b.snaps > 0 {
 		sum.AvgReplayPerSnap = round2(float64(b.pred.Replayed) / float64(b.snaps))
@@ -355,8 +378,8 @@ func main() {
 	warmup := flag.Duration("warmup", 10*time.Second, "with -stats: stats received in the first warmup after the last bot joined are not counted")
 	perBot := flag.Bool("perbot", true, "print one summary per bot (false: totals only)")
 	flag.Parse()
-	if *kind != "walker" && *kind != "probe" {
-		log.Fatalf("unknown -kind %q (built: walker, probe)", *kind)
+	if *kind != "walker" && *kind != "probe" && *kind != "shootrun" {
+		log.Fatalf("unknown -kind %q (built: walker, probe, shootrun)", *kind)
 	}
 	ctx := context.Background()
 	var cancel context.CancelFunc
@@ -382,9 +405,34 @@ func main() {
 			log.Fatalf("-lab %s: %v", *lab, err)
 		}
 	}
+	if *kind == "shootrun" {
+		// B.9 check 3 integration: the shooter joins first (blue), the runner second (orange).
+		var wg sync.WaitGroup
+		out := make([]Summary, 2)
+		var rec *statsRecorder
+		if *stats {
+			rec = &statsRecorder{token: *token}
+		}
+		wg.Add(2)
+		go func() { defer wg.Done(); out[0] = run(ctx, *url, "bot-shooter", 1, rec, newShooter()) }()
+		time.Sleep(300 * time.Millisecond)
+		go func() { defer wg.Done(); out[1] = run(ctx, *url, "bot-runner", 2, nil, &runner{}) }()
+		if rec != nil {
+			rec.setFrom(time.Now())
+		}
+		wg.Wait()
+		res := map[string]any{"kind": "shootrun", "perBot": out}
+		if rec != nil {
+			res["serverTick"] = rec.report(2)
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(res)
+		return
+	}
 	var rec *statsRecorder
 	if *stats {
-		rec = &statsRecorder{}
+		rec = &statsRecorder{token: *token}
 	}
 	var wg sync.WaitGroup
 	out := make([]Summary, *n)
@@ -396,12 +444,23 @@ func main() {
 		}
 		go func(i int) {
 			defer wg.Done()
-			out[i] = run(ctx, *url, fmt.Sprintf("bot-walker-%d", i+1), uint64(i+1), r)
+			out[i] = run(ctx, *url, fmt.Sprintf("bot-walker-%d", i+1), uint64(i+1), r, nil)
 		}(i)
 		time.Sleep(50 * time.Millisecond)
 	}
 	if rec != nil {
 		rec.setFrom(time.Now().Add(*warmup))
+		if rec.token != "" {
+			go func() {
+				select {
+				case <-time.After(*warmup):
+					if err := rec.reset(); err != nil {
+						log.Printf("statsReset: %v", err)
+					}
+				case <-ctx.Done():
+				}
+			}()
+		}
 	}
 	wg.Wait()
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
