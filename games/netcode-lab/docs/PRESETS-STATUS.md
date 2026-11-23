@@ -21,14 +21,14 @@ room's Lab; the link carries `?preset=Pxx` so the page can apply that preset's s
 | P13 Client FPS | ✓ | done (fpsCap broadcast to every client; 128 Hz + 144 FPS) | `game/loop.ts` applies `fpsCap` | – |
 | P14 Peeker's advantage | ✓ (58367a2) | done (d41e342) | perf panel P14 section with run buttons (84b5ebe) | – |
 | P15 Budget table | ✓ (58367a2) | done | perf panel table, formula labelled est., tick wait = playout buffer | – |
-| P16 Regions and fragile cables | ✗ (page; verified, flip waits) | regions mounted on the main server | `/infra.html?preset=P16` puts the page in state (verified) | client: Lab must open the page link for built page presets (server answers `presetPage`), and smoke must expect that; then flip |
-| P17 Beacons and matchmaking | ✗ (page; verified, flip waits) | as P16 | `/infra.html?preset=P17` verified | client, as P16 |
-| P18 Relay / backbone | ✗ (page; verified, flip waits) | regions mounted on the main server | scribe S14 (f05bcb6) at d2c12c6: `infra.html?preset=P18` per-route est. budget bars, to sg viettel/good public vs backbone jitter 9.5 vs 0.5 ms, bar 208 vs 191 ms; with the cut jitter 16.0 vs 1.5 ms, loss 1/10 vs 0/10, bar 308 vs 233 ms; core's `pages-core.mjs` (C5) confirms the link state | client: commit the Lab fix (below), then flip |
+| P16 Regions and fragile cables | ✓ (39ecc75, page) | regions mounted on the main server | `/infra.html?preset=P16` puts the page in state (verified) | – (Lab opens the page, 8c4c1e1) |
+| P17 Beacons and matchmaking | ✓ (39ecc75, page) | as P16 | `/infra.html?preset=P17` verified | – |
+| P18 Relay / backbone | ✓ (39ecc75, page) | regions mounted on the main server | scribe S14 (f05bcb6) at d2c12c6: `infra.html?preset=P18` per-route est. budget bars, to sg viettel/good public vs backbone jitter 9.5 vs 0.5 ms, bar 208 vs 191 ms; with the cut jitter 16.0 vs 1.5 ms, loss 1/10 vs 0/10, bar 308 vs 233 ms; core's `pages-core.mjs` (C5) confirms the link state | – |
 | P19 Tick health | ✓ (58367a2; preset turns the naive loop on) | done | perf panel tick health + loop switch | live 50-bot comparison owed in the quiet window (bots) |
-| P20 Percentiles | ✗ (page; verified, flip waits) | `/metrics` mounted | scribe S14 (f05bcb6) at d2c12c6: compose drill (30 players, cut held 150 s): ISPRouteP95High FIRING for sg/vnpt (t=103 s, 194), sg/fpt (124 s, 184), sg/viettel (137 s, 191) from /api/v1/alerts; Grafana mean-vs-p99 panel 18 series, no "No data" | client: commit the Lab fix, then flip |
-| P21 Rollback | ✗ (page; verified, flip waits) | duel relay mounted | `/duel.html?preset=P21`: mode rollback, D 0, banner, match running (verified) | client, as P16 |
-| P22 Input delay | ✗ (page; verified, flip waits) | as P21 | `?preset=P22`: rollback, D auto (verified) | client, as P16 |
-| P23 Lockstep | ✗ (page; verified, flip waits) | as P21 | `?preset=P23`: lockstep, D auto (verified) | client, as P16 |
+| P20 Percentiles | ✓ (39ecc75, page) | `/metrics` mounted | scribe S14 (f05bcb6) at d2c12c6: compose drill (30 players, cut held 150 s): ISPRouteP95High FIRING for sg/vnpt (t=103 s, 194), sg/fpt (124 s, 184), sg/viettel (137 s, 191) from /api/v1/alerts; Grafana mean-vs-p99 panel 18 series, no "No data" | – |
+| P21 Rollback | ✓ (39ecc75, page) | duel relay mounted | `/duel.html?preset=P21`: mode rollback, D 0, banner, match running (verified) | – |
+| P22 Input delay | ✓ (39ecc75, page) | as P21 | `?preset=P22`: rollback, D auto (verified) | – |
+| P23 Lockstep | ✓ (39ecc75, page) | as P21 | `?preset=P23`: lockstep, D auto (verified) | – |
 | P24 Died behind the wall | ✓ | done (Death event, 50 ms each way) | death replay; smoke covers a real kill | – |
 | P25 Glitch lab | ✓ (58367a2) | done; WS loss burst now stalls for the whole outage (b66f098, DECISIONS 56) | glitch buttons + names (118cbcf); duel page desync | – |
 | P26 Sub-tick | ✓ (C6) | done | F4 panel: own-shot timing histogram on vs quantised + server percentiles (2a83a4b) | – |
@@ -82,3 +82,17 @@ the committed `client/src/hud/lab.ts` (line 180) still enables "apply" for a bui
 loop (`smoke.mjs` 165-169) then fails for each one (measured in C5: 5 failures for 5 flipped presets), because
 the server answers `presetPage`. Client's uncommitted working copy (`lab.ts` 201: built page presets disabled
 with "opens its own page"; `session.ts` 158 handles `presetPage`) fixes that.
+
+
+## Final flip (2026-11-23, core): 29 of 29 built
+
+Client's 8c4c1e1 makes a page preset's Lab button open its page instead of sending `{t:"preset"}`. Core flipped
+P16, P17, P18, P20, P21, P22 and P23 in 39ecc75 (and the server now sends the fill state on join).
+
+Clean worktree build at 39ecc75 (client, sim.wasm, duel-www, server, bot); server on 127.0.0.1:18119, HTTPS +
+WebTransport on 18120, PID-recorded, alive for the run, stopped by PID, no bot process left; host load 24.
+
+`NETLAB_ADMIN_TOKEN=… node smoke/smoke.mjs http://127.0.0.1:18119` → **62 passed, 0 failed, 0 skipped**:
+"Lab lists presets P01–P29 — 29 enabled, 0 disabled as not built"; each page preset "opens its own page"
+(`/infra.html?preset=P16|P17|P18|P20`, `/duel.html?preset=P21|P22|P23`, HTTP 200); fill bots start and stop
+from the Lab.
