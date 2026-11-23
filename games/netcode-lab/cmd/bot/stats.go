@@ -54,6 +54,7 @@ type statsRecorder struct {
 	from    time.Time
 	all     int
 	kept    []statsMsg
+	keptAt  []time.Time
 	badJSON int
 }
 
@@ -80,6 +81,7 @@ func (r *statsRecorder) reset() error {
 	r.resetAt = time.Now()
 	r.from = r.resetAt.Add(1100 * time.Millisecond)
 	r.kept = r.kept[:0]
+	r.keptAt = r.keptAt[:0]
 	r.mu.Unlock()
 	return nil
 }
@@ -98,6 +100,7 @@ func (r *statsRecorder) add(raw []byte, at time.Time) {
 		return // still ramping up or warming up
 	}
 	r.kept = append(r.kept, m)
+	r.keptAt = append(r.keptAt, at)
 }
 
 func pct(sorted []float64, p float64) float64 {
@@ -176,6 +179,18 @@ func (r *statsRecorder) report(bots int) map[string]any {
 		mean[k] = round3(mean[k] / float64(cnt[k]))
 	}
 	out["costMeans"] = mean
+	// Seconds with a tick over budget, with the receive time, to match against host stalls.
+	var slow []string
+	for i, m := range r.kept {
+		if m.Tick.WithinBudgetPct < 100 && len(slow) < 200 {
+			late := 0.0
+			if m.TickStartLate != nil {
+				late = m.TickStartLate.MaxMs
+			}
+			slow = append(slow, fmt.Sprintf("%s within=%.2f tickMax=%.2f startLateMax=%.2f", r.keptAt[i].Format("15:04:05.000"), m.Tick.WithinBudgetPct, m.Tick.MaxMs, late))
+		}
+	}
+	out["secondsWithTickOverBudget"] = slow
 	if last.TickStartLate != nil {
 		out["catchUpTicks"] = last.TickStartLate.CatchUpTicks
 		out["scheduleResets"] = last.TickStartLate.ScheduleResets
