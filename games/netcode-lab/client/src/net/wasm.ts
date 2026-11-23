@@ -45,7 +45,7 @@ export interface NetcodeSim {
   clockEstimate(c: number, nowMs: number): { ready: boolean; offsetMs: number; rttMs: number; minRttMs: number; lastRttMs: number; jitterMs: number; samples: number; serverTimeMs: number; serverTick: number; tickRate: number };
   newPacer(): number;
   pacerDue(pacer: number, clock: number, nowMs: number): number[];
-  pacerFeedback(pacer: number, starved: number, nowMs: number): void;
+  pacerFeedback(pacer: number, starved: number, nowMs: number, inputLead?: number): void;
   pacerInfo(pacer: number): { marginTicks: number; raises: number };
   free(h: number): void;
 }

@@ -156,7 +156,7 @@ async function boot() {
   const sfx = new Sfx();
   const vfx = new ShotVfx(world.scene, world.camera, assets.vfx.impact_decal ?? null, () => world.shotTargets());
   let lastShotAt = -Infinity;
-  const combat = new CombatHud(hud, { hit: "./textures/vfx/hit_marker.png", head: null, skull: null } /* headshot.png and kill_icon.png at bfce3d7 are not usable images (reported) */);
+  const combat = new CombatHud(hud, { hit: "./textures/vfx/hit_marker.png", head: "./textures/vfx/headshot.png", skull: "./textures/vfx/kill_icon.png" } /* replaced in dd393e2; checked over the dark HUD */);
   let deathRespawnTick: number | null = null;
   const overlay = link.sim ? new HitboxOverlay(world.scene, { body: link.sim.PLAYER.body, head: link.sim.PLAYER.head }) : null;
   const replay = new DeathReplay(hud, courtyard);

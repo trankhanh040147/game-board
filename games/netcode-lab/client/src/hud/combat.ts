@@ -59,7 +59,7 @@ export class CombatHud {
 
   feedKill(e: KillMsg, team: (id: number) => string, youId: number, now: number) {
     const who = (id: number, name: string) => `<span class="${team(id)}">${escapeHtml(name)}${id === youId ? " (you)" : ""}</span>`;
-    const tags = `${e.headshot ? '<span class="hs">HS</span>' : ""}${e.trust ? '<span class="trust">trust-mode claim</span>' : ""}`;
+    const tags = `${e.headshot ? (this.iconUrl.head ? `<img class="hsicon" src="${this.iconUrl.head}" alt="headshot" title="headshot">` : '<span class="hs">HS</span>') : ""}${e.trust ? '<span class="trust">trust-mode claim</span>' : ""}`;
     this.feedRows.push({ at: now, html: `${who(e.killerId, e.killer)} ${this.skull()}${tags} ${who(e.victimId, e.victim)}` });
     if (this.feedRows.length > 6) this.feedRows.shift();
   }

@@ -193,7 +193,8 @@ export class Session implements LabBackend {
     if (s.encoding & this.sim.ENC.delta) this.deltaSnaps++;
     this.ownServer = s.own.state;
     this.ownInfo = s.own;
-    this.sim.pacerFeedback(this.pacer, s.own.starved, now);
+    // Lead mode (core 0b4e1af): the smallest arrival lead since the last snapshot; 127 = no input arrived (ignored).
+    this.sim.pacerFeedback(this.pacer, s.own.starved, now, s.own.inputLead);
     this.dead = s.own.dead;
     if (this.pred && (s.lastProcessedInputSeq > 0 || s.own.life !== this.life)) {
       const replay = this.setting("reconcile", true);
