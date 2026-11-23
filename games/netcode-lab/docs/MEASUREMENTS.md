@@ -12,7 +12,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | # | Check (HANDOFF B.9) | Status | Recorded result | Section |
 |---|---|---|---|---|
 | 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** | Identical state hashes on every tick at 20/30/64/128 Hz | [section](#check-1--determinism-native-vs-wasm-b9-1) |
-| 2 | Reconciliation, 0 corrections over 5 min | **not met: 1 per run (pacer design)** | Quiet window (load 5–8): 1 correction on WS and 1 on WT, both at about 6 s after join, from the lead-mode pacer probing down to its first starvation; none in the remaining 294 s; 0 late ticks. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
+| 2 | Reconciliation, 0 corrections over 5 min | **not met on this host** | After `18e1e23` (late-input grace): 2 corrections on WS and 2 on WT at load 19–67; the start-up probe correction is gone (`heldLate` 10/9); 3 of 4 corrections coincide with host stalls, 1 has none logged. Quiet window before the fix: 1+1 (pacer probe). Modifier half: speedScale 0.8 gives 2397 corrections in 120 s | [after fix](#check-2-after-cores-late-input-grace-18e1e23-decisions-57--2026-11-23-21552203-bots-loaded-host), [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
 | 4 | Shot budget vs 190 ms est. / 71 ms | **default pass; fast just outside** | Quiet window: default 195.9 ± 8.8 ms (+3.1%); 128 Hz + 144 FPS modelled 81.8 ± 6.0 ms (+15.2% over ≈ 71), gap = playout buffer 15.7 ms; browser default 214.4 / 206.6 / 211.0 ms (loaded) | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots) |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met; host-loaded in every run** | Quiet window (load 16–29): allocating 99.02% / p99 7.57 ms, zero-alloc 98.79% / 10.44 ms. Rerun 21:49 (load 24–61 from the owner's Chrome/node): zero-alloc 97.14% / 23.05 ms, allocating 95.04% / 39.67 ms; 82% / 91% of over-budget seconds coincide with host stalls. Zero-alloc allocates 70% less (277 vs 918 MB). No human players | [quiet window](#quiet-window--final-runs-of-checks-2-4-5-6-2026-11-23-21302147-bots), [rerun](#check-5-rerun-both-loops-2026-11-23-21492153-bots-host-not-quiet) |
@@ -1103,3 +1103,47 @@ bin/bot -url ws://127.0.0.1:18610/ws -n 50 -d 100s -tick 128 -stats -warmup 10s 
   run), with 24 against 59 GC cycles.
 - **What would settle it:** a pass/fail on tick time needs a host where the owner's Chrome and `node` are idle too.
   The best result so far is the quiet-window run: allocating 99.02% / p99 7.57 ms at load 28–29.
+
+## Check 2 after core's late-input grace (18e1e23, DECISIONS 57) — 2026-11-23 21:55–22:03, bots, loaded host
+
+Clean worktree build at `1fc9cf5` (includes `18e1e23`). The bots use `OnServerLead`. WS and WT ran at the same time,
+each with its own server, then the speed-modifier half ran alone. Every server PID was alive at the end, and no bot
+reported errors.
+
+```
+HTTP_PORT=18600 HTTPS_PORT=18643 sh scripts/check2-reconcile.sh ws 5m
+HTTP_PORT=18620 HTTPS_PORT=18663 sh scripts/check2-reconcile.sh wt 5m
+HTTP_PORT=18630 HTTPS_PORT=18631 sh scripts/check2-reconcile.sh ws 2m '{"speedScale":0.8}'
+```
+
+**Host:** not quiet.
+- **Check 2:** load average 66.71 at the start, mean 27.6, 18.99 at the end. Top CPU before: Chrome 62.2% / 41.5% /
+  29.4% (89289), duetexpertd 23.5%, Chrome 17.4% (53257). After: Chrome 58.6% / 40.4% / 32.8%, Slack renderer 27.8%,
+  Chrome 22.7%.
+- **Speed run:** load 20.03 → 13.33. Before: `node` 27.6% among the Chrome helpers. After: Playwright Chromium 109.9%.
+
+| Run | **Corrections** | Repeated (`starved`) | Held one tick (`heldLate`) | Held during stall (`heldOnStall`) | Pacer raises / margin at end | RTT / jitter | Server late ticks > 3 periods (max) | Probe > 3 periods (max) |
+|---|---|---|---|---|---|---|---|---|
+| WS 5 min (PID 32089) | **2** | 2 | 10 | 70 | 6 / 0 | 41.59 / 0.48 ms | 238 (871.1 ms) | 7 (101.2 ms) |
+| WT 5 min (PID 32081) | **2** | 2 | 9 | 65 | 6 / 0 | 41.60 / 0.83 ms | 253 (617.1 ms) | 8 (104.4 ms) |
+| WS 2 min, speedScale 0.8 (PID 43072) | **2397** (of 2399 snapshots) | 0 | 1 | 7 | 1 / 1 | 41.52 / 2.27 ms | 8 (71.5 ms) | 1 (61.1 ms) |
+
+Corrections against host stalls (a server late tick or a probe pause within ±2 s):
+
+| Correction | Matching host stall |
+|---|---|
+| WT 21:56:06.440 | yes: both servers logged late ticks at 21:56:06 |
+| WS 21:59:36.327 | **none found**; the next burst starts at 21:59:38.9, 2.6 s later |
+| WS 21:59:46.102 | yes: late ticks at 21:59:46 in both servers, and a probe pause of 84 ms at 21:59:46.293 |
+| WT 21:59:46.482 | yes: the same 21:59:46 stall |
+
+**Verdict, check 2: not met on this host (2 corrections per run), but the code-caused correction is gone.**
+- The quiet-window run had 1 correction per run, about 6 s after join, from the pacer's probe-down. None appears
+  here: `heldLate` 10 / 9 shows the grace tick holding those late inputs without a correction.
+- The 4 remaining corrections equal the 4 repeated inputs (`starved` 2 + 2). Three coincide with host stalls; one
+  (WS 21:59:36.3) has no logged stall.
+- A pass/fail needs a run on a quiet host. Here the load reached 66, and the servers logged 238 / 253 late ticks.
+
+**Verdict, second half: corrections appear, as B.9 #2 expects.** With `speedScale` 0.8, 2397 of 2399 snapshots
+corrected the prediction. Smoothing is drawn by the browser client (P25 rubber-band), so a headless bot cannot
+measure it.
