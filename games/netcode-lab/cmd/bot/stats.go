@@ -290,3 +290,26 @@ func totals(out []Summary) map[string]any {
 	return map[string]any{"corrections": corr, "replayed": repl, "inputsSent": inputs, "snapshots": snaps,
 		"botsWithErrors": errs, "maxServerStarvedTicks": starvedMax, "rttMedianMsMedian": pct(rtts, 0.5), "tickRatesSeen": rates}
 }
+
+// interArrival summarises snapshot gaps (P29, B.9 check 6): percentiles, a
+// histogram in multiples of the send interval, and stalls longer than 3x it.
+func interArrival(gaps []float64, intervalMs float64) map[string]any {
+	g := append([]float64(nil), gaps...)
+	slices.Sort(g)
+	hist := map[string]int{}
+	over3 := 0
+	for _, v := range gaps {
+		k := int(v / intervalMs)
+		key := fmt.Sprintf("%d-%dx", k, k+1)
+		if k >= 6 {
+			key = ">=6x"
+		}
+		hist[key]++
+		if v > 3*intervalMs {
+			over3++
+		}
+	}
+	return map[string]any{"samples": len(g), "sendIntervalMs": round3(intervalMs),
+		"p50Ms": round3(pct(g, 0.5)), "p95Ms": round3(pct(g, 0.95)), "p99Ms": round3(pct(g, 0.99)), "maxMs": round3(g[len(g)-1]),
+		"stallsOver3xInterval": over3, "histogramByInterval": hist}
+}

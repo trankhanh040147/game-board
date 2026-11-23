@@ -67,6 +67,8 @@ type Summary struct {
 	TickRate         int             `json:"tickRate"`
 	CorrectionTimes  []string        `json:"correctionTimes,omitempty"`
 	Brain            any             `json:"shots,omitempty"`
+	BadSnapshots     int             `json:"undecodableSnapshots"`
+	InterArrival     map[string]any  `json:"snapshotInterArrival,omitempty"`
 	Errors           []string        `json:"errors,omitempty"`
 }
 
@@ -76,25 +78,28 @@ type bot struct {
 	start time.Time
 	rng   *rand.Rand
 
-	mu       sync.Mutex
-	ep       codec.Endpoint
-	clk      clock.Sync
-	pacer    *clock.Pacer
-	pred     *sim.Predictor
-	set      settings
-	id       int
-	welcomed chan struct{}
-	snaps    int
-	lastSnap float64
-	maxGap   float64
-	starved  uint16
-	errs     []string
-	dist     float64
-	lastPos  [3]sim.Fx
-	cond     json.RawMessage
-	brain    brain
-	corrAt   []string       // wall-clock time of each correction (first 500)
-	rec      *statsRecorder // non-nil on the bot that records server stats
+	mu        sync.Mutex
+	ep        codec.Endpoint
+	clk       clock.Sync
+	pacer     *clock.Pacer
+	pred      *sim.Predictor
+	set       settings
+	id        int
+	welcomed  chan struct{}
+	snaps     int
+	lastSnap  float64
+	maxGap    float64
+	starved   uint16
+	errs      []string
+	dist      float64
+	lastPos   [3]sim.Fx
+	cond      json.RawMessage
+	brain     brain
+	baselines codec.Baselines // v3 delta baselines by SnapID
+	badSnaps  int
+	gaps      []float64      // snapshot inter-arrival times (ms), P29
+	corrAt    []string       // wall-clock time of each correction (first 500)
+	rec       *statsRecorder // non-nil on the bot that records server stats
 }
 
 func (b *bot) now() float64 { return float64(time.Since(b.start).Nanoseconds()) / 1e6 }
@@ -162,12 +167,14 @@ func (b *bot) readLoop(ctx context.Context) {
 				b.clk.OnPong(p, now)
 			}
 		case codec.TSnapshot:
-			codec.ReadSnapshot(&r, &snap)
+			codec.ReadSnapshotWith(&r, &snap, &b.baselines)
 			if r.Err != nil {
+				b.badSnaps++
 				break
 			}
 			if b.lastSnap > 0 {
 				b.maxGap = math.Max(b.maxGap, now-b.lastSnap)
+				b.gaps = append(b.gaps, now-b.lastSnap)
 			}
 			b.lastSnap = now
 			b.snaps++
@@ -184,7 +191,7 @@ func (b *bot) readLoop(ctx context.Context) {
 				}
 			}
 			w.B = w.B[:0]
-			codec.AppendSnapshotAck(&w, b.ep.NextHeader(codec.TSnapshotAck, now), &codec.SnapshotAck{BaselineID: snap.BaselineID, ServerTick: snap.ServerTick})
+			codec.AppendSnapshotAck(&w, b.ep.NextHeader(codec.TSnapshotAck, now), &codec.SnapshotAck{BaselineID: snap.SnapID, ServerTick: snap.ServerTick} /* v3: ack the snapshot id */)
 			out := append([]byte(nil), w.B...)
 			b.mu.Unlock()
 			b.conn.SendDatagram(out)
@@ -330,6 +337,10 @@ loop:
 	}
 	if b.brain != nil {
 		sum.Brain = b.brain.report()
+	}
+	sum.BadSnapshots = b.badSnaps
+	if len(b.gaps) > 0 && b.set.SendRate > 0 {
+		sum.InterArrival = interArrival(b.gaps, 1000/float64(b.set.SendRate))
 	}
 	if b.snaps > 0 {
 		sum.AvgReplayPerSnap = round2(float64(b.pred.Replayed) / float64(b.snaps))
