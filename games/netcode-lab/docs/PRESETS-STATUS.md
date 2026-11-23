@@ -23,9 +23,9 @@ room's Lab; the link carries `?preset=Pxx` so the page can apply that preset's s
 | P15 Budget table | ✓ (58367a2) | done | perf panel table, formula labelled est., tick wait = playout buffer | – |
 | P16 Regions and fragile cables | ✗ (page; verified, flip waits) | regions mounted on the main server | `/infra.html?preset=P16` puts the page in state (verified) | client: Lab must open the page link for built page presets (server answers `presetPage`), and smoke must expect that; then flip |
 | P17 Beacons and matchmaking | ✗ (page; verified, flip waits) | as P16 | `/infra.html?preset=P17` verified | client, as P16 |
-| P18 Relay / backbone | ✗ (page) | as P16 | `?preset=P18` state verified; scribe's S12 walk found the budget bar missing (since added in 968711d) and per-sample loss not better: re-walk needed | scribe (re-walk), client (as P16) |
+| P18 Relay / backbone | ✗ (page; verified, flip waits) | regions mounted on the main server | scribe S14 (f05bcb6) at d2c12c6: `infra.html?preset=P18` per-route est. budget bars, to sg viettel/good public vs backbone jitter 9.5 vs 0.5 ms, bar 208 vs 191 ms; with the cut jitter 16.0 vs 1.5 ms, loss 1/10 vs 0/10, bar 308 vs 233 ms; core's `pages-core.mjs` (C5) confirms the link state | client: commit the Lab fix (below), then flip |
 | P19 Tick health | ✓ (58367a2; preset turns the naive loop on) | done | perf panel tick health + loop switch | live 50-bot comparison owed in the quiet window (bots) |
-| P20 Percentiles | ✗ (page) | `/metrics` mounted | Grafana alert not verified by core; DEMO says Prometheus/Grafana not run by scribe | duel/scribe (compose run), client (as P16) |
+| P20 Percentiles | ✗ (page; verified, flip waits) | `/metrics` mounted | scribe S14 (f05bcb6) at d2c12c6: compose drill (30 players, cut held 150 s): ISPRouteP95High FIRING for sg/vnpt (t=103 s, 194), sg/fpt (124 s, 184), sg/viettel (137 s, 191) from /api/v1/alerts; Grafana mean-vs-p99 panel 18 series, no "No data" | client: commit the Lab fix, then flip |
 | P21 Rollback | ✗ (page; verified, flip waits) | duel relay mounted | `/duel.html?preset=P21`: mode rollback, D 0, banner, match running (verified) | client, as P16 |
 | P22 Input delay | ✗ (page; verified, flip waits) | as P21 | `?preset=P22`: rollback, D auto (verified) | client, as P16 |
 | P23 Lockstep | ✗ (page; verified, flip waits) | as P21 | `?preset=P23`: lockstep, D auto (verified) | client, as P16 |
@@ -72,3 +72,13 @@ on 18117), PID-recorded, alive for every run and stopped by PID; host load avera
 
 Page presets P16, P17, P21, P22, P23 stay ✗: client's Lab at 2c9ba63 still offers "apply" for built page presets
 (lab.ts 180-186), so flipping them still fails the smoke's apply loop (C5 evidence). They flip when the Lab opens the page.
+
+
+## Page presets: why the flip waits (2026-11-23, core)
+
+All seven page presets (P16, P17, P18, P20, P21, P22, P23) are verified: their `?preset=` links (core C5) and, for P18
+and P20, scribe's S14 walk and compose drill. They flip together when client commits its Lab fix. At HEAD 539aee6
+the committed `client/src/hud/lab.ts` (line 180) still enables "apply" for a built page preset. The smoke's apply
+loop (`smoke.mjs` 165-169) then fails for each one (measured in C5: 5 failures for 5 flipped presets), because
+the server answers `presetPage`. Client's uncommitted working copy (`lab.ts` 201: built page presets disabled
+with "opens its own page"; `session.ts` 158 handles `presetPage`) fixes that.
