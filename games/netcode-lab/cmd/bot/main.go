@@ -383,6 +383,7 @@ func main() {
 	kind := flag.String("kind", "walker", "walker = bots; probe = no-network control that sleeps on the server's tick schedule and reports late wake-ups (check 2)")
 	probeHz := flag.Int("hz", 64, "with -kind probe: tick rate to sleep on")
 	tick := flag.Int("tick", 0, "set the server tick rate (20/30/64/128) through the Lab before the bots join; needs -token")
+	condAll := flag.String("cond", "", `conditioner for every player and new joiners, as JSON {"up":{...},"down":{...}} (keys delayMs, jitterMs, lossPct, dupPct, reorderPct); needs -token`)
 	lab := flag.String("lab", "", `extra Lab settings to apply before the bots join, as JSON (e.g. '{"speedScale":0.8}'); needs -token`)
 	token := flag.String("token", os.Getenv("NETLAB_ADMIN_TOKEN"), "admin token for -tick (default $NETLAB_ADMIN_TOKEN)")
 	stats := flag.Bool("stats", false, "record the server's 1 Hz tick stats (via bot 1) and print a load report")
@@ -406,6 +407,15 @@ func main() {
 	if *tick > 0 {
 		if err := setTickRate(ctx, *url, *token, *tick); err != nil {
 			log.Fatalf("-tick %d: %v", *tick, err)
+		}
+	}
+	if *condAll != "" {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(*condAll), &m); err != nil {
+			log.Fatalf("-cond: %v", err)
+		}
+		if err := applyCondAll(ctx, *url, *token, m); err != nil {
+			log.Fatalf("-cond %s: %v", *condAll, err)
 		}
 	}
 	if *lab != "" {

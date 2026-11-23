@@ -266,6 +266,55 @@ func applyLab(ctx context.Context, url, token string, settings map[string]any) e
 	}
 }
 
+// applyCondAll sets every player's conditioner and the default for new joiners
+// (control "cond" with all:true and the admin token).
+func applyCondAll(ctx context.Context, url, token string, cond map[string]any) error {
+	if token == "" {
+		return fmt.Errorf("no admin token (-token or NETLAB_ADMIN_TOKEN)")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	conn, err := dial(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer conn.Close("admin done")
+	join, _ := json.Marshal(map[string]string{"t": "join", "name": "harness-admin"})
+	if err := conn.SendControl(join); err != nil {
+		return err
+	}
+	sent := false
+	for {
+		m, err := conn.Recv(ctx)
+		if err != nil {
+			return err
+		}
+		if !m.Control {
+			continue
+		}
+		var c ctrl
+		if json.Unmarshal(m.Data, &c) != nil {
+			continue
+		}
+		switch {
+		case c.T == "welcome" && !sent:
+			msg := map[string]any{"t": "cond", "all": true, "token": token}
+			for k, v := range cond {
+				msg[k] = v
+			}
+			b, _ := json.Marshal(msg)
+			if err := conn.SendControl(b); err != nil {
+				return err
+			}
+			sent = true
+		case c.T == "cond" && sent:
+			return nil
+		case c.T == "error":
+			return fmt.Errorf("server: %s", c.Msg)
+		}
+	}
+}
+
 func totals(out []Summary) map[string]any {
 	var corr, repl, starvedMax uint64
 	var inputs uint32
