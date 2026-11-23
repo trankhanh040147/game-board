@@ -349,3 +349,22 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
     - Live 60 s runs on this Mac at load average 26–47 (2026-11-23 20:08–20:14) are **inconclusive**. Both rules
       climbed to 5–6 because inputs arrived up to 13 ticks after their stamp (lead −13), which no margin rule
       absorbs. The quiet-host before/after run is still owed (MEASUREMENTS).
+
+## 2026-11-23 — duel: D3 presenter panel for P11, P12, P15, P19, P29
+
+1. **One panel, one mount call.** `client/src/hud/perf.ts` exports `mountPerf(session, hud)`. It wraps only public
+   hooks (transport `onBinary`/`onControl`/`sendBinary`, `session.onSnapEvent`) and always calls the previous
+   handler, so it needs one line in `main.ts` (client's file) after the page sets its handlers. F3 toggles it; it
+   also opens on P11, P12, P15, P19 and P29.
+2. **P11 segments are cut at measured instants on the server clock**: click → first input packet carrying the fire
+   (shooter clock) → `recvMs` → `tickStartMs` → first snapshot carrying the ShotResult → target receives the Damage
+   event → the target frame whose render time reached the shot's tick. The target splits its part into interpolation
+   and frame wait (how long the shot had been renderable when the frame drew it) and sends `shotSeen`. Each client
+   maps its clock to the server's from pongs (median offset of the lowest-RTT half of 16), independently of the WASM
+   clock. Only hits get the target half; misses show the shooter half and stay out of the average of 20.
+3. **The downlink segment starts at the shooter's snapshot send time.** The target's snapshot send time is not in
+   `shotSeen`; all clients get a snapshot on the same tick, so the two differ by the send schedule only.
+4. **P15 tolerance**: the total within ±15% (B.9 check 4); a segment is flagged beyond max(15% of the formula, 3 ms)
+   and shows why the formula and the measurement differ (for example the server's input buffer in "tick wait").
+5. **P19 shows tick-time percentiles, not buckets**: the server sends p50/p95/p99/p999/max for the whole window.
+   The panel keeps the last numbers seen per loop mode so the two loops can be compared after a switch.
