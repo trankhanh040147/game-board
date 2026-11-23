@@ -32,3 +32,34 @@ func TestOffsetAndTick(t *testing.T) {
 		t.Fatalf("tick %f want %f", got, want)
 	}
 }
+
+// On a calm host a stall's margin raise drains back to 1 tick within seconds,
+// and a starvation in the first second of a session still raises it.
+func TestPacerMarginRaisesAndDrains(t *testing.T) {
+	p := NewPacer()
+	p.OnServerFeedback(0, 0)
+	p.OnServerFeedback(1, 500) // first second of the session
+	if p.Margin != 2 {
+		t.Fatalf("first-second starvation must raise: %v", p.Margin)
+	}
+	p.OnServerFeedback(2, 900) // same burst: no second raise
+	if p.Margin != 2 {
+		t.Fatalf("burst raised twice: %v", p.Margin)
+	}
+	now := 900.0
+	for i := uint16(3); i < 7; i++ { // four more stalls, 1.5 s apart
+		now += 1500
+		p.OnServerFeedback(i, now)
+	}
+	if p.Margin != 6 {
+		t.Fatalf("margin %v want 6", p.Margin)
+	}
+	stallEnd := now
+	for p.Margin > 1 && now-stallEnd < 60000 {
+		now += 50 // a snapshot every 50 ms, no starvation
+		p.OnServerFeedback(6, now)
+	}
+	if took := now - stallEnd; p.Margin != 1 || took > 8000 {
+		t.Fatalf("margin %v after %.0f ms; want 1 within 8 s", p.Margin, took)
+	}
+}

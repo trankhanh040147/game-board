@@ -160,7 +160,7 @@ func base(s *Settings) { *s = DefaultSettings() }
 func Presets() []Preset {
 	return []Preset{
 		{ID: "P01", Title: "Vocabulary", Section: "A.1", Built: true, apply: base,
-			Banner: "RTT, tick, snapshot and frame: 64 Hz server, 20 snapshots/s, 60 FPS, 40 ms RTT."},
+			Banner: "RTT, tick, snapshot and frame. Defaults are the A.1 running assumptions (est.): 64 Hz server, 20 snapshots/s, 60 FPS; 40 ms RTT is simulated by the conditioner."},
 		{ID: "P02", Title: "Dumb client", Section: "A.4", Built: true,
 			apply: func(s *Settings) {
 				base(s)

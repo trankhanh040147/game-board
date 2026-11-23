@@ -70,7 +70,24 @@ func TestShootOverTheWire(t *testing.T) {
 	room.mu.Lock()
 	room.clients[a.id].state = sim.State{Pos: [3]sim.Fx{0, 0, f(-10)}, OnGround: true}
 	room.clients[b.id].state = sim.State{Pos: [3]sim.Fx{0, 0, f(-20)}, OnGround: true}
+	moved := room.tick.Load()
+	room.mu.Unlock()
+	// The history entry for the current tick may already hold the old spawn
+	// positions; render at a tick recorded after the move.
+	deadline := time.Now().Add(2 * time.Second)
+	for room.tick.Load() < moved+2 {
+		if time.Now().After(deadline) {
+			t.Fatal("server did not tick")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	room.mu.Lock()
 	tick := room.tick.Load()
+	if e := room.hist.at(tick); e == nil {
+		t.Fatal("no history at render tick")
+	} else if p, ok := e.find(b.id); !ok || p.pos != room.clients[b.id].state.Pos {
+		t.Fatalf("history at render tick does not hold the moved target: %+v", p)
+	}
 	room.mu.Unlock()
 
 	// Two inputs prime the server's playout buffer; the second fires at the target (yaw 0 = -Z).

@@ -18,6 +18,7 @@ import (
 	"github.com/quic-go/webtransport-go"
 
 	"netcodelab/net/transport"
+	"netcodelab/server/duelrelay"
 	"netcodelab/shared"
 )
 
@@ -40,6 +41,9 @@ func Serve(ctx context.Context, log *slog.Logger, room *Room, cfg Config) error 
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", transport.WSHandler(room.HandleConn))
+	// Duel mini-mode relay (M8, owned by "duel"), so LAN players reach it from the main URL.
+	duel := duelrelay.New(log)
+	mux.Handle("/duel/ws", transport.WSHandler(duel.HandleConn))
 	mux.HandleFunc("/shared/map.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -99,6 +103,7 @@ func Serve(ctx context.Context, log *slog.Logger, room *Room, cfg Config) error 
 		wtSrv = &webtransport.Server{H3: h3, CheckOrigin: func(*http.Request) bool { return true }}
 		h3mux := http.NewServeMux()
 		h3mux.Handle("/wt", transport.WTHandler(wtSrv, room.HandleConn))
+		h3mux.Handle("/duel/wt", transport.WTHandler(wtSrv, duel.HandleConn))
 		h3mux.Handle("/", mux)
 		h3.Handler = h3mux
 		go func() { errc <- wtSrv.ListenAndServe() }()

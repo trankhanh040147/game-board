@@ -5,8 +5,8 @@ package clock
 // of the estimated server tick, so they arrive just before the tick that needs
 // them. When the server reports that it had to repeat an input (its buffer
 // ran empty), the margin grows by one tick (at most once per second, so one
-// stall counts once); after each 3 s without starvation it shrinks by 0.25
-// tick. This keeps input latency low without starving the server.
+// stall counts once); after 2 s without starvation it shrinks by one tick
+// per second back to MinMargin. This keeps input latency low without starving the server.
 type Pacer struct {
 	Margin    float64 // ticks; starts at MinMargin
 	MinMargin float64
@@ -18,6 +18,7 @@ type Pacer struct {
 	haveStarved bool
 	calmSince   float64
 	raisedAt    float64
+	raisedOnce  bool
 	Adjustments int // times the margin was raised
 }
 
@@ -54,7 +55,8 @@ func (p *Pacer) OnServerFeedback(starved uint16, nowMs float64) {
 		p.lastStarved = starved
 		// One raise per burst: starvations within 1 s of a raise belong to
 		// the same stall and do not raise again.
-		if nowMs-p.raisedAt > 1000 {
+		if !p.raisedOnce || nowMs-p.raisedAt > 1000 {
+			p.raisedOnce = true
 			p.Margin = min(p.MaxMargin, p.Margin+1)
 			p.Adjustments++
 			p.raisedAt = nowMs
@@ -62,8 +64,10 @@ func (p *Pacer) OnServerFeedback(starved uint16, nowMs float64) {
 		p.calmSince = nowMs
 		return
 	}
-	if nowMs-p.calmSince > 3000 && p.Margin > p.MinMargin {
-		p.Margin = max(p.MinMargin, p.Margin-0.25)
-		p.calmSince = nowMs
+	// Calm for 2 s: give back one tick per second, so a stall's raise
+	// drains within seconds on a calm host (6 -> 1 in about 7 s).
+	if nowMs-p.calmSince > 2000 && p.Margin > p.MinMargin {
+		p.Margin = max(p.MinMargin, p.Margin-1)
+		p.calmSince = nowMs - 1000
 	}
 }
