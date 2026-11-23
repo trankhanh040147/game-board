@@ -233,6 +233,29 @@ func main() {
 		o.certHash, _ = base64.StdEncoding.DecodeString(info.WT.CertHashBase64)
 		o.useWT, o.wtBase = true, *wt
 	}
+	pollCut := func() {
+		if r, err := http.Get(o.base + "/api/regions"); err == nil {
+			var v struct {
+				CableCut bool `json:"cableCut"`
+			}
+			json.NewDecoder(r.Body).Decode(&v)
+			r.Body.Close()
+			cutNow.Store(v.CableCut)
+		}
+	}
+	pollCut() // before the first round, so no sample is filed under a stale state
+	stopPoll := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stopPoll:
+				return
+			case <-time.After(250 * time.Millisecond):
+				pollCut()
+			}
+		}
+	}()
+	defer close(stopPoll)
 	rng := rand.New(rand.NewPCG(*seed, 7))
 	a := &agg{samples: map[string][]float64{}, sent: map[string]int{}, lost: map[string]int{}, jit: map[string][2]float64{}}
 	stop := make(chan struct{})
@@ -260,6 +283,7 @@ func main() {
 			log.Fatalf("cable cut %v failed: %v %v", on, err, r)
 		}
 		r.Body.Close()
+		cutNow.Store(on)
 		fmt.Fprintf(os.Stderr, "cable cut %v at %.0f s\n", on, time.Since(start).Seconds())
 	}
 	if *cutAt > 0 {
@@ -268,23 +292,6 @@ func main() {
 			time.AfterFunc(*cutAt+*cutFor, func() { cut(false) })
 		}
 	}
-	go func() {
-		for {
-			if r, err := http.Get(o.base + "/api/regions"); err == nil {
-				var v struct {
-					CableCut bool `json:"cableCut"`
-				}
-				json.NewDecoder(r.Body).Decode(&v)
-				r.Body.Close()
-				cutNow.Store(v.CableCut)
-			}
-			select {
-			case <-stop:
-				return
-			case <-time.After(250 * time.Millisecond):
-			}
-		}
-	}()
 	time.Sleep(*d)
 	close(stop)
 	wg.Wait()

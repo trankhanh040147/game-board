@@ -19,7 +19,7 @@ services:
   infra:
     image: netcode-lab:local
     depends_on: [game]
-    command: ["bin/infra", "-http", "0.0.0.0:8091", "-https", "0.0.0.0:8454", "-www", "bin/duel-www"]
+    command: ["bin/infra", "-http", "0.0.0.0:8091", "-https", "0.0.0.0:8454", "-www", "bin/duel-www", "-advertise-https-port", "${INFRA_HTTPS_PORT:-8454}"]
     environment:
       - "NETLAB_ADMIN_TOKEN=${NETLAB_ADMIN_TOKEN:-lab}"
     ports:

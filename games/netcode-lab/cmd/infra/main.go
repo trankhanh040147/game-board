@@ -43,6 +43,7 @@ func main() {
 	httpsAddr := flag.String("https", "0.0.0.0:18721", "HTTPS + WebTransport; empty disables")
 	www := flag.String("www", "bin/duel-www", "built pages (make duel-www): infra.html, duel.html")
 	relaxAfter := flag.Float64("relax-after", 10, "matchmaker: seconds before the threshold relaxes")
+	advertise := flag.Int("advertise-https-port", 0, "WebTransport port to tell browsers (when a container maps it to another host port); 0 = the listen port")
 	flag.Parse()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -68,6 +69,9 @@ func main() {
 	if *httpsAddr != "" {
 		_, p, _ := net.SplitHostPort(*httpsAddr)
 		httpsPort, _ = strconv.Atoi(p)
+	}
+	if *advertise > 0 {
+		httpsPort = *advertise
 	}
 	var wtSrv *webtransport.Server
 	wt := func(on func(transport.Conn)) http.Handler {

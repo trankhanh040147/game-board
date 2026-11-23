@@ -40,6 +40,7 @@ document.body.innerHTML = `<main>
   <div class="dim">A.11 shot budget for a player and a target on the measured route to the best region: uplink + downlink = this browser's
   median RTT, plus the late-packet allowance (p95 − median, which the interpolation buffer must absorb), plus fixed A.11 values
   (64 Hz, 20 snapshots/s, 100 ms buffer, 60 FPS). Route settings are simulated; the RTTs are measured here. Ping once per route to compare.</div>
+  <div class="row">Region <select id="bregion"><option value="best">best (lowest median)</option><option>hcm</option><option>hn</option><option>sg</option></select></div>
   <div id="budget"></div></section>
 <section style="grid-column:1/-1"><h2>Ping history <span class="tag">routes simulated</span></h2><table id="hist"></table></section>
 <section style="grid-column:1/-1"><h2>Route table <span class="tag">simulated</span></h2><table id="routes"></table>
@@ -126,7 +127,8 @@ function drawBudget() {
   const latest = new Map<string, Round[]>();
   for (const [k, id] of latestId) latest.set(k, history.filter((h) => h.id === id));
   const bars = [...latest.values()].map((g) => {
-    const best = g.filter((x) => Number.isFinite(x.median)).sort((a, b) => a.median - b.median)[0];
+    const want = sel("bregion");
+    const best = g.filter((x) => Number.isFinite(x.median) && (want === "best" || x.region === want)).sort((a, b) => a.median - b.median)[0];
     if (!best) return null;
     const v: Record<string, number> = { ...FIXED, uplink: best.median / 2, downlink: best.median / 2, late: Math.max(0, best.p95 - best.median) };
     return { best, v, total: PARTS.reduce((a, [k]) => a + v[k], 0) };
@@ -140,6 +142,7 @@ function drawBudget() {
 
 let keepTimer = 0;
 $("ping").addEventListener("click", () => round());
+$("bregion").addEventListener("change", () => drawBudget());
 $("keep").addEventListener("change", async (e) => {
   const on = (e.target as HTMLInputElement).checked;
   if (!on) { clearTimeout(keepTimer); return; }
