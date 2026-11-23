@@ -3,7 +3,7 @@ import type { Transport } from "./transport";
 import type { InputIntent } from "../game/input";
 import { InterpBuffer, type EntitySample } from "../game/interp";
 import type { LabBackend } from "../hud/lab";
-import { isGameEvent, type GameEvent, type RoundMsg, type ScoreRow } from "../game/events";
+import type { SnapEvent, RoundMsg, ScoreRow, KillMsg, ClaimRejectedMsg, HistoryMsg, DebugPosData } from "../game/events";
 
 export interface SupportedSetting { key: string; kind: string; allowed?: unknown[]; min?: number; max?: number; built: boolean; note?: string }
 export interface PresetDesc { id: string; title: string; section: string; banner?: string; built: boolean }
@@ -31,12 +31,31 @@ export class Session implements LabBackend {
   serverStats: any = null;
   lastError = "";
   onChange: () => void = () => {};
-  /** Server-confirmed game events (M3), as decoded by the WASM codec. */
-  onGameEvent: (e: GameEvent, now: number) => void = () => {};
+  /** Server-confirmed snapshot events (shot/damage/death), each delivered once (the server resends until acked). */
+  onSnapEvent: (e: SnapEvent, now: number) => void = () => {};
+  onKill: (m: KillMsg, now: number) => void = () => {};
+  onClaimRejected: (m: ClaimRejectedMsg, now: number) => void = () => {};
+  onHistory: (m: HistoryMsg) => void = () => {};
   round: RoundMsg | null = null;
   scoreRows: ScoreRow[] | null = null;
-  /** Snapshot events the codec could not decode into a known kind (shown in the Lab footer, never dropped silently). */
+  /** Snapshot events the codec did not know (counted, never dropped silently). */
   unknownEvents = 0;
+  private seenShots = new Set<number>();
+  private seenDamage = new Set<string>();
+  private seenLife = 0;
+  private deathLives = new Set<number>();
+  spectator = false;
+  life = 0;
+  dead = false;
+  private welcomed = false;
+  /** Spectators: each player's own view, relayed by the server while truthGhost is on (B.7 three truths). */
+  readonly debugFrom = new Map<number, { at: number; data: DebugPosData }>();
+  /** Client-measured numbers for the 1 Hz report (scoreboard ping/loss/FPS); set by the page. */
+  reportSource: () => { fps: number } = () => ({ fps: 0 });
+  /** Data for the debugpos relay (own predicted + others as drawn); set by the page. */
+  debugSource: (() => DebugPosData | null) | null = null;
+  private lastReport = 0;
+  private lastDebug = 0;
   /** The server placed us (join; respawn in M4): the view takes the server's yaw/pitch. */
   onSpawn: (yaw: number, pitch: number) => void = () => {};
 
@@ -55,6 +74,8 @@ export class Session implements LabBackend {
   private curPred: SimState | null = null;
   private lastTickAt = 0;
   private lastClientTick = 0;
+  /** Own predicted state per client tick (last 256), so P24 can say where you were on your screen at the hit tick. */
+  readonly ownByTick = new Map<number, SimState>();
   private offset = [0, 0, 0];
   private lastPing = -Infinity;
   lastReplayed = 0;
@@ -68,20 +89,20 @@ export class Session implements LabBackend {
   private lossWin: { sent: number; lost: number; recv: number; gaps: number }[] = [];
   private lastSnapAt = 0;
 
-  constructor(readonly sim: NetcodeSim, readonly t: Transport, name: string) {
+  constructor(readonly sim: NetcodeSim, readonly t: Transport, name: string, spectate = false) {
     this.conn = sim.newConn();
     this.clock = sim.newClock();
     this.pacer = sim.newPacer();
     t.onControl = (m) => this.onControl(m);
     t.onBinary = (b) => this.onBinary(b);
     t.onClose = (r) => { this.connected = false; this.closedReason = r; this.onChange(); };
-    t.sendControl({ t: "join", name });
+    t.sendControl(spectate ? { t: "join", name, spectate: true } : { t: "join", name });
     this.win.at = performance.now();
   }
 
   get tickRate(): number { return this.settings?.tickRate ?? 64; }
   get tickMs(): number { return 1000 / this.tickRate; }
-  get ready(): boolean { return this.pred !== 0; }
+  get ready(): boolean { return this.welcomed && (this.spectator || this.pred !== 0); }
   setting<T>(k: string, fallback: T): T { return (this.settings?.[k] as T) ?? fallback; }
   isBuilt(key: string): boolean { return this.supported.find((s) => s.key === key)?.built ?? false; }
 
@@ -101,9 +122,16 @@ export class Session implements LabBackend {
         this.presets = m.presets ?? [];
         this.builtPresets = new Set(this.presets.filter((p) => p.built).map((p) => p.id));
         this.cond = m.cond ?? null;
-        this.pred = this.sim.newPredictor(m.spawn);
-        this.curPred = this.prevPred = m.spawn;
-        this.onSpawn(this.sim.angleToRadians(m.spawn.yaw), this.sim.angleToRadians(m.spawn.pitch));
+        this.spectator = !!m.spectator;
+        this.life = m.life ?? 0;
+        this.seenLife = this.life;
+        if (m.round) this.round = m.round;
+        if (!this.spectator) {
+          this.pred = this.sim.newPredictor(m.spawn);
+          this.curPred = this.prevPred = m.spawn;
+          this.onSpawn(this.sim.angleToRadians(m.spawn.yaw), this.sim.angleToRadians(m.spawn.pitch));
+        }
+        this.welcomed = true;
         break;
       case "players":
         this.players = new Map((m.players ?? []).map((p: any) => [p.id, { name: p.name, team: p.team }]));
@@ -114,7 +142,11 @@ export class Session implements LabBackend {
       case "cond": this.cond = m.cond; break;
       case "stats": this.serverStats = m; break;
       case "round": this.round = m; break;
-      case "scoreboard": this.scoreRows = m.players; break;
+      case "scoreboard": this.scoreRows = m.players; this.round = { t: "round", no: m.no, state: m.state, endsAtServerMs: m.endsAtServerMs, scores: m.scores }; break;
+      case "kill": this.onKill(m, performance.now()); break;
+      case "claimRejected": this.onClaimRejected(m, performance.now()); break;
+      case "history": this.onHistory(m); break;
+      case "debugpos": this.debugFrom.set(m.from, { at: performance.now(), data: m.data }); break;
       case "error": this.lastError = m.msg; break;
     }
     this.onChange();
@@ -153,11 +185,18 @@ export class Session implements LabBackend {
     this.ownServer = s.own.state;
     this.ownInfo = s.own;
     this.sim.pacerFeedback(this.pacer, s.own.starved, now);
-    if (this.pred && s.lastProcessedInputSeq > 0) {
+    this.dead = s.own.dead;
+    if (this.pred && (s.lastProcessedInputSeq > 0 || s.own.life !== this.life)) {
       const replay = this.setting("reconcile", true);
-      const r = this.sim.reconcile(this.pred, s.own.state, s.lastProcessedInputSeq, this.sim.dtForRate(this.tickRate), replay);
+      const r = this.sim.reconcile(this.pred, s.own.state, s.lastProcessedInputSeq, this.sim.dtForRate(this.tickRate), replay, s.own.life, s.own.dead);
       this.lastReplayed = r.replayed;
-      if (replay) {
+      if (r.respawned || s.own.life !== this.life) {
+        // A new life: the server placed us at a spawn. Jump there, no blending, and take the spawn's view direction.
+        this.life = s.own.life;
+        this.offset = [0, 0, 0];
+        this.prevPred = this.curPred = r.state;
+        this.onSpawn(this.sim.angleToRadians(s.own.state.yaw), this.sim.angleToRadians(s.own.state.pitch));
+      } else if (replay) {
         // Same rules give delta 0; a real correction is blended out over a few frames (A.7) instead of a hard jump.
         if (r.corrected) for (let i = 0; i < 3; i++) this.offset[i] += r.delta[i] / this.sim.FX;
         if (this.prevPred) this.prevPred = { ...this.prevPred, x: this.prevPred.x - r.delta[0], y: this.prevPred.y - r.delta[1], z: this.prevPred.z - r.delta[2] };
@@ -167,6 +206,7 @@ export class Session implements LabBackend {
       }
       this.curPred = r.state;
     }
+    if (this.spectator) this.ownServer = null;
     const ents = new Map<number, EntitySample & { team: number; moving: boolean }>();
     const F = this.sim.FX;
     for (const e of s.entities) {
@@ -174,37 +214,62 @@ export class Session implements LabBackend {
     }
     this.interp.push(s.serverTimeMs, now, ents);
     for (const ev of s.events) {
-      if (isGameEvent(ev)) this.onGameEvent(ev, now);
-      else this.unknownEvents++;
+      if (ev.type === "shot") { if (this.seenShots.has(ev.shotSeq)) continue; this.seenShots.add(ev.shotSeq); }
+      else if (ev.type === "damage") { const k = `${ev.shooterId}:${ev.shotSeq}`; if (this.seenDamage.has(k)) continue; this.seenDamage.add(k); }
+      else if (ev.type === "death") { if (ev.life <= this.seenLife - 1 || this.deathLives.has(ev.life)) continue; this.deathLives.add(ev.life); }
+      else { this.unknownEvents++; continue; }
+      this.onSnapEvent(ev, now);
     }
+    if (this.seenShots.size > 512) this.seenShots = new Set([...this.seenShots].slice(-256));
+    if (this.seenDamage.size > 512) this.seenDamage = new Set([...this.seenDamage].slice(-256));
     this.t.sendBinary(this.sim.encodeSnapshotAck(this.conn, s.baselineId, s.serverTick, now));
   }
 
   /** Called every render frame. Runs the fixed ticks the pacer says are due; never passes frame dt to the sim. */
-  frame(now: number, sample: () => InputIntent, onFire: (seq: number) => void) {
+  frame(now: number, sample: () => InputIntent, onFire: (seq: number, clientTick: number) => { victimId: number; hitbox: number } | null | void) {
     if (now - this.lastPing >= PING_MS) {
       this.lastPing = now;
       this.t.sendBinary(this.sim.encodePing(this.conn, now));
     }
     this.measure(now);
+    if (now - this.lastReport >= 1000 && !this.spectator) {
+      this.lastReport = now;
+      const e = this.sim.clockEstimate(this.clock, now);
+      const loss = this.meas.downLossPct;
+      if (e.ready) this.t.sendControl({ t: "report", rttMs: +e.rttMs.toFixed(1), jitterMs: +e.jitterMs.toFixed(1), lossPct: loss === null ? 0 : +loss.toFixed(2), fps: this.reportSource().fps });
+    }
+    if (this.setting("truthGhost", false) && !this.spectator && this.debugSource && now - this.lastDebug >= 100) {
+      this.lastDebug = now;
+      const d = this.debugSource();
+      if (d) this.t.sendControl({ t: "debugpos", data: d });
+    }
     if (!this.pred || !this.settings) return;
+    const trust = this.setting<string>("authority", "server") === "trust";
     const dt = this.sim.dtForRate(this.tickRate);
     for (const clientTick of this.sim.pacerDue(this.pacer, this.clock, now)) {
       const i = sample();
       const B = this.sim.BTN;
       const buttons = (i.forward ? B.forward : 0) | (i.back ? B.back : 0) | (i.left ? B.left : 0) | (i.right ? B.right : 0) | (i.jump ? B.jump : 0) | (i.fire ? B.fire : 0);
       const cmd: any = { seq: ++this.seq, clientTick, buttons, yaw: this.sim.angleFromRadians(i.yaw), pitch: this.sim.angleFromRadians(i.pitch) };
+      let claim: { victimId: number; hitbox: number } | null = null;
       if (i.fire) {
         const rt = this.renderServerTick(now);
         if (rt !== null) { cmd.renderTick = Math.floor(rt); cmd.renderFrac = Math.floor((rt % 1) * 65536); }
         cmd.subtickFrac = 0;
-        onFire(cmd.seq);
+        claim = onFire(cmd.seq, clientTick) || null;
       }
       this.prevPred = this.curPred;
       this.curPred = this.sim.predict(this.pred, cmd, dt);
       this.lastTickAt = now;
       this.lastClientTick = clientTick;
+      this.ownByTick.set(clientTick, this.curPred!);
+      if (this.ownByTick.size > 256) this.ownByTick.delete(this.ownByTick.keys().next().value!);
       this.t.sendBinary(this.sim.encodeInputFromPredictor(this.conn, this.pred, now));
+      if (trust) {
+        // A.5 trust mode: the client states its position and its own hit verdicts; the server relays them.
+        const p = this.curPred!;
+        this.t.sendBinary(this.sim.encodeClaim(this.conn, { seq: cmd.seq, clientTick, x: p.x, y: p.y, z: p.z, victimId: claim?.victimId ?? 0, hitbox: claim?.hitbox ?? 0 }, now));
+      }
     }
     const decay = Math.exp(-(now - (this.lastFrame || now)) / CORRECTION_TAU_MS);
     for (let k = 0; k < 3; k++) this.offset[k] *= decay;
@@ -286,6 +351,16 @@ export class Session implements LabBackend {
 
   applyPreset(id: string, token: string) { this.t.sendControl({ t: "preset", token, id }); }
   setSetting(key: string, value: unknown, token: string) { this.t.sendControl({ t: "lab", token, settings: { [key]: value } }); }
+  /** P03 "modded client": one forged Claim (type 7) — "I hit <enemy> in the head" from where I stand, through any wall.
+   *  The admin token only gates the Lab button; the server judges the claim by authority mode alone. */
+  sendForgedClaim(_token: string): string {
+    const enemy = [...this.players].find(([id, p]) => id !== this.id && p.team !== this.team && p.team !== "spectator");
+    if (!enemy || !this.curPred) return "no enemy player to claim a hit on";
+    const p = this.curPred;
+    this.t.sendBinary(this.sim.encodeClaim(this.conn, { seq: this.seq, clientTick: this.lastClientTick, x: p.x, y: p.y, z: p.z, victimId: enemy[0], hitbox: this.sim.HIT.head }, performance.now()));
+    return `forged headshot claim on ${enemy[1].name} sent`;
+  }
+  requestHistory() { this.t.sendControl({ t: "history" }); }
   setCond(up: Partial<CondDir>, down: Partial<CondDir>) { this.t.sendControl({ t: "cond", up, down }); }
   close() { this.t.close(); }
 }

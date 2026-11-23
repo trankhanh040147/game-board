@@ -15,6 +15,8 @@ export interface LabBackend {
   cond?: { up: { delayMs: number; jitterMs: number; lossPct: number }; down: { delayMs: number; jitterMs: number; lossPct: number } } | null;
   setCond?(up: { delayMs: number; jitterMs: number; lossPct: number }, down: { delayMs: number; jitterMs: number; lossPct: number }): void;
   lastError?: string;
+  /** P03: send one forged result claim as a "modded client" (admin only). */
+  sendForgedClaim?(token: string): string;
   applyPreset(id: string, token: string): void;
   setSetting(key: string, value: unknown, token: string): void;
 }
@@ -116,6 +118,19 @@ export class LabPanel {
       }
       row.style.flexWrap = "wrap";
       frag.appendChild(row);
+    }
+
+    {
+      const built = b.connected && b.builtPresets.has("P03") && !!b.sendForgedClaim; // P03 built = server handles Claim (type 7)
+      const box = el("div", { class: "unsafe" });
+      box.innerHTML = `<b>⚠ Modded client (unsafe)</b><br><span class="dim">Sends a forged "I hit them in the head" claim, as a cheat would, to show what P03 trust mode accepts and what server authority rejects.</span>`;
+      const btn = el("button", { id: "forged-claim" }, "Send forged headshot claim");
+      btn.disabled = !built || !canAdmin;
+      const why = !b.connected ? "server not connected" : !built ? "not built yet (server side of P03)" : !this.token ? "needs admin token" : "";
+      btn.addEventListener("click", () => this.setStatus(b.sendForgedClaim?.(this.token) ?? ""));
+      box.append(btn);
+      if (why) box.append(el("span", { class: "dim" }, ` · ${why}`));
+      frag.appendChild(box);
     }
 
     let group = "";

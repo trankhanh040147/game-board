@@ -16,7 +16,10 @@ import { PRESET_DOCS, conceptUrl } from "./hud/presets";
 import { Sfx } from "./audio";
 import { ShotVfx } from "./render/vfx";
 import { CombatHud } from "./hud/combat";
-import type { ScoreRow } from "./game/events";
+import { HIT_HEAD, toVec, type ScoreRow, type ShotEvent, type DeathEvent, type Vec3 } from "./game/events";
+import { HitboxOverlay } from "./render/hitboxes";
+import { DeathReplay } from "./hud/deathReplay";
+import * as THREE from "three";
 
 // B.3: 600 rpm. Cosmetic cadence only; the server decides which shots exist.
 const FIRE_INTERVAL_MS = 100;
@@ -125,35 +128,54 @@ async function boot() {
   const vfx = new ShotVfx(world.scene, world.camera, assets.vfx.impact_decal ?? null, () => world.shotTargets());
   let lastShotAt = -Infinity;
   const combat = new CombatHud(hud, { hit: "./textures/vfx/hit_marker.png", head: null, skull: null } /* headshot.png and kill_icon.png at bfce3d7 are not usable images (reported) */);
-  let deadUntilServerMs: number | null = null;
+  let deathRespawnTick: number | null = null;
+  const overlay = link.sim ? new HitboxOverlay(world.scene, { body: link.sim.PLAYER.body, head: link.sim.PLAYER.head }) : null;
+  const replay = new DeathReplay(hud, courtyard);
+  const shotReason = el("div", { id: "shotreason", class: "hud box" });
+  shotReason.style.display = "none";
+  hud.appendChild(shotReason);
+  let shotReasonUntil = 0;
+  /** What this client drew for each other player when it fired (P08/P09 red box), by input seq. */
+  const shotSeen = new Map<number, { at: number; seen: Map<number, Vec3> }>();
+  const ownTrail: { t: number; p: Vec3 }[] = [];
   let killerName = "";
   let lastPhase: string | null = null;
   if (s) {
     const nameOf = (id: number) => id === s.id ? `${s.name} (you)` : s.players.get(id)?.name ?? `player ${id}`;
     const teamOf = (id: number) => id === s.id ? s.team : s.players.get(id)?.team ?? "";
-    s.onGameEvent = (e, now) => {
-      switch (e.kind) {
-        case "hit":
-          if (e.shooter === s.id) { combat.hit(e, now); sfx.play(e.headshot ? "headshot" : "hit_marker"); }
+    s.onSnapEvent = (e, now) => {
+      switch (e.type) {
+        case "shot":
+          if (e.hitId) { combat.hit(e.damage, e.hitbox === HIT_HEAD, now); sfx.play(e.hitbox === HIT_HEAD ? "headshot" : "hit_marker"); }
+          if (e.killed) { combat.killConfirmed(nameOf(e.hitId), e.hitbox === HIT_HEAD, now); sfx.play("kill_confirm"); }
+          onShotResult(e, now);
           break;
-        case "kill":
-          combat.feedKill(e, nameOf, teamOf, now);
-          if (e.killer === s.id && e.victim !== s.id) { combat.killConfirmed(nameOf(e.victim), e.headshot, now); sfx.play("kill_confirm"); }
-          if (e.victim === s.id) sfx.play("player_death");
+        case "damage":
+          combat.damaged(e.damage, nameOf(e.shooterId), now);
           break;
         case "death":
-          deadUntilServerMs = e.respawnAtServerMs;
-          killerName = nameOf(e.killer);
-          break;
-        case "rejected":
-          sfx.play("rejected_claim");
+          killerName = nameOf(e.shooterId);
+          deathRespawnTick = e.respawnTick;
+          sfx.play("player_death");
+          showDeathReplay(e);
           break;
       }
     };
+    s.onKill = (m, now) => combat.feedKill(m, teamOf, s.id, now);
+    s.onClaimRejected = (m, now) => {
+      combat.feedNote(`<span class="trust">rejected claim</span> from ${m.name}: "hit ${nameOf(m.victimId)}${m.hitbox === HIT_HEAD ? " in the head" : ""}" — ${m.reason}`, now);
+      sfx.play("rejected_claim");
+    };
   }
   /** Predicted cosmetics (B.3): flash, tracer, decal and sound play at once; hit feedback waits for the server. */
-  const fireCosmetic = (now: number) => {
-    if (now - lastShotAt < FIRE_INTERVAL_MS) return false;
+  let lastShotTick = -Infinity;
+  /** Cosmetic shots follow the server's fire acceptance: one per fireCooldownTicks inputs (600 rpm). Offline: 100 ms. */
+  const fireCosmetic = (now: number, clientTick?: number) => {
+    if (clientTick !== undefined && s) {
+      const cd = s.sim.fireCooldownTicks(s.tickRate);
+      if (clientTick - lastShotTick < cd) return false;
+      lastShotTick = clientTick;
+    } else if (now - lastShotAt < FIRE_INTERVAL_MS) return false;
     lastShotAt = now;
     world.rifle.fire(now);
     vfx.fire(now, world.rifle.muzzleWorld());
@@ -220,9 +242,14 @@ async function boot() {
       fps.push(now);
       lastFrameMs = frameMs;
       if (s && s.connected) {
-        s.frame(now, () => input.sample(), (seq) => { if (fireCosmetic(now)) onShot(seq, now); });
+        s.frame(now, () => input.sample(), (seq, clientTick) => {
+          if (s.dead || !fireCosmetic(now, clientTick)) return null;
+          onShot(seq, now);
+          return s.setting<string>("authority", "server") === "trust" ? trustHit() : null;
+        });
         frameAvg = frameMs > 0 ? frameAvg * 0.9 + Math.min(frameMs, 100) * 0.1 : frameAvg;
         const v = s.ownView(now, frameAvg);
+        if (v) { ownTrail.push({ t: now, p: { ...v } }); while (ownTrail.length && now - ownTrail[0].t > 2000) ownTrail.shift(); }
         if (v && dims) {
           probe.update(now, input.lastMoveKeyAt, v);
           world.setView(v.x, v.y + dims.eyeHeight, v.z, input.yaw, input.pitch);
@@ -235,13 +262,87 @@ async function boot() {
       world.rifle.update(now, frameMs);
       vfx.update(now);
       combat.update(now);
+      overlay?.update(now);
+      if (now > shotReasonUntil) shotReason.style.display = "none";
       world.animate(frameMs);
       world.render();
     },
   });
 
-  /** Called for each predicted shot; later pieces attach the P09 client-seen hitboxes here. */
-  function onShot(_seq: number, _now: number) {}
+  /** Records what this client drew for every other player at the moment it fired (P08 reason, P09 red box). */
+  function onShot(seq: number, now: number) {
+    const seen = new Map<number, Vec3>();
+    for (const [id, e] of lastDrawn) seen.set(id, { x: e.x, y: (e as any).y ?? 0, z: e.z });
+    shotSeen.set(seq, { at: now, seen });
+    for (const [k, v] of shotSeen) if (now - v.at > 3000) shotSeen.delete(k);
+  }
+
+  /** A.5 trust mode only: this client decides its own hit — ray from its predicted eye against the players as drawn,
+   *  stopped by the first map box (sim traceMap). The server relays the verdict without checks. */
+  function trustHit(): { victimId: number; hitbox: number } | null {
+    if (!s || !link.sim) return null;
+    const S = s.sim, st = s.predictorInfo()?.state;
+    if (!st) return null;
+    const yaw = S.angleFromRadians(input.yaw), pitch = S.angleFromRadians(input.pitch);
+    const wall = S.traceMap(st.x, st.y, st.z, yaw, pitch);
+    const d = S.aimDir(yaw, pitch);
+    const o = new THREE.Vector3(st.x / S.FX, st.y / S.FX + S.PLAYER.eyeHeight, st.z / S.FX);
+    const ray = new THREE.Ray(o, new THREE.Vector3(d[0], d[1], d[2]));
+    let best: { victimId: number; hitbox: number; dist: number } | null = null;
+    const P = S.PLAYER, hit = new THREE.Vector3();
+    for (const [id, e] of lastDrawn) {
+      const team = (e as any).team === 1 ? "orange" : "blue";
+      if (team === s.team || (e as any).alive === false) continue;
+      const y = (e as any).y ?? 0;
+      for (const [hb, half, y0, y1] of [[HIT_HEAD, P.head.half, P.head.bottom, P.head.top], [1, P.body.half, 0, P.body.top]] as const) {
+        const box = new THREE.Box3(new THREE.Vector3(e.x - half, y + y0, e.z - half), new THREE.Vector3(e.x + half, y + y1, e.z + half));
+        if (!ray.intersectBox(box, hit)) continue;
+        const dist = hit.distanceTo(o);
+        if (dist < wall && (!best || dist < best.dist)) best = { victimId: id, hitbox: hb, dist };
+      }
+    }
+    return best ? { victimId: best.victimId, hitbox: best.hitbox } : null;
+  }
+
+  function onShotResult(e: ShotEvent, now: number) {
+    if (!s) return;
+    const F = s.sim.FX;
+    const target = e.hitId || e.seenId;
+    const red = e.seenId || e.hitId ? toVec(e.seenPos, F) : null; // server: target at your render time (what you saw)
+    const blue = e.seenId || e.hitId ? toVec(e.usedPos, F) : null; // server: target at the time it checked
+    if (overlay && red && blue) overlay.show(now, red, blue);
+    const drawnAtFire = target ? shotSeen.get(e.shotSeq)?.seen.get(target) ?? null : null;
+    const name = (id: number) => s.players.get(id)?.name ?? `player ${id}`;
+    const checked = e.lagcomp ? `rewound to tick ${(e.rewoundTick + e.rewoundFrac / 65536).toFixed(2)}` : e.favoured ? "did not rewind (favour victim: your RTT is above the limit)" : "checked current positions (lag compensation off)";
+    let text: string;
+    if (e.hitId) text = `Hit ${name(e.hitId)}${e.hitbox === HIT_HEAD ? " in the head" : ""} — the server ${checked}${e.trust ? " (trust mode: your own claim)" : ""}.`;
+    else if (e.seenId) text = `Miss on the server: you aimed on ${name(e.seenId)}, but the server ${checked}. Server history: they moved ${e.movedCm} cm between your render time and the time it checked.`;
+    else text = `Miss: your ray hit no player at your render time either${e.clamped ? ` (rewind clamped by the ${s.setting("historyMs", 0)} ms history cap)` : ""}.`;
+    const drawnNote = drawnAtFire && blue
+      ? ` <span class="dim">This client drew them ${(Math.hypot(drawnAtFire.x - blue.x, drawnAtFire.z - blue.z) * 100).toFixed(0)} cm from where the server checked (client drawing vs server).</span>` : "";
+    shotReason.innerHTML = `${text}${drawnNote}${red ? ' <span class="dim">· <span style="color:#ef4444">red</span> = at your render time · <span style="color:#3b82f6">blue</span> = where the server checked</span>' : ""}`;
+    shotReason.style.display = "";
+    shotReasonUntil = now + 3500;
+  }
+
+  function showDeathReplay(e: DeathEvent) {
+    if (!s || !link.sim) return;
+    const F = s.sim.FX;
+    const st = s.ownByTick.get(e.resolveTick);
+    const youAtHit = st ? { x: st.x / F, y: st.y / F, z: st.z / F } : null;
+    const shooter = toVec(e.shooterPos, F);
+    let cover: boolean | null = null;
+    if (youAtHit) {
+      const from = new THREE.Vector3(shooter.x, shooter.y + link.sim.PLAYER.eyeHeight, shooter.z);
+      const to = new THREE.Vector3(youAtHit.x, youAtHit.y + link.sim.PLAYER.eyeHeight, youAtHit.z);
+      const dir = to.clone().sub(from);
+      const rc = new THREE.Raycaster(from, dir.clone().normalize(), 0, dir.length());
+      cover = rc.intersectObjects(world.mapMeshes, false).length > 0;
+    }
+    const now = performance.now();
+    replay.show(e, killerName, ownTrail.filter((o) => now - o.t < 1500).map((o) => o.p), youAtHit, toVec(e.hitPos, F), shooter, cover, s.tickMs,
+      s.setting("historyMs", 1000), s.setting("favorVictimRttMs", 0));
+  }
 
   function recordPresenter(now: number, v: { x: number; y: number; z: number } | null) {
     if (!s) return;
@@ -287,7 +388,7 @@ async function boot() {
   }
 
   // Handle for automated browser checks (Playwright cannot grant pointer lock headless).
-  (window as any).__netlab = { input, session: s, probe, presenter, vfx, world };
+  (window as any).__netlab = { input, session: s, probe, presenter, vfx, world, shotSeen, drawn: () => lastDrawn };
   lab.local = {
     get fpsCap() { return loop.fpsCap; },
     setFpsCap(v: number) { loop.fpsCap = v as FpsCap; },
@@ -333,21 +434,21 @@ async function boot() {
       predict: !!st.predict, reconcile: !!st.reconcile, interp: !!st.interp,
       lagcomp: !!st.lagcomp && s.isBuilt("lagcomp"),
     } : null;
-    scorecard.render(mode, st && !s.isBuilt("lagcomp") ? { fair: "lag compensation not built yet (server: M3)" } : {});
+    scorecard.render(mode, st && !s.isBuilt("lagcomp") ? { fair: "lag compensation not built yet" } : st && st.lagcomp && st.favorVictimRttMs > 0 ? { fair: `lag compensation (none above ${st.favorVictimRttMs} ms RTT)` } : {});
 
     const serverNow = est.ready ? est.serverTimeMs : null;
     combat.round(s.round, serverNow);
-    if (s.round && s.round.phase !== lastPhase) {
-      if (lastPhase !== null) sfx.play(s.round.phase === "live" ? "round_start" : "round_end");
-      lastPhase = s.round.phase;
+    if (s.round && s.round.state !== lastPhase) {
+      if (lastPhase !== null) sfx.play(s.round.state === "playing" ? "round_start" : "round_end");
+      lastPhase = s.round.state;
     }
-    if (deadUntilServerMs !== null && serverNow !== null && serverNow >= deadUntilServerMs) deadUntilServerMs = null;
-    combat.respawnIn(deadUntilServerMs !== null && serverNow !== null ? (deadUntilServerMs - serverNow) / 1000 : null, killerName);
+    if (!s.dead && deathRespawnTick !== null) { deathRespawnTick = null; replay.hide(); }
+    combat.respawnIn(s.dead && deathRespawnTick !== null && est.ready ? (deathRespawnTick - est.serverTick) * s.tickMs / 1000 : null, killerName);
     const boardRows: ScoreRow[] = s.scoreRows ?? [
       { id: s.id, name: `${s.name}`, team: s.team, kills: null, deaths: null, pingMs: est.ready ? Math.round(est.rttMs) : null, lossPct: m.downLossPct, fps: fps.fps },
       ...[...s.players].filter(([id]) => id !== s.id).map(([id, p]) => ({ id, name: p.name, team: p.team as "blue" | "orange", kills: null, deaths: null, pingMs: null, lossPct: null, fps: null })),
     ];
-    combat.scoreboard(boardRows, s.id, s.scoreRows ? "ping, loss and FPS as reported to the server" : "Kills, deaths and other players' ping/loss/FPS: needs server (scoreboard data is M4). Your own row is measured here.");
+    combat.scoreboard(boardRows, s.id, s.scoreRows ? "From the server's 1 Hz scoreboard." : "Waiting for the server's scoreboard; your own row is measured here.");
     if (s.settingsEpoch !== probeEpoch) { probeEpoch = s.settingsEpoch; probe.results = []; }
     // A.16: the server's conditioner adds simulated delay/jitter/loss to every measured network number.
     const c = s.cond;

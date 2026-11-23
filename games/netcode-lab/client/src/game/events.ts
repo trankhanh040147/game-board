@@ -1,36 +1,37 @@
-// M3/M4 game events as the client consumes them. PROPOSAL sent to core (2026-11-23); the WASM `decode` is expected to
-// turn snapshot events into these objects (field `kind`), and the control channel to carry `round` and `scoreboard`.
-// Until core confirms them in docs/PROTOCOL.md nothing produces these, so the HUD that uses them stays empty.
+// M3/M4 game data as defined by core: docs/PROTOCOL.md v2 and wasm/main.go decodeEvent (apiVersion 2).
+// Positions are Q16.16 integer triples [x, y, z]; divide by NetcodeSim.FX for metres.
 
-export interface Vec3 { x: number; y: number; z: number } // metres (WASM converts from Q16.16)
+export type Fx3 = [number, number, number];
+export interface Vec3 { x: number; y: number; z: number } // metres
 
-/** Server-confirmed hit. Sent to the shooter (hit marker, damage number) and to the victim (damage taken). */
-export interface HitEvent { kind: "hit"; shooter: number; victim: number; damage: number; headshot: boolean; shotSeq: number; serverTick: number; health: number }
-/** Broadcast to everyone (kill feed). */
-export interface KillEvent { kind: "kill"; killer: number; victim: number; headshot: boolean; serverTick: number }
-/** To the shooter for every resolved shot: why it hit or missed (P08), and the rewind data for the P09 overlay. */
+/** Snapshot event to the shooter: verdict on one fire input (P08 reason, P09 boxes, P11 stamps). */
 export interface ShotEvent {
-  kind: "shot"; shotSeq: number; hit: boolean; victim: number | null; headshot: boolean;
-  lagcomp: boolean;            // was the rewind applied
-  renderTick: number;          // what the client said it saw (tick + frac/65536)
-  rewoundTick: number;         // tick the server traced against after clamping to the history cap
-  clamped: boolean;            // rewind was limited by historyMs
-  nearest: number | null;      // the player the ray passed closest to (for the miss reason)
-  seenPos: Vec3 | null;        // server history: nearest player's position at rewoundTick (blue box, P09)
-  nowPos: Vec3 | null;         // server: nearest player's position when the shot was resolved (P08 "moved N cm")
+  type: "shot"; shotSeq: number; resolveTick: number; renderTick: number; renderFrac: number; rewoundTick: number; rewoundFrac: number;
+  flags: number; lagcomp: boolean; clamped: boolean; favoured: boolean; killed: boolean; trust: boolean;
+  hitId: number; hitbox: number; damage: number; victimHp: number;
+  seenId: number; seenHitbox: number; movedCm: number; seenPos: Fx3; usedPos: Fx3; wallDistM: number; recvMs: number; tickStartMs: number;
 }
-/** P03: a result claim from a client the server refused (authoritative modes). */
-export interface RejectedEvent { kind: "rejected"; claimant: number; victim: number; reason: string }
-/** P24: to the victim on death, so it can replay why it died. */
-export interface DeathEvent { kind: "death"; killer: number; hitTick: number; rewoundTick: number; victimAtHit: Vec3; victimAtRewound: Vec3; shooterRttMs: number; shooterInterpMs: number; respawnAtServerMs: number }
-
-export type GameEvent = HitEvent | KillEvent | ShotEvent | RejectedEvent | DeathEvent;
-
-/** Control channel (JSON). */
-export interface RoundMsg { t: "round"; round: number; phase: "live" | "intermission"; endsAtServerMs: number; score: { blue: number; orange: number }; winner?: "blue" | "orange" | "draw" }
-export interface ScoreRow { id: number; name: string; team: "blue" | "orange"; kills: number | null; deaths: number | null; pingMs: number | null; lossPct: number | null; fps: number | null }
-export interface ScoreboardMsg { t: "scoreboard"; players: ScoreRow[] }
-
-export function isGameEvent(e: unknown): e is GameEvent {
-  return !!e && typeof e === "object" && typeof (e as { kind?: unknown }).kind === "string";
+/** Snapshot event to the victim. */
+export interface DamageEvent { type: "damage"; shotSeq: number; shooterId: number; hitbox: number; damage: number; health: number; resolveTick: number; flags: number; killed: boolean }
+/** Snapshot event to the victim on death (P24 replay). */
+export interface DeathEvent {
+  type: "death"; life: number; shooterId: number; hitbox: number; flags: number; lagcomp: boolean; shotSeq: number; resolveTick: number;
+  rewoundTick: number; rewoundFrac: number; hitPos: Fx3; nowPos: Fx3; shooterPos: Fx3; shooterYaw: number; shooterPitch: number; respawnTick: number;
 }
+export type SnapEvent = ShotEvent | DamageEvent | DeathEvent | { type: "unknown"; code: number };
+
+/** Control channel. */
+export interface RoundMsg { t: "round"; no: number; state: "playing" | "ended"; endsAtServerMs: number; scores: { blue: number; orange: number } }
+export interface KillMsg { t: "kill"; killerId: number; killer: string; victimId: number; victim: string; headshot: boolean; tick: number; trust: boolean; lagcomp: boolean }
+export interface ClaimRejectedMsg { t: "claimRejected"; id: number; name: string; victimId: number; hitbox: number; tick: number; reason: string }
+export interface ScoreRow {
+  id: number; name: string; team: "blue" | "orange"; kills: number | null; deaths: number | null; alive?: boolean;
+  pingMs: number | null; pingSource?: "client" | "server-acks"; lossPct: number | null; fps: number | null;
+  shots?: number; hits?: number; rejectedClaims?: number;
+}
+export interface HistoryMsg { t: "history"; tickRate: number; ticks: { tick: number; serverTimeMs: number; players: { id: number; team: string; x: number; y: number; z: number; yaw: number; pitch: number; alive: boolean }[] }[] }
+/** What each client relays to spectators while truthGhost is on (shape chosen by the client; the server forwards it). */
+export interface DebugPosData { tick: number; serverMs: number; own: Vec3; others: { id: number; x: number; y: number; z: number }[] }
+
+export const HIT_HEAD = 2;
+export const toVec = (p: Fx3, FX: number): Vec3 => ({ x: p[0] / FX, y: p[1] / FX, z: p[2] / FX });

@@ -1,4 +1,4 @@
-import type { HitEvent, KillEvent, RoundMsg, ScoreRow } from "../game/events";
+import type { KillMsg, RoundMsg, ScoreRow } from "../game/events";
 import { el } from "./widgets";
 
 // Combat HUD (B.3). Everything here shows only on a server-confirmed event; the client never invents a hit.
@@ -33,15 +33,22 @@ export class CombatHud {
   }
 
   /** Shooter side of a confirmed hit: marker, damage number, headshot icon. */
-  hit(e: HitEvent, now: number) {
-    this.markerUntil = now + (e.headshot ? 350 : 200);
+  hit(damage: number, headshot: boolean, now: number) {
+    this.markerUntil = now + (headshot ? 350 : 200);
     this.marker.style.display = "";
-    this.marker.classList.toggle("head", e.headshot);
-    this.headIcon.style.display = e.headshot ? "" : "none";
-    const n = el("div", { class: `dmg${e.headshot ? " head" : ""}` }, String(e.damage));
+    this.marker.classList.toggle("head", headshot);
+    this.headIcon.style.display = headshot ? "" : "none";
+    const n = el("div", { class: `dmg${headshot ? " head" : ""}` }, String(damage));
     n.style.left = `${50 + (Math.random() - 0.5) * 4}%`; // spread so repeated numbers do not overlap
     this.numbers.appendChild(n);
     setTimeout(() => n.remove(), 900);
+  }
+
+  /** Victim side: a red flash and who hit you (server Damage event). */
+  damaged(damage: number, by: string, now: number) {
+    this.feedNote(`<span class="dmgtaken">−${damage}</span> from ${escapeHtml(by)}`, now);
+    document.body.classList.add("hurt");
+    setTimeout(() => document.body.classList.remove("hurt"), 180);
   }
 
   killConfirmed(victimName: string, headshot: boolean, now: number) {
@@ -50,13 +57,20 @@ export class CombatHud {
     this.confirm.style.display = "";
   }
 
-  feedKill(e: KillEvent, name: (id: number) => string, team: (id: number) => string, now: number) {
-    const who = (id: number) => `<span class="${team(id)}">${escapeHtml(name(id))}</span>`;
-    this.feedRows.push({ at: now, html: `${who(e.killer)} ${this.skull()}${e.headshot ? (this.iconUrl.head ? `<img class="hsicon" src="${this.iconUrl.head}" alt="headshot">` : '<span class="hs">HS</span>') : ""} ${who(e.victim)}` });
+  feedKill(e: KillMsg, team: (id: number) => string, youId: number, now: number) {
+    const who = (id: number, name: string) => `<span class="${team(id)}">${escapeHtml(name)}${id === youId ? " (you)" : ""}</span>`;
+    const tags = `${e.headshot ? '<span class="hs">HS</span>' : ""}${e.trust ? '<span class="trust">trust-mode claim</span>' : ""}`;
+    this.feedRows.push({ at: now, html: `${who(e.killerId, e.killer)} ${this.skull()}${tags} ${who(e.victimId, e.victim)}` });
     if (this.feedRows.length > 6) this.feedRows.shift();
   }
 
   private skull() { return this.iconUrl.skull ? `<img src="${this.iconUrl.skull}" alt="killed">` : '<span class="skull" aria-label="killed">☠</span>'; }
+
+  /** A plain line in the kill feed (e.g. a rejected claim, P03). */
+  feedNote(html: string, now: number) {
+    this.feedRows.push({ at: now, html });
+    if (this.feedRows.length > 6) this.feedRows.shift();
+  }
 
   /** Round timer from the server's round state (null = the server sends no rounds yet). */
   round(r: RoundMsg | null, serverNowMs: number | null) {
@@ -64,7 +78,7 @@ export class CombatHud {
     const left = Math.max(0, (r.endsAtServerMs - serverNowMs) / 1000);
     const mm = Math.floor(left / 60), ss = Math.floor(left % 60).toString().padStart(2, "0");
     this.timer.style.display = "";
-    this.timer.innerHTML = `<span class="blue">${r.score.blue}</span> · ${r.phase === "live" ? `${mm}:${ss}` : `next round ${Math.ceil(left)} s`} · <span class="orange">${r.score.orange}</span>`;
+    this.timer.innerHTML = `<span class="blue">${r.scores.blue}</span> · round ${r.no} · ${r.state === "playing" ? `${mm}:${ss}` : `next round in ${Math.ceil(left)} s`} · <span class="orange">${r.scores.orange}</span>`;
   }
 
   /** Respawn countdown after the server says you died (null = alive). */
@@ -81,10 +95,10 @@ export class CombatHud {
       const rs = rows.filter((r) => r.team === t).sort((a, b) => (b.kills ?? 0) - (a.kills ?? 0) || (a.deaths ?? 0) - (b.deaths ?? 0));
       const f = (v: number | null, d = 0) => (v === null || v === undefined ? "—" : v.toFixed(d));
       return `<table><thead><tr><th class="${t}">${t === "blue" ? "Blue" : "Orange"}</th><th>K</th><th>D</th><th>ping</th><th>loss %</th><th>FPS</th></tr></thead><tbody>${
-        rs.map((r) => `<tr class="${r.id === youId ? "you" : ""}"><td>${escapeHtml(r.name)}</td><td>${f(r.kills)}</td><td>${f(r.deaths)}</td><td>${f(r.pingMs)}</td><td>${f(r.lossPct, 1)}</td><td>${f(r.fps)}</td></tr>`).join("")
+        rs.map((r) => `<tr class="${r.id === youId ? "you" : ""}"><td>${escapeHtml(r.name)}</td><td>${f(r.kills)}</td><td>${f(r.deaths)}</td><td title="${r.pingSource === "server-acks" ? "server ack RTT (client has not reported)" : "client clock sync"}">${f(r.pingMs)}${r.pingSource === "server-acks" ? "*" : ""}</td><td>${f(r.lossPct, 1)}</td><td>${f(r.fps)}</td></tr>`).join("")
       }</tbody></table>`;
     };
-    this.board.innerHTML = `<div class="dim">${note}</div><div class="teams">${team("blue")}${team("orange")}</div>`;
+    this.board.innerHTML = `<div class="dim">${note}</div><div class="dim">ping: measured by each client (clock sync), * = server ack RTT · loss: client-measured downlink · values include simulated conditioner delay/loss when it is on</div><div class="teams">${team("blue")}${team("orange")}</div>`;
   }
 
   update(now: number) {

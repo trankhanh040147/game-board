@@ -22,6 +22,7 @@ export class InputCapture {
   private keys = new Set<string>();
   private fireHeld = false;
   private dragging = false;
+  private skipMove = false;
   /** Fire presses since the last tick, so a click shorter than a tick is not lost. */
   private firePresses = 0;
   /** performance.now() of the last movement-key press, for the input → motion probe. */
@@ -42,6 +43,9 @@ export class InputCapture {
     });
     document.addEventListener("mousemove", (e) => {
       if (!(this.locked || (this.dragMode && this.dragging))) return;
+      // Drag mode: the first move after a press can carry the whole distance since the last delivered move (seen in
+      // Chromium as a ~200 px jump), which would snap the aim. Drop it, and drop single-event spikes.
+      if (this.dragMode && (this.skipMove || Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250)) { this.skipMove = false; return; }
       this.yaw -= e.movementX * this.sensitivity;
       this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.pitch - e.movementY * this.sensitivity));
     });
@@ -50,6 +54,7 @@ export class InputCapture {
       if (this.dragMode) {
         if (e.target !== canvas) return; // the Lab panel and other UI keep their clicks
         this.dragging = true;
+        this.skipMove = true;
       }
       if (e.button !== 0) return;
       this.fireHeld = true;
