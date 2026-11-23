@@ -127,6 +127,11 @@ async function boot() {
 
   go.addEventListener("click", () => input.lock());
   canvas.addEventListener("click", () => { if (!input.locked && !lab.open) input.lock(); });
+  input.onLockError = (msg) => {
+    let el2 = card.querySelector<HTMLElement>(".lockerr");
+    if (!el2) { el2 = el("div", { class: "bad lockerr" }); card.appendChild(el2); }
+    el2.textContent = msg;
+  };
   input.onLockChange = (locked) => { start.style.display = locked || lab.open ? "none" : "flex"; };
   if (!s) input.onFirePress = () => world.rifle.fire(performance.now());
   presenter.onToggle = (open) => { if (open && input.locked) document.exitPointerLock(); };

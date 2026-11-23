@@ -93,3 +93,17 @@
    shown and tested on a WebTransport-capable page.
 5. **Scorecard Fair reads lagcomp together with its `built` flag.** The setting defaults to true but the server has no
    lag compensation yet, so Fair shows ✗ with "not built yet".
+
+## 2026-11-23 — client: K2 (assets, presenter view, smoke test)
+
+1. **Character models are scaled to the sim's player height at load** (the CC0 model is about 2.7 units tall).
+   Hitboxes stay the sim's boxes, and the truth ghost draws those boxes as wireframes, so the model never stands in
+   for a hitbox. Animations (idle/walk) advance on real frame time and are cosmetic only.
+2. **Presenter view is an F2 overlay inside the normal client**, not a separate spectator. The server has no
+   spectator join and does not relay other players' predicted positions. The view shows server truth (debug feed),
+   what this client draws, and this client's own prediction, and labels the rest "needs server". Pause/step uses
+   the last 2 s recorded by this browser until the server-side ring buffer (B.7) exists.
+3. **The smoke test uses `playwright-core` with an explicit browser path** (`PW_CHROMIUM`, else Playwright's own,
+   else the newest Chromium in the Playwright cache). This avoids a browser download and a version lock to one
+   Playwright release. Headless Chromium refuses pointer lock, so the test sets the lock flag directly and sends real
+   key events; the refusal is shown on the start screen instead of throwing.

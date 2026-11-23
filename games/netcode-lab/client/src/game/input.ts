@@ -51,15 +51,17 @@ export class InputCapture {
     document.addEventListener("keyup", (e) => this.keys.delete(e.code));
   }
 
+  onLockError?: (msg: string) => void;
+
   async lock() {
     // unadjustedMovement = raw mouse without OS acceleration, where the browser supports it.
     try {
       await (this.canvas as any).requestPointerLock({ unadjustedMovement: true });
       this.rawMouse = true;
-    } catch {
-      this.rawMouse = false;
-      await (this.canvas as any).requestPointerLock();
-    }
+      return;
+    } catch { this.rawMouse = false; }
+    try { await (this.canvas as any).requestPointerLock(); }
+    catch (e) { this.onLockError?.(`The browser refused pointer lock: ${(e as Error).message}`); }
   }
 
   sample(): InputIntent {
