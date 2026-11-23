@@ -91,7 +91,7 @@ Make variables: `HTTP`, `HTTPS` (listen addresses for `run` and `dev`), `N`, `D`
 
 **Fill bots** (bots that roam, cross the gap and shoot): `bin/server -fill 4` (or `-fill -1` to balance the teams),
 or the Lab's "Bots (fill the teams)" buttons **Fill teams (3v3)** and **Remove bots** (admin token). Their names end
-in `[bot]`. The Lab buttons are in the code at `8c4c1e1`; scribe checked `-fill` only.
+in `[bot]`. Scribe checked `-fill`; the Lab buttons are covered by the client smoke (MEASUREMENTS check 7: fill-bot buttons, 55/0/0 at `8c4c1e1`).
 
 **Docker Compose** (`deploy/`): host ports move with env vars `GAME_HTTP_PORT`, `GAME_HTTPS_PORT`, `INFRA_HTTP_PORT`,
 `INFRA_HTTPS_PORT`, `PROM_PORT`, `GRAFANA_PORT`; admin token `NETLAB_ADMIN_TOKEN` (default `lab`). Use your own
