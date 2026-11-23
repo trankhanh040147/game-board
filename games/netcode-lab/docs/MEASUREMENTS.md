@@ -841,3 +841,33 @@ With interest on, each client gets about 8 of 59 other players, and bytes per cl
 host-dominated at this load, so the CPU cost of the grid cannot be read from these runs.
 
 **P19** is in "Check 5 / P19" above (loaded host, timing inconclusive; zero-alloc allocates 37% less).
+
+### Check 6 / P29 rerun with gap timestamps and a host probe (2026-11-23 20:37–20:43, bots, loaded host)
+
+Same script, now with a wall-clock timestamp for every gap over 3× the interval. A no-game-code probe runs next to
+each transport. A gap counts as a host stall when it overlaps a server "tick started late" interval or a > 3-period
+probe pause (±50 ms). Clean worktree build at `666b4ef`; both servers were alive at the end; no bot errors.
+
+```
+HTTP_PORT=18650 HTTPS_PORT=18651 sh scripts/p29-transport.sh 2m 5 3
+```
+
+| Transport | Load avg 1 min (start → end) | Host stall events | Bot | Snapshots | Gaps > 3× (150 ms) | Not overlapping a host stall | Of those, > 187.5 ms (3× the longest 62.5 ms schedule gap) |
+|---|---|---|---|---|---|---|---|
+| WS | 29.86 → 14.92 | 311 | 1 / 2 / 3 | 2401 / 2398 / 2399 | 105 / 143 / 137 | 98 / 134 / 129 | most (cluster 180–245 ms) |
+| WT | 18.93 → 19.59 | 371 | 1 | 2281 | 10 | 5: 187.8, 153.3, 179.1, 156.1, 156.4 ms | 1 |
+| WT | | | 2 | 2267 | 10 | 6: 203.1, 157.9, 156.6, 156.3, 156.5, 187.0 ms | 1 |
+| WT | | | 3 | 2275 | 8 | 3: 159.8, 156.5, 155.1 ms | 0 |
+
+Reading:
+- **WebSocket** stalls do not depend on the host: 92–94% of them overlap no host stall. They are the simulated TCP
+  retransmit (DECISIONS 8).
+- **WebTransport:** 14 of 28 gaps overlap host stalls. Of the other 14, 12 are 153–180 ms. At 64 Hz and 20/s,
+  snapshots alternate 3- and 4-tick gaps (46.9 / 62.5 ms), so **two** consecutive lost snapshots already make a
+  gap of about 156 ms, over the 150 ms threshold. At 5% loss that happens about 5.7 times per bot per 2280
+  snapshots, which matches 3–6 seen.
+- **What remains:** only 2 of 28 WT gaps go past 187.5 ms (three missed slots at the longest schedule gap) without a
+  host stall. Three losses in a row (p ≈ 1.25·10⁻⁴) explain about that many.
+- **Status:** B.9 #6 remains **partial** until the lead decides which threshold the check uses. Under a literal
+  "> 3 × 50 ms", datagram mode shows a few two-loss gaps. Under "> 3 missed snapshots", it shows about none
+  outside host stalls. Either way it differs from WebSocket by two orders of magnitude.
