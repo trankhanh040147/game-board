@@ -83,6 +83,24 @@ try {
   const simOn = cond && (cond.up.delayMs + cond.down.delayMs) > 0;
   check("A.16: RTT row says it includes simulated delay when the conditioner is on", !simOn || /RTT[^\n]*incl\. simulated/.test(graph), simOn ? graph.split("\n")[0] : "conditioner off");
 
+  // 1c. Region rooms (M7): ?region= joins /r/{region}/ws|wt; the start screen links the duel and infra pages.
+  for (const [q, want] of [["&transport=ws", "ws"], ["", "wt"]]) {
+    const R = await ctx.newPage();
+    R.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`[smoke-region] ${m.text()}`); });
+    await R.goto(`${BASE}/?name=smoke-region&region=sg&isp=viettel${q}`);
+    const ok = await R.waitForFunction(() => window.__netlab?.session?.ready, null, { timeout: 20000 }).then(() => true, () => false);
+    const card = await R.locator("#start").innerText();
+    const kind = ok ? await R.evaluate(() => window.__netlab.session.t.kind) : "none";
+    const rtt = ok ? await R.waitForFunction(() => { const e = window.__netlab.session.clockEstimate(performance.now()); return e.ready ? e.rttMs : null; }, null, { timeout: 5000 }).then((h) => h.jsonValue(), () => null) : null;
+    check(`?region=sg&isp=viettel joins the sg region room over ${want}`, ok && kind === want && /region room sg/.test(card), `${kind}, RTT ${rtt === null ? "—" : rtt.toFixed(0)} ms (simulated route)`);
+    if (!q) {
+      const links = await R.$$eval("#start .pagelinks a", (as) => as.map((a) => a.getAttribute("href")));
+      const codes = await Promise.all(["./duel.html", "./infra.html"].map(async (h) => (await fetch(new URL(h, BASE + "/")).catch(() => null))?.status ?? 0));
+      check("start screen links the duel and infra pages on the same host", links.includes("./duel.html") && links.includes("./infra.html") && codes.every((c) => c === 200), `links ${links.join(", ")} · HTTP ${codes.join(", ")}`);
+    }
+    await R.close();
+  }
+
   // 2. Play without pointer lock. Headless Chromium rejects requestPointerLock (a real rejected promise), so this is
   //    the same path an embedded browser view takes. Expect: overlay closes, drag-to-look note, keys move the player.
   await A.click("#start button");

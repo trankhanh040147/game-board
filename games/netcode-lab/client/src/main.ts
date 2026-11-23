@@ -29,10 +29,26 @@ const FIRE_INTERVAL_MS = 100;
 const hud = document.body;
 const offlineBackend: LabBackend = { connected: false, builtPresets: new Set(), settings: null, activePreset: null, applyPreset() {}, setSetting() {} };
 
-interface Link { sim: NetcodeSim | null; session: Session | null; transportNote: string; problems: string[] }
+interface Link { sim: NetcodeSim | null; session: Session | null; transportNote: string; problems: string[]; region: string | null }
+
+const REGIONS = ["hcm", "hn", "sg"];
+/** ?region=hcm|hn|sg joins that region's room (/r/{region}/ws|wt, M7); isp, lm, route and platform pass through. */
+function regionPaths(): { region: string; ws: string; wt: string } | null {
+  const q = new URLSearchParams(location.search);
+  const region = q.get("region");
+  if (!region) return null;
+  if (!REGIONS.includes(region)) throw new Error(`unknown region "${region}" (use ${REGIONS.join(", ")})`);
+  const pass = new URLSearchParams();
+  for (const k of ["isp", "lm", "route", "platform"]) { const v = q.get(k); if (v) pass.set(k, v); }
+  const qs = pass.toString() ? `?${pass}` : "";
+  return { region, ws: `/r/${region}/ws${qs}`, wt: `/r/${region}/wt${qs}` };
+}
 
 async function connect(): Promise<Link> {
-  const link: Link = { sim: null, session: null, transportNote: "", problems: [] };
+  const link: Link = { sim: null, session: null, transportNote: "", problems: [], region: null };
+  let rp: ReturnType<typeof regionPaths> = null;
+  try { rp = regionPaths(); } catch (e) { link.problems.push((e as Error).message); return link; }
+  link.region = rp?.region ?? null;
   try { link.sim = await loadSim(); } catch (e) { link.problems.push(`Shared sim (WASM): ${(e as Error).message}`); }
   let info;
   try { info = await fetchInfo(); } catch (e) { link.problems.push(`Game server: ${(e as Error).message}`); }
@@ -45,13 +61,13 @@ async function connect(): Promise<Link> {
   const forceWs = new URLSearchParams(location.search).get("transport") === "ws";
   if (forceWs) link.transportNote = "forced by ?transport=ws";
   else if (webTransportPossible() && info.wt) {
-    try { t = await WtTransport.connect(info); }
+    try { t = await WtTransport.connect(rp ? { ...info, wt: { ...info.wt, path: rp.wt } } : info); }
     catch (e) { link.transportNote = `WebTransport failed (${(e as Error).message})`; }
   } else {
     link.transportNote = !window.isSecureContext ? "page is plain HTTP, not a secure context" : !info.wt ? "server offers no WebTransport" : "this browser has no WebTransport";
   }
   if (!t) {
-    try { t = await WsTransport.connect(info.ws); }
+    try { t = await WsTransport.connect(rp ? rp.ws : info.ws); }
     catch (e) { link.problems.push(`Game server: ${(e as Error).message}`); return link; }
   }
   const name = new URLSearchParams(location.search).get("name") ?? `player-${Math.floor(Math.random() * 900 + 100)}`;
@@ -123,10 +139,11 @@ async function boot() {
   card.innerHTML = `<h1><img class="logo" src="./ui/logo.svg" alt="Netcode Lab" width="280" height="64"></h1>
     ${row(courtyard !== null, "Courtyard map", courtyard ? "shared/map.json" : "shared/map.json missing")}
     ${row(link.sim !== null, "Shared sim (WASM)", link.sim ? `api v${link.sim.apiVersion}` : "")}
-    ${row(s !== null, "Game server", s ? `connected over ${s.t.kind === "wt" ? "WebTransport" : "WebSocket"}` : "")}
+    ${row(s !== null, "Game server", s ? `connected over ${s.t.kind === "wt" ? "WebTransport" : "WebSocket"}${link.region ? ` · region room <b>${link.region}</b> (simulated route)` : ""}` : "")}
     ${link.problems.map((p) => `<div class="bad">${p}</div>`).join("")}
     ${assets.failures.length ? `<div class="bad">Assets using primitive fallback: ${assets.failures.join("; ")}</div>` : ""}
     ${controls}
+    <div class="pagelinks">Also here: <a href="./duel.html">Duel mini-mode</a> (rollback, input delay, lockstep: P21–P23) · <a href="./infra.html">Regions &amp; infrastructure</a> (P16–P18, P20; simulated) · <a href="./concepts.html">Concepts</a>${link.region ? "" : ` · join a region room: <a href="?region=hcm">hcm</a> <a href="?region=hn">hn</a> <a href="?region=sg">sg</a>`}</div>
     <p class="dim">${s && new URLSearchParams(location.search).get("spectate") === "1" ? "Presenter: you join without a player. F2 toggles the top-down view; outside it, drag to look and WASD to fly." : s ? "Click Play to join your team." : "Offline: spectator camera only (WASD fly, Space up, Shift down); not the game's movement rules."}</p>`;
   const go = el("button", {}, s ? "Play" : "Enter spectator view");
   (go as HTMLButtonElement).disabled = !courtyard;

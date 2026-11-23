@@ -11,7 +11,7 @@ export interface LabBackend {
   activePreset: string | null;
   /** Server descriptors: kind, allowed values, built flag. */
   supported?: { key: string; kind: string; allowed?: unknown[]; min?: number; max?: number; built: boolean; note?: string }[];
-  presets?: { id: string; banner?: string; built: boolean }[];
+  presets?: { id: string; banner?: string; built: boolean; page?: string }[];
   cond?: { up: { delayMs: number; jitterMs: number; lossPct: number }; down: { delayMs: number; jitterMs: number; lossPct: number } } | null;
   setCond?(up: { delayMs: number; jitterMs: number; lossPct: number }, down: { delayMs: number; jitterMs: number; lossPct: number }): void;
   lastError?: string;
@@ -176,12 +176,14 @@ export class LabPanel {
       btn.disabled = !built || !canAdmin;
       if (b.activePreset === p.id) btn.style.outline = "2px solid #4ade80";
       btn.addEventListener("click", () => b.applyPreset(p.id, this.token));
-      const reason = !b.connected ? "server not connected" : !built ? "not built yet" : !this.token ? "needs admin token" : "";
       const sp = b.presets?.find((x) => x.id === p.id);
+      const reason = !b.connected ? "server not connected" : !built ? (sp?.page ? "shown on its own page" : "not built yet") : !this.token ? "needs admin token" : "";
       if (sp?.banner && !PRESET_DOCS.has(p.id)) row.title = sp.banner;
       const doc = PRESET_DOCS.get(p.id);
       const sec = doc ? `<a href="${conceptUrl(doc.concept)}" target="_blank" rel="noopener">${p.section}</a>` : p.section;
       row.append(btn, el("span", {}, `${p.idea} <span class="dim">(${sec})</span>${reason ? ` <span class="why dim">· ${reason}</span>` : ""}`));
+      // Presets shown on their own page (duel, regions): link it (same host, served by the game server).
+      if (sp?.page) row.appendChild(el("a", { href: `.${sp.page}`, target: "_blank", rel: "noopener", class: "pagelink" }, `open ${sp.page.replace(/^\//, "")} →`));
       if (doc) row.title = `${doc.banner}\nObserve: ${doc.observe}`;
       frag.appendChild(row);
     }
