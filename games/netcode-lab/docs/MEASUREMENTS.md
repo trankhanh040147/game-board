@@ -626,3 +626,18 @@ Reading:
   measure the host, not the loop. A real comparison needs a quiet host and the two runs back to back.
 - **Allocation: a real difference, independent of load.** Zero-alloc allocated 37% less (1117 vs 1780 MB, 79 vs
   125 GC cycles). It is still far from zero: about 11 MB/s for 50 players at 128 Hz. This is reported to core.
+
+### Second pair, 20:21–20:23, old and new builds side by side (still a loaded host)
+
+Old = server and `sim.wasm` built at 9079108 (sequential play, starvation-only pacer). New = 0b4e1af (scheduled
+play, lead pacer). Same 60 s frame-paced Node client, separate servers and ports, run one minute apart.
+
+| Build | Load avg | Margin every 5 s | Min lead per 5 s | Starvations | Corrections | Raises |
+|---|---|---|---|---|---|---|
+| old | 29–33 | 2,4,4,4,4,5,5,5,6,6,6 | −2,3,3,2,4,4,5,5,4,5,6 | 28 | 16 | 14 |
+| new | 23–26 | 1,1,1,2,2,3,2,3,3,3,3 | 0,−4,−6,−8,−4,−1,1,−2,1,0,3 | 16 | 7 | 4 |
+
+The old build shows the root cause directly: inputs arrived 3–6 ticks early, yet the server kept starving and the
+margin kept rising. The server drained the buffer, so being early bought nothing. The new build stops at 3. Its
+negative leads are inputs that really arrived late (host stalls, load > 20), and those are counted as starvations.
+This is still not the quiet-host run (load < 5), which remains owed.
