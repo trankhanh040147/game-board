@@ -13,7 +13,6 @@ core (claude), client (claude), review, research (hermes), art (antigravity), bo
 | ID | Member | Task | Evidence |
 |----|--------|------|----------|
 | R1 | research | LAN transport, WASM, macOS limits | Verdict: HTTPS + certhash on a single port for LAN WebTransport; plain-HTTP WebSocket fallback with a visible banner; gc-WASM (no TinyGo); in-process conditioner first, because macOS has no `tc netem`. |
-| C1 | core | Go sim, net, server, WASM (M0/M1) | `23fa0b7` sim, `371a5a6` net, `46b3c52` server + WS/WT + walker bot, `0062678` WASM API + determinism check + Makefile, `be08946` WT dial for bots. |
 | C1 docs | core | ARCHITECTURE, PROTOCOL, check 1 | `edf1e65`: ARCHITECTURE/PROTOCOL; B.9 check 1 (determinism) pass. |
 | K1 | client | Client loop/HUD/Lab + networking | `3b911b9`, `b4a0ac0`, `dfaeacb` (WebTransport + WebSocket fallback, WASM prediction/reconciliation, interpolation, Lab wired). |
 | A1 | art | CC0 sound effects | `f169724` |
@@ -25,7 +24,7 @@ core (claude), client (claude), review, research (hermes), art (antigravity), bo
 
 | ID | Member | Task | Notes |
 |----|--------|------|-------|
-| C2 | core | Next core milestone (C1 → C2) | — |
+| C1 | core | Go sim, net, server, WASM (M0/M1) | Turn still running. Committed so far: `23fa0b7` sim, `371a5a6` net, `46b3c52` server + WS/WT + walker bot, `0062678` WASM API + determinism check + Makefile, `be08946` WT dial for bots. |
 | K2 | client | Assets, presenter view, Playwright | — |
 | V1 | review | Root cause of corrections in B.9 check 2 | — |
 | R3 | research | Budget / peek measurement design | — |
