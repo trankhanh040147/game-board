@@ -121,9 +121,6 @@ try {
   check("Esc leaves drag mode and shows the overlay again", cBack);
   await C.close();
 
-  // 3. Shoot
-  skip("shoot", "the server has no hitscan yet (HANDOFF M3); fire input is sent, but no hit result exists to check");
-
   // 4. Lab panel + every enabled preset, clicked in the UI
   await A.keyboard.press("F1");
   check("Lab panel opens on F1", await A.locator("#lab.open").isVisible());
@@ -144,6 +141,80 @@ try {
   await A.keyboard.press("F1");
   await A.keyboard.press("F2");
   check("presenter view opens on F2", await A.locator("#presenter.open").isVisible());
+  await A.keyboard.press("F2");
+
+  // 6. Real shots. The target gets its own browser: headless Chromium stops animation frames in a background tab,
+  //    which would freeze that client's game loop.
+  await B.close();
+  const browser2 = await chromium.launch({ executablePath, headless: true, args: ["--use-gl=angle"] });
+  try {
+    const T = await browser2.newPage({ viewport: { width: 1280, height: 760 } });
+    T.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`[smoke-target] ${m.text()}`); });
+    T.on("pageerror", (e) => consoleErrors.push(`[smoke-target] pageerror: ${e.message}`));
+    await T.goto(`${BASE}/?name=smoke-target`);
+    await T.waitForFunction(() => window.__netlab?.session?.ready, null, { timeout: 20000 });
+    await T.click("#start button");
+    await A.bringToFront();
+    const who = (p) => p.evaluate(() => { const s = window.__netlab.session; return { id: s.id, team: s.team, ...s.ownView(performance.now()) }; });
+    const a = await who(A), t = await who(T);
+    if (a.team === t.team) throw new Error(`shooter and target joined the same team (${a.team}); teammates cannot be hit`);
+    await A.click(`#lab [data-preset="P09"]`).catch(async () => { await A.keyboard.press("F1"); await A.click(`#lab [data-preset="P09"]`); await A.keyboard.press("F1"); });
+    await A.waitForFunction(() => window.__netlab.session.activePreset === "P09", null, { timeout: 3000 });
+    if (await A.locator("#lab.open").isVisible()) await A.keyboard.press("F1");
+    // Line of fire at x ≈ 5.5 passes between the low wall (|x| < 3) and the side blocks (|x| > 8).
+    const goX = async (p, x) => {
+      for (let i = 0; i < 40; i++) {
+        const v = await who(p); const dx = x - v.x; if (Math.abs(dx) < 0.3) return;
+        const key = (v.team === "blue") === (dx > 0) ? "KeyD" : "KeyA";
+        await p.keyboard.down(key); await p.waitForTimeout(Math.min(250, Math.abs(dx) * 60)); await p.keyboard.up(key); await p.waitForTimeout(150);
+      }
+    };
+    await A.evaluate(() => { window.__netlab.input.yaw = 0; window.__netlab.input.pitch = 0; });
+    await T.evaluate(() => { window.__netlab.input.yaw = Math.PI; window.__netlab.input.pitch = 0; });
+    // Opening the Lab or the presenter view leaves play on purpose; press Play again (drag mode headless).
+    const play = async (p) => { if (await p.locator("#start").isVisible()) await p.click("#start button"); };
+    await play(A);
+    await goX(A, 5.5); await goX(T, 5.5);
+    await A.waitForTimeout(500);
+    // Aim at the target as this client draws it (interpolated), after mouse-down so the press cannot move the aim.
+    const aimAndFire = async () => {
+      await A.evaluate(() => { window.__shot = null; const s = window.__netlab.session; if (!s.__wrapped) { const prev = s.onSnapEvent; s.onSnapEvent = (e, now) => { prev(e, now); if (e.type === "shot") { window.__shot = e; window.__marker = getComputedStyle(document.getElementById("hitmarker")).display; } }; s.__wrapped = true; } });
+      await A.mouse.move(640, 380); await A.mouse.down();
+      await A.evaluate((tid) => {
+        const n = window.__netlab, e = n.drawn().get(tid), m = n.session.ownView(performance.now());
+        const dx = e.x - m.x, dz = e.z - m.z; n.input.yaw = Math.atan2(-dx, -dz); n.input.pitch = Math.atan2(((e.y ?? 0) + 1.0) - (m.y + 1.6), Math.hypot(dx, dz));
+      }, t.id);
+      await A.waitForTimeout(30); await A.mouse.up();
+      await A.waitForFunction(() => window.__shot, null, { timeout: 5000 }).catch(() => {});
+      await A.waitForTimeout(200);
+      return A.evaluate(() => ({
+        shot: window.__shot && { hitId: window.__shot.hitId, hitbox: window.__shot.hitbox, damage: window.__shot.damage, lagcomp: window.__shot.lagcomp, seenId: window.__shot.seenId, movedCm: window.__shot.movedCm, renderTick: window.__shot.renderTick, rewoundTick: window.__shot.rewoundTick, resolveTick: window.__shot.resolveTick },
+        reason: document.getElementById("shotreason")?.innerText ?? "",
+        marker: window.__marker ?? "none", // read inside the event handler: a body-hit marker lasts 200 ms
+        boxes: window.__netlab.world.scene.children.filter((o) => o.type === "Group" && o.children[0]?.type === "LineSegments" && o.children[0].renderOrder === 30).length,
+      }));
+    };
+    const hit = await aimAndFire();
+    check("shoot (P09, lag comp on, target still): server confirms the hit, hit marker shows", !!hit.shot && hit.shot.hitId === t.id && hit.marker !== "none",
+      hit.shot ? `hitId ${hit.shot.hitId}, hitbox ${hit.shot.hitbox}, damage ${hit.shot.damage}, rendered tick ${hit.shot.renderTick} → rewound ${hit.shot.rewoundTick} (resolved ${hit.shot.resolveTick})` : "no shot event");
+    check("P09 overlay: red (your render time) and blue (server) hitboxes drawn", hit.boxes >= 2, `${hit.boxes} boxes · ${hit.reason.split("\n")[0]}`);
+    await A.keyboard.press("F1");
+    await A.click(`#lab [data-preset="P08"]`);
+    await A.waitForFunction(() => window.__netlab.session.activePreset === "P08", null, { timeout: 3000 });
+    await A.keyboard.press("F1");
+    await play(A);
+    await A.waitForTimeout(400);
+    await T.keyboard.down("KeyA"); await A.waitForTimeout(350);
+    const miss = await aimAndFire();
+    await T.keyboard.up("KeyA");
+    check("P08 (lag comp off, target strafing): shot event with lagcomp off and a miss reason on screen", !!miss.shot && miss.shot.lagcomp === false && /lag compensation off/.test(miss.reason),
+      miss.shot ? `${miss.shot.hitId ? "hit" : "miss"}, seenId ${miss.shot.seenId}, server MovedCm ${miss.shot.movedCm} · "${miss.reason.split("\n")[0]}"` : "no shot event");
+    await A.keyboard.press("F1");
+    await A.click(`#lab [data-preset="P01"]`);
+    await A.keyboard.press("F1");
+  } finally {
+    await browser2.close();
+  }
 } catch (e) {
   check("smoke run finished", false, e.message);
 }
