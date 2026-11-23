@@ -1,0 +1,278 @@
+{
+ "uid": "netcode-lab",
+ "title": "Netcode Lab \u00b7 regions",
+ "schemaVersion": 39,
+ "version": 2,
+ "refresh": "5s",
+ "time": {
+  "from": "now-15m",
+  "to": "now"
+ },
+ "tags": [
+  "netcode-lab"
+ ],
+ "description": "A.12 / P20. Routes are simulated; RTTs are measured by clients over them.",
+ "panels": [
+  {
+   "id": 1,
+   "type": "timeseries",
+   "title": "RTT p50 / p95 / p99 by region \u00d7 ISP (measured over simulated routes)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 10
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.5, sum by (le, region, isp) (rate(netlab_client_rtt_ms_bucket[1m]))) and on (region, isp) netlab:rtt_ms:rate_count_1m",
+     "legendFormat": "p50 {{region}} {{isp}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    },
+    {
+     "refId": "B",
+     "expr": "netlab:rtt_ms:p95_1m",
+     "legendFormat": "p95 {{region}} {{isp}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    },
+    {
+     "refId": "C",
+     "expr": "netlab:rtt_ms:p99_1m",
+     "legendFormat": "p99 {{region}} {{isp}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "Mean vs p99 (averages hide the players who lag)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 10,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "netlab:rtt_ms:mean_1m",
+     "legendFormat": "mean {{region}} {{isp}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    },
+    {
+     "refId": "B",
+     "expr": "netlab:rtt_ms:p99_1m",
+     "legendFormat": "p99 {{region}} {{isp}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    }
+   ],
+   "description": "P20: the mean looks fine while p99 does not. Needs beacon traffic in the last minute (no traffic = no line, not NaN)."
+  },
+  {
+   "id": 3,
+   "type": "timeseries",
+   "title": "Loss % (beacon pings)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 10,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "100 * sum by (region, isp) (rate(netlab_client_probes_lost_total[1m])) / (sum by (region, isp) (rate(netlab_client_probes_total[1m])) > 0)",
+     "legendFormat": "{{region}} {{isp}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "timeseries",
+   "title": "Jitter p95",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 18,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le, region, isp) (rate(netlab_client_jitter_ms_bucket[1m])))",
+     "legendFormat": "{{region}} {{isp}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "Cable cut (simulated) and firing alerts",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 18,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "netlab_cable_cut",
+     "legendFormat": "cable cut to sg",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    },
+    {
+     "refId": "B",
+     "expr": "sum by (alertname, region, isp) (ALERTS{alertstate=\"firing\"})",
+     "legendFormat": "FIRING {{alertname}} {{region}} {{isp}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "Matchmaker: tickets/s by result and region",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 26,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (result, region) (rate(netlab_matchmaker_tickets_total[1m]))",
+     "legendFormat": "{{result}} {{region}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "Go GC pause p99 (infra process)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 26,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.99, sum by (le) (rate(go_gc_pauses_seconds_bucket[1m])))",
+     "legendFormat": "gc pause p99",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     }
+    }
+   ]
+  }
+ ]
+}

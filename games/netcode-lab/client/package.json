@@ -1,0 +1,24 @@
+{
+  "name": "netcode-lab-client",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts",
+    "smoke": "node smoke/smoke.mjs"
+  },
+  "dependencies": {
+    "dompurify": "3.2.6",
+    "marked": "17.0.0",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.187.0",
+    "playwright-core": "1.65.1",
+    "typescript": "5.9.3",
+    "vite": "7.1.0"
+  }
+}

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="icon-relay-node">
+  <!-- Central Relay Hub -->
+  <circle cx="12" cy="12" r="3" fill="currentColor" fill-opacity="0.15"/>
+  <circle cx="12" cy="12" r="1" fill="currentColor"/>
+
+  <!-- Peripheral Node Satellites -->
+  <circle cx="12" cy="3.5" r="2"/>
+  <circle cx="4" cy="17.5" r="2"/>
+  <circle cx="20" cy="17.5" r="2"/>
+
+  <!-- High-speed interconnect trunk lines -->
+  <line x1="12" y1="5.5" x2="12" y2="9"/>
+  <line x1="5.7" y1="16" x2="9.5" y2="13.5"/>
+  <line x1="18.3" y1="16" x2="14.5" y2="13.5"/>
+
+  <!-- Radio broadcast / relay packet pulses -->
+  <path d="M 7.5 7.5 A 6.5 6.5 0 0 1 16.5 7.5" stroke-dasharray="1.5 2.5" stroke-width="1.2"/>
+  <path d="M 6 12 A 6 6 0 0 0 12 18" stroke-dasharray="1.5 2.5" stroke-width="1.2"/>
+  <path d="M 18 12 A 6 6 0 0 1 12 18" stroke-dasharray="1.5 2.5" stroke-width="1.2"/>
+</svg>

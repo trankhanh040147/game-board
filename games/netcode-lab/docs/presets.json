@@ -1,0 +1,234 @@
+[
+  {
+    "id": "P01",
+    "group": "Core",
+    "idea": "Vocabulary",
+    "observe": "All four values visible and correct.",
+    "banner": "Clients send what the player did (inputs); the server decides what happened (positions, hits, deaths).",
+    "concept": "a1"
+  },
+  {
+    "id": "P02",
+    "group": "Core",
+    "idea": "Dumb client (A.4)",
+    "observe": "Pressing W moves you only after about one RTT plus waits; HUD \"input → motion: N ms\" (measured). Scorecard Instant ✗, Cheat-proof ✓.",
+    "banner": "The character moves only after at least one RTT plus tick wait plus frame wait: about 40–72 ms here (est.).",
+    "concept": "a4"
+  },
+  {
+    "id": "P03",
+    "group": "Core",
+    "idea": "Trust client (A.5)",
+    "observe": "In trust mode fake kills land in the kill feed. In authoritative modes the same packets are rejected and logged \"rejected claim\".",
+    "banner": "What goes wrong: the server cannot tell a genuine client from a modified one that sends \"headshot\" through a wall from across the map.",
+    "concept": "a5"
+  },
+  {
+    "id": "P04",
+    "group": "Core",
+    "idea": "Prediction (A.6)",
+    "observe": "Own movement reacts in the current frame while the server still decides.",
+    "banner": "The client runs the same movement rules as the server on its own inputs and draws the result in the current frame: 0 ms of network wait.",
+    "concept": "a6"
+  },
+  {
+    "id": "P05",
+    "group": "Core",
+    "idea": "Reconciliation (A.7)",
+    "observe": "HUD \"pending: #41 #42 #43, replayed: 2, corrections: 0\". Off shows stutter.",
+    "banner": "The client drops #1 from the queue, resets its base state to the server's x=11, and replays #2 and #3 on top of it: 11 → 12 → 13.",
+    "concept": "a7"
+  },
+  {
+    "id": "P06",
+    "group": "Core",
+    "idea": "Raw snapshots (A.8)",
+    "observe": "Other players visibly step every 50 ms, with bigger steps under jitter.",
+    "banner": "Drawing the latest snapshot directly gives this pattern: the other player stands still for about 3 frames, then jumps one step, and repeats.",
+    "concept": "a8"
+  },
+  {
+    "id": "P07",
+    "group": "Core",
+    "idea": "Interpolation (A.9)",
+    "observe": "Smooth motion; the ghost runs ahead by a measured ≈ 120 ms.",
+    "banner": "The client deliberately draws other players about 100 ms in the past.",
+    "concept": "a9"
+  },
+  {
+    "id": "P08",
+    "group": "Core",
+    "idea": "Three truths (A.10)",
+    "observe": "Aim on target and the server says miss, with reason \"target moved N cm since what you saw\".",
+    "banner": "If the server checks the shot against the target's current position, the shooter aimed true and still misses.",
+    "concept": "a10"
+  },
+  {
+    "id": "P09",
+    "group": "Core",
+    "idea": "Lag compensation (A.10)",
+    "observe": "On fire, an overlay draws the client-seen hitbox (red) and the rewound server hitbox (blue). Hits match the shooter's view.",
+    "banner": "A hit on the shooter's screen is a hit on the server.",
+    "concept": "a10"
+  },
+  {
+    "id": "P10",
+    "group": "Core",
+    "idea": "Scorecard (A.2)",
+    "observe": "All green only with predict, reconcile, interp, lagcomp and authority on.",
+    "banner": "The demo shows these four cells as a live scorecard that changes colour as techniques are toggled.",
+    "concept": "a2"
+  },
+  {
+    "id": "P11",
+    "group": "Budget",
+    "idea": "Shot budget",
+    "observe": "Stacked bar of 7 measured segments next to the `est.` 190 ms; last shot plus a rolling average of 20.",
+    "banner": "Follow one shot from the shooter's click until the target sees the hit.",
+    "concept": "a11"
+  },
+  {
+    "id": "P12",
+    "group": "Budget",
+    "idea": "Send and tick rate",
+    "observe": "Bar drops to about 103 (64/s) and about 80 (128 Hz); cost rises roughly linearly.",
+    "banner": "The price is that server CPU and bandwidth grow roughly linearly with the rate",
+    "concept": "a11"
+  },
+  {
+    "id": "P13",
+    "group": "Budget",
+    "idea": "Client FPS",
+    "observe": "Both frame segments shrink; 128 Hz + 144 FPS gives about 71 ms.",
+    "banner": "At 144 FPS each frame wait drops from about 8 to about 3.5 ms, at both ends (shooter and target): 128 Hz + 144 FPS gives ≈ 71 ms (est.).",
+    "concept": "a11"
+  },
+  {
+    "id": "P14",
+    "group": "Budget",
+    "idea": "Peeker's advantage",
+    "observe": "One measured number per configuration, labelled \"our measurement\" (Riot's figures may appear beside it as `ref`).",
+    "banner": "The player who moves out from a corner sees the defender before the defender sees them, because of these delays.",
+    "concept": "a10"
+  },
+  {
+    "id": "P15",
+    "group": "Budget",
+    "idea": "Budget table",
+    "observe": "Agreement within a stated tolerance; differences explained.",
+    "banner": "Each \"wait for the next X\" counts as half its period on average.",
+    "concept": "a11"
+  },
+  {
+    "id": "P16",
+    "group": "Infrastructure",
+    "idea": "Regions and fragile cables",
+    "observe": "Ping and the budget bar change by region; a cable cut hurts only `sg`. Labelled simulated.",
+    "banner": "International traffic depends on 6 subsea cables, which average about 10 incidents per year since 2022.",
+    "concept": "a12"
+  },
+  {
+    "id": "P17",
+    "group": "Infrastructure",
+    "idea": "Beacons and matchmaking",
+    "observe": "Matchmaker UI shows ticket, RTT map, chosen region and the relaxation step.",
+    "banner": "The client pings a UDP beacon in each region several times and takes the median.",
+    "concept": "a12"
+  },
+  {
+    "id": "P18",
+    "group": "Infrastructure",
+    "idea": "Relay / backbone",
+    "observe": "Jitter and loss graphs and the budget bar improve. Labelled simulated.",
+    "banner": "Put packets onto a private network at a nearby point of presence (PoP) as early as possible, instead of crossing many public ISP hops.",
+    "concept": "a12"
+  },
+  {
+    "id": "P19",
+    "group": "Infrastructure",
+    "idea": "Tick health",
+    "observe": "The naive loop shows GC spikes and a lower % within budget; the zero-alloc loop is flat. `-gcflags=-m` findings documented.",
+    "banner": "Measure the percentage of ticks within budget, not the average.",
+    "concept": "a12"
+  },
+  {
+    "id": "P20",
+    "group": "Infrastructure",
+    "idea": "Percentiles",
+    "observe": "The mean looks fine while p99 does not; the cable-cut drill fires the alert.",
+    "banner": "Averages hide the players who lag.",
+    "concept": "a12"
+  },
+  {
+    "id": "P21",
+    "group": "Other genres",
+    "idea": "Rollback",
+    "observe": "HUD: rollbacks per second, frames rolled back.",
+    "banner": "When the real input arrives and differs, the machine loads a saved state and re-simulates to the present.",
+    "concept": "a13"
+  },
+  {
+    "id": "P22",
+    "group": "Other genres",
+    "idea": "Input delay",
+    "observe": "Higher D gives fewer rollbacks.",
+    "banner": "Input delay reduces rollbacks: both players' inputs take effect D frames later.",
+    "concept": "a13"
+  },
+  {
+    "id": "P23",
+    "group": "Other genres",
+    "idea": "Lockstep",
+    "observe": "Stalls under jitter where rollback does not.",
+    "banner": "Every machine runs the same deterministic simulation, and a frame advances only when all players' commands for it have arrived.",
+    "concept": "a13"
+  },
+  {
+    "id": "P24",
+    "group": "Edge cases",
+    "idea": "Died behind the wall",
+    "observe": "The victim sees why they died behind cover; changing options changes the outcome.",
+    "banner": "The target can die after reaching cover on their own screen, because the server rewound to when they were still exposed.",
+    "concept": "a10"
+  },
+  {
+    "id": "P25",
+    "group": "Edge cases",
+    "idea": "Glitch lab",
+    "observe": "Each glitch is reproducible on demand and named on screen.",
+    "banner": "The client's prediction is corrected back to the server's state.",
+    "concept": "a14"
+  },
+  {
+    "id": "P26",
+    "group": "Edge cases",
+    "idea": "Sub-tick",
+    "observe": "Shot-timing error histogram at 64 Hz, on versus off. Never claim it equals 128 Hz.",
+    "banner": "Input timestamps are recorded inside the tick interval, but simulation and broadcast stay at 64 Hz.",
+    "concept": "a15"
+  },
+  {
+    "id": "P27",
+    "group": "Edge cases",
+    "idea": "Compression",
+    "observe": "kbps meter for raw, quantised and delta, at rest versus moving.",
+    "banner": "Delta encoding against the last snapshot the client acknowledged saves another order of magnitude: about 15 kbps when the scene is at rest.",
+    "concept": "a15"
+  },
+  {
+    "id": "P28",
+    "group": "Edge cases",
+    "idea": "Interest management",
+    "observe": "Entities and bytes per client, on versus off.",
+    "banner": "Unreal's Replication Graph divides the world into a grid, and each client receives only actors in nearby cells.",
+    "concept": "a15"
+  },
+  {
+    "id": "P29",
+    "group": "Edge cases",
+    "idea": "Transport",
+    "observe": "Snapshot inter-arrival histogram: TCP shows stalls, datagrams do not.",
+    "banner": "If packet 2 is lost, packets 3, 4 and 5 wait for its retransmission (head-of-line blocking).",
+    "concept": "a15"
+  }
+]
