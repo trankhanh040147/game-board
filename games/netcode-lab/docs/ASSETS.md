@@ -16,3 +16,19 @@ All assets used in Netcode Lab are dedicated to the public domain under the Crea
 | `ui_click.ogg` | UI click | https://kenney.nl/assets/interface-sounds | Interface Sounds (1.0) / `Audio/click_001.ogg` | Kenney | CC0 |
 | `round_start.ogg` | Round start | https://kenney.nl/assets/music-jingles | Music Jingles (1.0) / `Audio/Steel jingles/jingles_STEEL00.ogg` | Kenney | CC0 |
 | `round_end.ogg` | Round end | https://kenney.nl/assets/music-jingles | Music Jingles (1.0) / `Audio/Steel jingles/jingles_STEEL10.ogg` | Kenney | CC0 |
+
+## 3D Models (`games/netcode-lab/client/public/models/`)
+
+| File Name | What It Is | Source URL | Original Pack / File Name | Author | Licence |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `character.glb` | Player character (1.8 m scaled height, high readability at 30 m, neutral base material tintable to Blue #2563EB / Orange #EA580C) | https://kenney.nl/assets/blocky-characters | Blocky Characters (2.0) / `Models/GLB format/character-a.glb` | Kenney | CC0 |
+| `rifle.glb` | First-person rifle model (generic assault rifle with optical scope and magazine) | https://kenney.nl/assets/blaster-kit | Blaster Kit (2.1) / `Models/GLB format/blaster-f.glb` | Kenney | CC0 |
+
+## Map Textures (`games/netcode-lab/client/public/textures/`)
+
+| File Name | What It Is | Source URL | Original Pack / File Name | Author | Licence |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `ground.png` | Ground / floor surface texture (dark tiled grid pattern, 512x512) | https://kenney.nl/assets/prototype-textures | Prototype Textures 1.0 / `PNG/Dark/texture_02.png` | Kenney | CC0 |
+| `wall.png` | Wall / block surface texture (light bordered architectural concrete block, 512x512) | https://kenney.nl/assets/prototype-textures | Prototype Textures 1.0 / `PNG/Light/texture_08.png` | Kenney | CC0 |
+| `cover.png` | Low-wall cover surface texture (tactical framed low-wall cover, 512x512) | https://kenney.nl/assets/prototype-textures | Prototype Textures 1.0 / `PNG/Dark/texture_08.png` | Kenney | CC0 |
+| `grid.png` | Grid / prototype distance-meter texture (1-meter grid with coordinate markers for distance readability, 512x512) | https://kenney.nl/assets/prototype-textures | Prototype Textures 1.0 / `PNG/Dark/texture_01.png` | Kenney | CC0 |
