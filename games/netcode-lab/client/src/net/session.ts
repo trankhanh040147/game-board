@@ -168,7 +168,7 @@ export class Session implements LabBackend {
   }
 
   /** Called every render frame. Runs the fixed ticks the pacer says are due; never passes frame dt to the sim. */
-  frame(now: number, sample: () => InputIntent, onFire: () => void) {
+  frame(now: number, sample: () => InputIntent, onFire: (seq: number) => void) {
     if (now - this.lastPing >= PING_MS) {
       this.lastPing = now;
       this.t.sendBinary(this.sim.encodePing(this.conn, now));
@@ -185,7 +185,7 @@ export class Session implements LabBackend {
         const rt = this.renderServerTick(now);
         if (rt !== null) { cmd.renderTick = Math.floor(rt); cmd.renderFrac = Math.floor((rt % 1) * 65536); }
         cmd.subtickFrac = 0;
-        onFire();
+        onFire(cmd.seq);
       }
       this.prevPred = this.curPred;
       this.curPred = this.sim.predict(this.pred, cmd, dt);

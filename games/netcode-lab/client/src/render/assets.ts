@@ -7,13 +7,15 @@ export interface Assets {
   character: GLTF | null;
   rifle: GLTF | null;
   textures: Partial<Record<"ground" | "wall" | "cover" | "grid", THREE.Texture>>;
+  vfx: Partial<Record<"muzzle_flash" | "impact_decal" | "hit_marker" | "headshot" | "kill_icon", THREE.Texture>>;
+  sky: THREE.Texture | null;
   failures: string[];
 }
 
 export async function loadAssets(): Promise<Assets> {
   const gltf = new GLTFLoader();
   const tex = new THREE.TextureLoader();
-  const out: Assets = { character: null, rifle: null, textures: {}, failures: [] };
+  const out: Assets = { character: null, rifle: null, textures: {}, vfx: {}, sky: null, failures: [] };
   const fail = (what: string) => (e: unknown) => {
     const msg = `${what}: ${(e as Error)?.message ?? String(e)}`;
     out.failures.push(msg);
@@ -29,6 +31,13 @@ export async function loadAssets(): Promise<Assets> {
         t.anisotropy = 4;
         out.textures[k] = t;
       }, fail(`textures/${k}.png`))),
+    ...(["muzzle_flash", "impact_decal", "hit_marker", "headshot", "kill_icon"] as const).map((k) =>
+      tex.loadAsync(`./textures/vfx/${k}.png`).then((t) => { t.colorSpace = THREE.SRGBColorSpace; out.vfx[k] = t; }, fail(`textures/vfx/${k}.png`))),
+    tex.loadAsync("./textures/sky/sky.png").then((t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.mapping = THREE.EquirectangularReflectionMapping;
+      out.sky = t;
+    }, fail("textures/sky/sky.png")),
   ]);
   return out;
 }

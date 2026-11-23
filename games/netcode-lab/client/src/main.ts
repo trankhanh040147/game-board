@@ -13,6 +13,11 @@ import { Session } from "./net/session";
 import { loadAssets } from "./render/assets";
 import { PresenterView } from "./hud/presenter";
 import { PRESET_DOCS, conceptUrl } from "./hud/presets";
+import { Sfx } from "./audio";
+import { ShotVfx } from "./render/vfx";
+
+// B.3: 600 rpm. Cosmetic cadence only; the server decides which shots exist.
+const FIRE_INTERVAL_MS = 100;
 
 const hud = document.body;
 const offlineBackend: LabBackend = { connected: false, builtPresets: new Set(), settings: null, activePreset: null, applyPreset() {}, setSetting() {} };
@@ -114,6 +119,18 @@ async function boot() {
 
   const world = new World(canvas, courtyard, assets);
   const presenter = new PresenterView(hud, courtyard);
+  const sfx = new Sfx();
+  const vfx = new ShotVfx(world.scene, world.camera, assets.vfx.impact_decal ?? null, () => world.shotTargets());
+  let lastShotAt = -Infinity;
+  /** Predicted cosmetics (B.3): flash, tracer, decal and sound play at once; hit feedback waits for the server. */
+  const fireCosmetic = (now: number) => {
+    if (now - lastShotAt < FIRE_INTERVAL_MS) return false;
+    lastShotAt = now;
+    world.rifle.fire(now);
+    vfx.fire(now, world.rifle.muzzleWorld());
+    sfx.play("rifle_shot", 0.6);
+    return true;
+  };
   const input = new InputCapture(canvas);
   const fps = new FpsMeter();
   const probe = new MotionProbe();
@@ -131,8 +148,8 @@ async function boot() {
     ? { width: link.sim.PLAYER.halfWidth * 2, height: link.sim.PLAYER.height, headSize: link.sim.PLAYER.head.half * 2, headBottom: link.sim.PLAYER.head.bottom, eyeHeight: link.sim.PLAYER.eyeHeight }
     : null;
 
-  go.addEventListener("click", () => input.lock());
-  canvas.addEventListener("click", () => { if (!input.active && !lab.open && !presenter.open) input.lock(); });
+  go.addEventListener("click", () => { sfx.unlock(); input.lock(); });
+  canvas.addEventListener("click", () => { if (!input.active && !lab.open && !presenter.open) { sfx.unlock(); input.lock(); } });
   const dragNote = el("div", { id: "dragnote", class: "hud box" }, "no pointer lock: drag to look · left click fires · Esc for menu");
   dragNote.style.display = "none";
   hud.appendChild(dragNote);
@@ -145,7 +162,7 @@ async function boot() {
     start.style.display = active || lab.open || presenter.open ? "none" : "flex";
     dragNote.style.display = input.dragMode ? "" : "none";
   };
-  if (!s) input.onFirePress = () => world.rifle.fire(performance.now());
+  if (!s) input.onFirePress = () => fireCosmetic(performance.now());
   presenter.onToggle = (open) => {
     if (open) input.deactivate();
     start.style.display = open || lab.open || input.active ? "none" : "flex";
@@ -174,7 +191,7 @@ async function boot() {
       fps.push(now);
       lastFrameMs = frameMs;
       if (s && s.connected) {
-        s.frame(now, () => input.sample(), () => world.rifle.fire(now));
+        s.frame(now, () => input.sample(), (seq) => { if (fireCosmetic(now)) onShot(seq, now); });
         frameAvg = frameMs > 0 ? frameAvg * 0.9 + Math.min(frameMs, 100) * 0.1 : frameAvg;
         const v = s.ownView(now, frameAvg);
         if (v && dims) {
@@ -187,10 +204,14 @@ async function boot() {
         world.setView(cam.x, cam.y, cam.z, input.yaw, input.pitch);
       }
       world.rifle.update(now, frameMs);
+      vfx.update(now);
       world.animate(frameMs);
       world.render();
     },
   });
+
+  /** Called for each predicted shot; later pieces attach the P09 client-seen hitboxes here. */
+  function onShot(_seq: number, _now: number) {}
 
   function recordPresenter(now: number, v: { x: number; y: number; z: number } | null) {
     if (!s) return;
@@ -236,7 +257,7 @@ async function boot() {
   }
 
   // Handle for automated browser checks (Playwright cannot grant pointer lock headless).
-  (window as any).__netlab = { input, session: s, probe, presenter };
+  (window as any).__netlab = { input, session: s, probe, presenter, vfx, world };
   lab.local = {
     get fpsCap() { return loop.fpsCap; },
     setFpsCap(v: number) { loop.fpsCap = v as FpsCap; },

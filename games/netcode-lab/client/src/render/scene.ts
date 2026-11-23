@@ -14,12 +14,13 @@ export class World {
   readonly camera = new THREE.PerspectiveCamera(80, 1, 0.05, 500);
   private players = new Map<number, PlayerView>();
   private ghosts = new Map<number, THREE.Group>();
+  readonly mapMeshes: THREE.Mesh[] = [];
   readonly rifle: Rifle;
 
   constructor(canvas: HTMLCanvasElement, map: CourtyardMap, private assets: Assets | null = null) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.scene.background = new THREE.Color(0x9cc3e6);
+    this.scene.background = assets?.sky ?? new THREE.Color(0x9cc3e6);
     this.scene.fog = new THREE.Fog(0x9cc3e6, 40, 110);
     this.scene.add(new THREE.HemisphereLight(0xdbeafe, 0x57534e, 1.4));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -27,7 +28,7 @@ export class World {
     this.scene.add(sun);
     this.buildMap(map);
     this.scene.add(this.camera);
-    this.rifle = new Rifle(this.camera, assets?.rifle?.scene ?? null);
+    this.rifle = new Rifle(this.camera, assets?.rifle?.scene ?? null, assets?.vfx.muzzle_flash ?? null);
     this.resize();
     addEventListener("resize", () => this.resize());
   }
@@ -52,6 +53,8 @@ export class World {
       const mesh = new THREE.Mesh(geo, mats[kind]);
       mesh.position.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
       mesh.name = b.id;
+      mesh.userData.world = true; // impact decals stick to map geometry only
+      this.mapMeshes.push(mesh);
       this.scene.add(mesh);
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: 0x292524, transparent: true, opacity: 0.35 }));
       edges.position.copy(mesh.position);
@@ -117,6 +120,13 @@ export class World {
     for (const [id, g] of this.ghosts) if (!alive.has(id)) { this.scene.remove(g); this.ghosts.delete(id); }
   }
 
+  /** What a cosmetic tracer can stop at: the map and the players as drawn. */
+  shotTargets(): THREE.Object3D[] {
+    const out: THREE.Object3D[] = [...this.mapMeshes];
+    for (const p of this.players.values()) if (p.root.visible) out.push(p.root);
+    return out;
+  }
+
   render() { this.renderer.render(this.scene, this.camera); }
 }
 
@@ -175,19 +185,22 @@ function playerMesh(color: number, d: PlayerDims, ghost: boolean): THREE.Group {
 /** First-person rifle made of boxes. Recoil and muzzle flash are cosmetic and client-only (B.3). */
 export class Rifle {
   private root = new THREE.Group();
-  private flash: THREE.Mesh;
+  private flash: THREE.Object3D;
   private kick = 0;
   private flashUntil = 0;
   private restZ = -0.42;
 
-  constructor(camera: THREE.Camera, model: THREE.Object3D | null) {
+  constructor(camera: THREE.Camera, model: THREE.Object3D | null, flashTex: THREE.Texture | null = null) {
     if (model) {
       const m = model.clone(true);
       const box = new THREE.Box3().setFromObject(m);
       const len = box.max.z - box.min.z;
       m.scale.setScalar(0.5 / len); // about 0.5 m in hand
       this.root.add(m);
-      this.flash = new THREE.Mesh(new THREE.OctahedronGeometry(0.05), new THREE.MeshBasicMaterial({ color: 0xfde68a }));
+      this.flash = flashTex
+        ? new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }))
+        : new THREE.Mesh(new THREE.OctahedronGeometry(0.05), new THREE.MeshBasicMaterial({ color: 0xfde68a }));
+      if (flashTex) this.flash.scale.setScalar(0.16);
       this.flash.position.set(0, 0.015, -0.27);
       this.flash.visible = false;
       this.root.add(this.flash);
@@ -221,6 +234,9 @@ export class Rifle {
     this.root.traverse((o) => { o.renderOrder = 20; });
     camera.add(this.root);
   }
+
+  /** World position of the muzzle, where tracers start. */
+  muzzleWorld(): THREE.Vector3 { return this.flash.getWorldPosition(new THREE.Vector3()); }
 
   fire(now: number) {
     this.kick = 1;
