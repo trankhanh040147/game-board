@@ -46,3 +46,36 @@
 2. **Plain-HTTP WebSocket fallback with a visible banner** when WebTransport is not available.
 3. **gc-WASM, not TinyGo**, plus a native-vs-WASM sim hash test.
 4. **In-process conditioner first.** `tc netem` is Linux-only and the host is macOS; netem.sh stays CI-only.
+
+## 2026-11-23 — core: M0/M1 implemented; transport ruling and changes found while building
+
+12. **Transport (lead ruling, from research R1).** Plain `http://<LAN-IP>` is not a secure context, so browsers
+    refuse WebTransport there. The server mints an ECDSA P-256 self-signed cert at start (10-day validity, under the
+    14-day limit; SANs = localhost, 127.0.0.1, ::1 and every non-loopback interface IP). It serves the page over HTTPS
+    on TCP 8443 and WebTransport/HTTP3 on UDP 8443, and publishes the cert hash at `GET /certhash` (also
+    `/api/certhash`) for `serverCertificateHashes`. Plain HTTP on 8080 serves the same page with WebSocket only;
+    the client shows a "WebSocket fallback" banner there. Teammates click through one cert warning on 8443.
+13. **Origin check.** WebSocket accepts any origin (the page can come from :8080, :8443, a LAN IP or the Vite dev
+    server on :5173), and WebTransport `CheckOrigin` returns true. Reason: a LAN demo with no accounts. Lab changes
+    still need the admin token.
+14. **FMA (lead note).** The lead asked for `float64(a*b)+c` in `sim/`. `sim/` has no floats in `Step` at all
+    (decision 1, fixed point), so fusion cannot happen. Float is used only to load the map and to convert for
+    display. The sine table is generated source (`sim/sintab.go`), not computed at runtime.
+    `make determinism` is the gate: arm64, amd64 and WASM produce identical hashes.
+15. **Input pacing (B.4 rule 3) uses server feedback.** The client sends inputs on the synced clock
+    (`net/clock.Pacer`): one per server tick, ahead by RTT/2 plus a margin. The margin grows by one tick whenever
+    the snapshot's `own.starved` counter moves, and shrinks by 0.25 tick after each 10 s calm period. Reason:
+    measured, a fixed one-tick margin still starved the server about once per 20 s on localhost, and every
+    starvation caused one correction.
+16. **Playout buffer primed at 2 inputs** (TargetInputBuffer 1 + 1) before the server starts consuming a new
+    client's inputs. Reason: priming at 1 starved at once (measured 2–3 corrections per bot in 20 s).
+17. **Snapshot carries `serverTimeMs` (f64) and the own input-buffer health** (`inputBuffer`, `starved`,
+    `inputLead`). These are additions to B.5. Reason: the client maps tick ↔ time across tick-rate changes, and
+    the pacer and the A.14 HUD need the starvation count.
+18. **Server stats go on control JSON at 1 Hz**: tick time p50/p99/max, % within budget, tick start lateness,
+    and per-client loss/RTT/buffer. Reason: JSON stays off the per-tick path (B.2).
+19. **Ports: 8080 (HTTP + WS) and 8443 (HTTPS + WS + WebTransport).** The Vite dev proxy already points at :8080.
+20. **The `dumb` mode is not a separate server mode.** P02 = `predict:false, reconcile:false, interp:false` with
+    server authority. The server does the same work in every authoritative mode; only the client draws differently.
+21. **Generated WASM files are not committed.** `make wasm` writes `client/public/sim.wasm` and `wasm_exec.js`
+    (3.5 MB). `make dev` and `make client` build them first.

@@ -49,7 +49,9 @@ type Room struct {
 	clients  map[uint8]*Client
 	defCond  CondPair
 	sendAcc  int
-	durs     []float64 // tick processing time (ms) over the last second
+	durs     []float64 // tick processing time (ms), recent ticks
+	lates    []float64 // how late each tick started vs its schedule (ms)
+	lateMax  float64   // worst start lateness since start (ms)
 	wbuf     codec.Writer
 
 	tick        atomic.Uint32
@@ -124,7 +126,11 @@ func (r *Room) Run(ctx context.Context) {
 		} else if -d > 5*period {
 			next = time.Now() // fell far behind (laptop sleep): do not burst
 		}
-		r.step()
+		late := time.Since(next)
+		if late > 3*period {
+			r.log.Warn("tick started late", "lateMs", float64(late.Microseconds())/1000, "budgetMs", float64(period.Microseconds())/1000)
+		}
+		r.step(float64(late.Nanoseconds()) / 1e6)
 		if time.Now().After(statsAt) {
 			statsAt = statsAt.Add(time.Second)
 			r.sendStats()
@@ -132,9 +138,11 @@ func (r *Room) Run(ctx context.Context) {
 	}
 }
 
-func (r *Room) step() {
+func (r *Room) step(lateMs float64) {
 	t0 := time.Now()
 	r.mu.Lock()
+	r.lates = append(r.lates, lateMs)
+	r.lateMax = max(r.lateMax, lateMs)
 	tick := r.tick.Add(1)
 	r.tickStartNs.Store(t0.Sub(r.start).Nanoseconds())
 	s := r.settings
@@ -151,6 +159,9 @@ func (r *Room) step() {
 	r.durs = append(r.durs, d)
 	if len(r.durs) > 4*s.TickRate {
 		r.durs = r.durs[len(r.durs)-4*s.TickRate:]
+	}
+	if len(r.lates) > 4*s.TickRate {
+		r.lates = r.lates[len(r.lates)-4*s.TickRate:]
 	}
 	r.mu.Unlock()
 }
@@ -544,6 +555,7 @@ func (r *Room) applySettings(s Settings, preset string) {
 	if rateChanged {
 		r.setRate(s.TickRate)
 		r.durs = r.durs[:0]
+		r.lates = r.lates[:0]
 	}
 	r.mu.Unlock()
 	r.log.Info("settings", "preset", preset, "tickRate", s.TickRate, "sendRate", s.SendRate, "predict", s.Predict, "reconcile", s.Reconcile)
@@ -677,6 +689,8 @@ func tickStats(durs []float64, rate int) TickStats {
 func (r *Room) sendStats() {
 	r.mu.Lock()
 	ts := tickStats(r.durs, r.settings.TickRate)
+	late := tickStats(r.lates, r.settings.TickRate)
+	lateMax := r.lateMax
 	tick := r.tick.Load()
 	s := r.settings
 	cs := make([]*Client, 0, len(r.clients))
@@ -704,7 +718,8 @@ func (r *Room) sendStats() {
 		you["condStats"] = map[string]cond.Stats{"up": c.up.Stats(), "down": c.down.Stats()}
 		r.send(c, map[string]any{
 			"t": "stats", "serverTick": tick, "serverTimeMs": r.NowMs(), "tickRate": s.TickRate, "sendRate": s.SendRate,
-			"tick": ts, "players": len(cs), "you": you,
+			"tick": ts, "tickStartLate": map[string]any{"p50Ms": late.P50Ms, "p99Ms": late.P99Ms, "maxMs": late.MaxMs, "maxSinceStartMs": lateMax},
+			"players": len(cs), "you": you,
 		})
 	}
 }
