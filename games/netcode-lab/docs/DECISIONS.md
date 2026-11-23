@@ -327,3 +327,25 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
     needs 2 ticks this oscillates forever, and each cycle is a correction. `TestPacerDoesNotOscillate`: the old
     rule gave 44 raises in 110 s, the new one 3. A single stall on a calm host still drains to 1 tick within
     8 s (`TestPacerMarginRaisesAndDrains`).
+51. **Inputs play at their stamped tick; the pacer targets measured lead** (amends 7, 15, 40, 50; research R6).
+    - Cause of the margin at the ceiling: the server consumed inputs in sequence and ignored `clientTick`. It also
+      consumed two per tick whenever more than 3 were queued. A margin above about 3 ticks therefore added no
+      buffer: the server drained it back to 3. Every late input (frame-bunched sends, client stalls) raised the
+      margin again, so it ratcheted to 6. The inputs queued by the high margin are the hold research measured.
+    - The host's late wakeups did not count as starvation (decision 22 holds those ticks). The client's own late
+      frames do count: an input that really arrives late is a starvation (A.14).
+    - Server: an input stamped for a later tick waits in the buffer (`waitedEarly` in stats). An overdue one is
+      played, plus one more in the same tick to catch up. A missing input whose tick has not come yet is not a
+      starvation. A missing input whose tick has come is: repeat the last input and count it. Stamps far off
+      (no clock yet, more than 8 ticks late or 16 early, e.g. after a rate change) fall back to sequential play.
+    - Snapshot `own.inputLead` is now the **smallest** arrival lead since the previous snapshot (stamped tick −
+      server tick at arrival; 1 = just in time), not the newest one's.
+    - Pacer lead mode (`OnServerLead`, WASM `pacerFeedback(pacer, starved, now, own.inputLead)`): raise on
+      starvation as before. Lower one tick when every lead in the last 2 s was ≥ 2. The margin may go down to −4,
+      because RTT/2 and the clock offset are estimates. It settles at the smallest margin that still leaves one
+      tick of slack. Tests: from 6 on a clean link it reaches lead 1 in 12 s with 0 starvations; on a host
+      needing 3 ticks of slack it settles at lead 3 with 3 raises in 90 s, not at the ceiling.
+    - The old `OnServerFeedback` path (calm drain) stays for clients that do not pass the lead.
+    - Live 60 s runs on this Mac at load average 26–47 (2026-11-23 20:08–20:14) are **inconclusive**. Both rules
+      climbed to 5–6 because inputs arrived up to 13 ticks after their stamp (lead −13), which no margin rule
+      absorbs. The quiet-host before/after run is still owed (MEASUREMENTS).

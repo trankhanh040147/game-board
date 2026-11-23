@@ -572,3 +572,23 @@ Reading:
 - **Total:** the advantage is therefore about 120 + 40 ms. Under Bad route the holder side grows less than the
   extra 20 ms of delay, because the arrival-clock model keys on the least-delayed snapshot, and jitter widens the spread.
 - **Caveat:** peeker corrections (9 and 69) mean some exposures may be off by the correction size.
+
+## Pacer margin, before/after DECISIONS 51 (2026-11-23, core) — quiet run still owed
+
+Command: `bin/server -http 127.0.0.1:<port> -https ""`, then
+`node wasm/test/client-loop.mjs client/public/sim.wasm client/public/wasm_exec.js ws://127.0.0.1:<port>/ws 60 60`
+(60 s, the input loop runs once per 16.7 ms "frame" like a rAF browser; prints margin and min lead every 5 s).
+`PACER_LEGACY=1` selects the old starvation-only feedback.
+
+| Run | Host load avg | Margin over 60 s (5 s samples) | Corrections | Min lead seen |
+|---|---|---|---|---|
+| before (9079108) | 36 | 4,4,4,5,5,6,6,6,6,6,6 | 23 | not reported then |
+| after (0b4e1af), lead mode | 26 → 47 | 4,5,3,4,5,5,6,6,5,5,6 | 22 | −6 |
+| A/B at the same time, after: legacy feedback | 44 | 1,1,1,2,4,4,4,5,5,5,6,5 | 21 | −13 |
+| A/B at the same time, after: lead mode | 44 | 1,2,2,3,5,4,4,6,5,4,6 | 13 | −12 |
+
+On this host, inputs arrived up to 13 ticks (~200 ms) after their stamp. That comes from stalls of the Node
+client and the server under load, and no margin rule can absorb it. These runs therefore do not show the
+clean-link behaviour; the unit tests do (`go test -run 'TestPacerLead' -v ./net/clock`): margin 6 → lead 1 in
+12 s with 0 starvations, and settling at lead 3 when the host needs 3 ticks. **Owed**: the same 60 s command on
+a host with load average < 5, before and after.
