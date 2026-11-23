@@ -53,7 +53,8 @@ async function connect(): Promise<Link> {
     catch (e) { link.problems.push(`Game server: ${(e as Error).message}`); return link; }
   }
   const name = new URLSearchParams(location.search).get("name") ?? `player-${Math.floor(Math.random() * 900 + 100)}`;
-  link.session = new Session(link.sim, t, name);
+  const spectate = new URLSearchParams(location.search).get("spectate") === "1";
+  link.session = new Session(link.sim, t, spectate ? `${name} (presenter)` : name, spectate);
   return link;
 }
 
@@ -116,7 +117,7 @@ async function boot() {
     ${row(s !== null, "Game server", s ? `connected over ${s.t.kind === "wt" ? "WebTransport" : "WebSocket"}` : "")}
     ${link.problems.map((p) => `<div class="bad">${p}</div>`).join("")}
     ${assets.failures.length ? `<div class="bad">Assets using primitive fallback: ${assets.failures.join("; ")}</div>` : ""}
-    <p class="dim">${s ? "Click to play: mouse look, WASD, Space jump, left click fire." : "Offline: spectator camera only (WASD fly, Space up, Shift down); not the game's movement rules."} F1 opens the Lab panel. Esc releases the mouse.</p>`;
+    <p class="dim">${s && new URLSearchParams(location.search).get("spectate") === "1" ? "Presenter: you join without a player. F2 toggles the top-down view; outside it, drag to look and WASD to fly." : s ? "Click to play: mouse look, WASD, Space jump, left click fire." : "Offline: spectator camera only (WASD fly, Space up, Shift down); not the game's movement rules."} F1 opens the Lab panel. Esc releases the mouse.</p>`;
   const go = el("button", {}, s ? "Play" : "Enter spectator view");
   (go as HTMLButtonElement).disabled = !courtyard;
   card.appendChild(go);
@@ -124,6 +125,7 @@ async function boot() {
 
   const world = new World(canvas, courtyard, assets);
   const presenter = new PresenterView(hud, courtyard);
+  let presenterAuto = false;
   const sfx = new Sfx();
   const vfx = new ShotVfx(world.scene, world.camera, assets.vfx.impact_decal ?? null, () => world.shotTargets());
   let lastShotAt = -Infinity;
@@ -214,6 +216,21 @@ async function boot() {
     dragNote.style.display = input.dragMode ? "" : "none";
   };
   if (!s) input.onFirePress = () => fireCosmetic(performance.now());
+  if (s) {
+    presenter.onPause = () => s.requestHistory();
+    s.onHistory = (h) => {
+      const F = s.sim.FX;
+      presenter.setHistory(h.ticks.map((t) => ({ tick: t.tick, serverTimeMs: t.serverTimeMs, players: t.players.filter((p) => p.alive).map((p) => ({ id: p.id, team: p.team === "orange" ? 1 : 0, x: p.x / F, z: p.z / F })) })));
+    };
+    s.debugSource = () => {
+      const now = performance.now();
+      const v = s.ownView(now, frameAvg);
+      if (!v) return null;
+      const est = s.clockEstimate(now);
+      return { tick: Math.floor(est.serverTick), serverMs: est.serverTimeMs, own: v, others: [...lastDrawn].map(([id, e]) => ({ id, x: e.x, y: (e as any).y ?? 0, z: e.z })) };
+    };
+    s.reportSource = () => ({ fps: fps.fps });
+  }
   presenter.onToggle = (open) => {
     if (open) input.deactivate();
     start.style.display = open || lab.open || input.active ? "none" : "flex";
@@ -228,7 +245,7 @@ async function boot() {
 
   const loop = new FixedLoop(64, {
     onTick() {
-      if (s) return; // connected: ticks come from the WASM pacer, see onRender
+      if (s && !s.spectator) return; // playing: ticks come from the WASM pacer, see onRender
       const i = input.sample();
       const step = 12 / 64;
       const fx = -Math.sin(i.yaw), fz = -Math.cos(i.yaw);
@@ -254,6 +271,7 @@ async function boot() {
           probe.update(now, input.lastMoveKeyAt, v);
           world.setView(v.x, v.y + dims.eyeHeight, v.z, input.yaw, input.pitch);
         }
+        if (s.spectator) world.setView(cam.x, cam.y, cam.z, input.yaw, input.pitch);
         drawOthers(now);
         recordPresenter(now, v);
       } else {
@@ -352,8 +370,14 @@ async function boot() {
     const teamOf = (id: number) => id === s.id ? (s.team === "orange" ? 1 : 0) : ((s.interp.latest()?.entities.get(id) as any)?.team ?? 0);
     const drawn: { id: number; team: number; x: number; z: number }[] = [];
     for (const [id, e] of lastDrawn) drawn.push({ id, team: (e as any).team ?? 0, x: e.x, z: e.z });
+    const predicted: { id: number; team: number; x: number; z: number }[] = [];
+    for (const [id, d] of s.debugFrom) {
+      if (now - d.at > 500 || id === s.id) continue;
+      predicted.push({ id, team: s.players.get(id)?.team === "orange" ? 1 : 0, x: d.data.own.x, z: d.data.own.z });
+    }
     presenter.record({
       t: now,
+      predicted,
       simNote: presenterSimNote,
       serverNowMs: est.ready ? est.serverTimeMs : null,
       renderServerMs: r,
@@ -449,6 +473,13 @@ async function boot() {
       ...[...s.players].filter(([id]) => id !== s.id).map(([id, p]) => ({ id, name: p.name, team: p.team as "blue" | "orange", kills: null, deaths: null, pingMs: null, lossPct: null, fps: null })),
     ];
     combat.scoreboard(boardRows, s.id, s.scoreRows ? "From the server's 1 Hz scoreboard." : "Waiting for the server's scoreboard; your own row is measured here.");
+    if (s.spectator && !presenterAuto) {
+      // Presenter join (?spectate=1): no player, no rifle, the top-down view opens by itself.
+      presenterAuto = true;
+      world.rifle.setVisible(false);
+      start.style.display = "none";
+      presenter.toggle(true);
+    }
     if (s.settingsEpoch !== probeEpoch) { probeEpoch = s.settingsEpoch; probe.results = []; }
     // A.16: the server's conditioner adds simulated delay/jitter/loss to every measured network number.
     const c = s.cond;

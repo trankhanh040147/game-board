@@ -14,6 +14,7 @@ export interface Frame {
   truthTick: number | null;
   drawn: PlayerMark[];              // others as this client draws them (interpolated or raw)
   own: { id: number; team: number; x: number; z: number; yaw: number } | null; // this client's predicted self
+  predicted: PlayerMark[];          // other players' own predicted positions, relayed by the server (debugpos)
   ownServer: { x: number; z: number } | null;   // newest server state of self (snapshot)
 }
 
@@ -26,6 +27,11 @@ export class PresenterView {
   private canvas: HTMLCanvasElement;
   private info: HTMLElement;
   private frames: Frame[] = [];
+  /** The server's 2 s ring (B.7), fetched on pause; positions in metres. */
+  private history: { tick: number; serverTimeMs: number; players: PlayerMark[] }[] | null = null;
+  private hcursor = 0;
+  /** Called when the presenter pauses, to fetch the server's history. */
+  onPause?: () => void;
   open = false;
   paused = false;
   private cursor = 0; // index into frames while paused
@@ -43,9 +49,19 @@ export class PresenterView {
     addEventListener("keydown", (e) => {
       if (e.code === "F2") { e.preventDefault(); this.toggle(); return; }
       if (!this.open) return;
-      if (e.code === "Space") { e.preventDefault(); this.paused = !this.paused; this.cursor = this.frames.length - 1; }
-      if (this.paused && e.code === "ArrowLeft") this.cursor = Math.max(0, this.cursor - 1);
-      if (this.paused && e.code === "ArrowRight") this.cursor = Math.min(this.frames.length - 1, this.cursor + 1);
+      if (e.code === "Space") {
+        e.preventDefault();
+        this.paused = !this.paused;
+        this.cursor = this.frames.length - 1;
+        this.history = null;
+        if (this.paused) this.onPause?.();
+      }
+      const step = (d: number) => {
+        if (this.history) this.hcursor = Math.max(0, Math.min(this.history.length - 1, this.hcursor + d));
+        else this.cursor = Math.max(0, Math.min(this.frames.length - 1, this.cursor + d));
+      };
+      if (this.paused && e.code === "ArrowLeft") step(-1);
+      if (this.paused && e.code === "ArrowRight") step(1);
     });
   }
 
@@ -62,9 +78,23 @@ export class PresenterView {
     while (this.frames.length && this.frames[0].t < f.t - HISTORY_MS) this.frames.shift();
   }
 
+  setHistory(h: { tick: number; serverTimeMs: number; players: PlayerMark[] }[]) {
+    if (!this.paused || !h.length) return;
+    this.history = h;
+    this.hcursor = h.length - 1;
+  }
+
   draw() {
     if (!this.open || !this.frames.length) return;
-    const f = this.paused ? this.frames[this.cursor] : this.frames[this.frames.length - 1];
+    let f = this.paused ? this.frames[this.cursor] : this.frames[this.frames.length - 1];
+    let hrow: { tick: number; serverTimeMs: number; players: PlayerMark[] } | null = null;
+    if (this.paused && this.history) {
+      // Step through server ticks; pair each with the browser frame closest in server time for drawn/predicted marks.
+      hrow = this.history[this.hcursor];
+      let best = f, bd = Infinity;
+      for (const fr of this.frames) { if (fr.serverNowMs === null) continue; const d = Math.abs(fr.serverNowMs - hrow.serverTimeMs); if (d < bd) { bd = d; best = fr; } }
+      f = { ...best, truth: hrow.players, truthTick: hrow.tick };
+    }
     const dpr = Math.min(devicePixelRatio, 2);
     const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
     if (this.canvas.width !== Math.round(W * dpr) || this.canvas.height !== Math.round(H * dpr)) { this.canvas.width = Math.round(W * dpr); this.canvas.height = Math.round(H * dpr); }
@@ -88,16 +118,22 @@ export class PresenterView {
     const r = Math.max(7, 0.5 * s);
     const lines: string[] = [];
     const truthById = new Map((f.truth ?? []).map((p) => [p.id, p]));
+    const predById = new Map(f.predicted.map((p) => [p.id, p]));
     const cm = (a: { x: number; z: number }, b: { x: number; z: number }) => (Math.hypot(a.x - b.x, a.z - b.z) * 100).toFixed(0);
 
     for (const d of f.drawn) {
       const t = truthById.get(d.id);
       if (t) { g.strokeStyle = "#e5e7eb"; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(px(d.x), pz(d.z)); g.lineTo(px(t.x), pz(t.z)); g.stroke(); g.setLineDash([]); }
       g.strokeStyle = teamHex(d.team); g.lineWidth = 2; g.beginPath(); g.arc(px(d.x), pz(d.z), r, 0, 7); g.stroke(); g.lineWidth = 1;
-      lines.push(`player ${d.id}: drawn here (interpolated) ${t ? `· server truth is ${cm(d, t)} cm ahead` : ""} · their own prediction: <span class="dim">needs server</span>`);
+      const pr = predById.get(d.id);
+      lines.push(`player ${d.id}: ○ drawn here (interpolated)${t ? ` · ● server truth ${cm(d, t)} cm ahead` : ""} · △ their own prediction ${pr ? `${cm(d, pr)} cm from what you draw` : '<span class="dim">not relayed (needs truthGhost on, sent by their client)</span>'}`);
     }
     if (f.truth) for (const t of f.truth) {
       g.fillStyle = teamHex(t.team); g.beginPath(); g.arc(px(t.x), pz(t.z), r * 0.7, 0, 7); g.fill();
+    }
+    for (const pm of f.predicted) {
+      g.strokeStyle = teamHex(pm.team); g.lineWidth = 2;
+      g.beginPath(); g.moveTo(px(pm.x), pz(pm.z) - r * 1.3); g.lineTo(px(pm.x) + r, pz(pm.z) + r * 0.8); g.lineTo(px(pm.x) - r, pz(pm.z) + r * 0.8); g.closePath(); g.stroke(); g.lineWidth = 1;
     }
     if (f.own) {
       const o = f.own;
@@ -109,11 +145,10 @@ export class PresenterView {
     }
     const age = f.serverNowMs !== null && f.renderServerMs !== null ? f.serverNowMs - f.renderServerMs : null;
     const head = [
-      `<b>${this.paused ? `PAUSED · frame ${this.cursor + 1}/${this.frames.length} · ${(f.t - this.frames[this.frames.length - 1].t).toFixed(0)} ms` : "live"}</b>`,
-      `<span class="dim">Legend:</span> ● server truth (debug feed${f.truthTick ? `, tick ${f.truthTick}` : ""}) · ○ drawn by this client${age !== null ? ` (${age.toFixed(0)} ms in the past, measured${f.simNote})` : ""} · ▲ your prediction · <span style="color:#fbbf24">—</span> to your last server state`,
+      `<b>${!this.paused ? "live" : hrow ? `PAUSED · server tick ${hrow.tick} (${this.hcursor + 1}/${this.history!.length}, server's 2 s history)` : `PAUSED · frame ${this.cursor + 1}/${this.frames.length} · ${(f.t - this.frames[this.frames.length - 1].t).toFixed(0)} ms (this browser's recording; waiting for server history)`}</b>`,
+      `<span class="dim">Legend:</span> ● server truth (${hrow ? "server history" : "debug feed"}${f.truthTick ? `, tick ${f.truthTick}` : ""}) · ○ drawn by this client${age !== null ? ` (${age.toFixed(0)} ms in the past, measured${f.simNote})` : ""} · △ each player's own prediction (relayed) · ▲ your prediction · <span style="color:#fbbf24">—</span> to your last server state`,
     ];
-    if (!f.truth) head.push(`<span class="warn">Server truth hidden:</span> turn on truthGhost in the Lab (the server sends positions only then).`);
-    head.push(`<span class="dim">Pause/step replays the last 2 s recorded by this browser; the server-side 2 s ring buffer (B.7) needs server.</span>`);
+    if (!f.truth) head.push(`<span class="warn">Server truth hidden:</span> turn on truthGhost in the Lab (the server sends positions and relays predictions only then). Pause shows the server's history anyway.`);
     this.info.innerHTML = head.concat(lines).join("<br>");
   }
 }

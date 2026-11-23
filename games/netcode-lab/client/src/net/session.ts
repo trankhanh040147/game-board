@@ -146,7 +146,7 @@ export class Session implements LabBackend {
       case "kill": this.onKill(m, performance.now()); break;
       case "claimRejected": this.onClaimRejected(m, performance.now()); break;
       case "history": this.onHistory(m); break;
-      case "debugpos": this.debugFrom.set(m.from, { at: performance.now(), data: m.data }); break;
+      case "debugpos": if (m.data?.own) this.debugFrom.set(m.from, { at: performance.now(), data: m.data }); break;
       case "error": this.lastError = m.msg; break;
     }
     this.onChange();
@@ -241,7 +241,7 @@ export class Session implements LabBackend {
     if (this.setting("truthGhost", false) && !this.spectator && this.debugSource && now - this.lastDebug >= 100) {
       this.lastDebug = now;
       const d = this.debugSource();
-      if (d) this.t.sendControl({ t: "debugpos", data: d });
+      if (d) this.t.sendControl({ t: "debugpos", ...d }); // the server relays the whole message as `data`
     }
     if (!this.pred || !this.settings) return;
     const trust = this.setting<string>("authority", "server") === "trust";

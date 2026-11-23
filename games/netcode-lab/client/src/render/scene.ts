@@ -235,6 +235,8 @@ export class Rifle {
     camera.add(this.root);
   }
 
+  setVisible(v: boolean) { this.root.visible = v; }
+
   /** World position of the muzzle, where tracers start. */
   muzzleWorld(): THREE.Vector3 { return this.flash.getWorldPosition(new THREE.Vector3()); }
 
