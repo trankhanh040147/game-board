@@ -943,6 +943,12 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 					r.errorTo(c, "preset "+p.ID+" is not built yet")
 					return
 				}
+				if p.apply == nil {
+					// Lives on another page (infra.html / duel.html): nothing to
+					// apply to this room; tell the client where it is.
+					r.send(c, map[string]any{"t": "presetPage", "id": p.ID, "page": p.Page})
+					return
+				}
 				s := DefaultSettings()
 				p.apply(&s)
 				cp := DefaultCond()

@@ -78,7 +78,7 @@ func TestControlProtocol(t *testing.T) {
 	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "token") {
 		t.Fatal(e)
 	}
-	ctrl(t, c, map[string]any{"t": "preset", "id": "P16", "token": "secret"})
+	ctrl(t, c, map[string]any{"t": "preset", "id": "P18", "token": "secret"})
 	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "not built") {
 		t.Fatal(e)
 	}
@@ -331,5 +331,30 @@ func TestGlitches(t *testing.T) {
 	ctrl(t, c, map[string]any{"t": "glitch", "token": "nope", "kind": "lossBurst"})
 	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "token") {
 		t.Fatal(e)
+	}
+}
+
+// A page preset (no server state) answers with its page instead of applying
+// anything, once built; it must never reach a nil apply.
+func TestPagePresetAnswersWithPage(t *testing.T) {
+	presetsForTest = allPresets()
+	for i, p := range presetsForTest {
+		if p.ID == "P16" {
+			presetsForTest[i].Built = true
+		}
+	}
+	defer func() { presetsForTest = nil }()
+	_, url := newTestServer(t)
+	c, err := transport.DialWS(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close("")
+	ctrl(t, c, map[string]any{"t": "join", "name": "p"})
+	next(t, c, "welcome")
+	ctrl(t, c, map[string]any{"t": "preset", "id": "P16", "token": "secret"})
+	m := next(t, c, "presetPage")
+	if m["page"] != "/infra.html?preset=P16" {
+		t.Fatalf("%v", m)
 	}
 }

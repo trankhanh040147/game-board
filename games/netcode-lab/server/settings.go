@@ -210,7 +210,17 @@ func base(s *Settings) { *s = DefaultSettings() }
 
 // Presets lists every B.6 preset. Built=false ones are listed so the Lab panel
 // can show them as "not built yet"; applying them is refused.
+// presetsForTest, when set by a test, replaces the preset table.
+var presetsForTest []Preset
+
 func Presets() []Preset {
+	if presetsForTest != nil {
+		return presetsForTest
+	}
+	return allPresets()
+}
+
+func allPresets() []Preset {
 	return []Preset{
 		{ID: "P01", Title: "Vocabulary", Section: "A.1", Built: true, apply: base,
 			Banner: "RTT, tick, snapshot and frame. Defaults are the A.1 running assumptions (est.): 64 Hz server, 20 snapshots/s, 60 FPS; 40 ms RTT is simulated by the conditioner."},
