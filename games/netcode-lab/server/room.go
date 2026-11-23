@@ -58,6 +58,8 @@ type Room struct {
 
 	tick      atomic.Uint32
 	hist      *history
+	tickHist  hist // whole-window tick processing time
+	lateHist  hist // whole-window tick start lateness
 	round     roundState
 	teamScore [2]int
 	spawnSeq  int
@@ -238,6 +240,9 @@ func (r *Room) step(lateMs float64) {
 		r.sendSnapshots(tick, s)
 	}
 	d := float64(time.Since(t0).Nanoseconds()) / 1e6
+	budget := float64(period) / 1e6
+	r.tickHist.add(d, budget)
+	r.lateHist.add(lateMs, budget)
 	r.durs = append(r.durs, d)
 	if len(r.durs) > 4*s.TickRate {
 		r.durs = r.durs[len(r.durs)-4*s.TickRate:]
@@ -783,6 +788,14 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 		c.mu.Lock()
 		c.reportRTT, c.reportJitter, c.reportLoss, c.reportFPS = in.RTTMs, in.JitterMs, in.LossPct, in.FPS
 		c.mu.Unlock()
+	case "statsReset":
+		if !r.checkToken(in.Token) {
+			r.errorTo(c, "statsReset: bad admin token")
+			return
+		}
+		r.tickHist.reset()
+		r.lateHist.reset()
+		r.send(c, map[string]any{"t": "statsReset", "serverTimeMs": r.NowMs()})
 	case "history":
 		r.send(c, r.historyMsg())
 	case "chat":
@@ -902,6 +915,9 @@ func (r *Room) sendStats() {
 		cs = append(cs, c)
 	}
 	r.mu.Unlock()
+	// Whole window since start or the last {t:"statsReset"}: tick time and
+	// start lateness kept separate (slow tick vs late scheduler), plus GC.
+	window := map[string]any{"tickMs": r.tickHist.stats(), "startLateMs": r.lateHist.stats(), "gc": readGC()}
 	for _, c := range cs {
 		es := c.ep.Snapshot()
 		c.mu.Lock()
@@ -924,6 +940,7 @@ func (r *Room) sendStats() {
 			"t": "stats", "serverTick": tick, "serverTimeMs": r.NowMs(), "tickRate": s.TickRate, "sendRate": s.SendRate,
 			"tick": ts, "tickStartLate": map[string]any{"p50Ms": late.P50Ms, "p99Ms": late.P99Ms, "maxMs": late.MaxMs, "maxSinceStartMs": lateMax, "catchUpTicks": catchUps, "scheduleResets": r.scheduleResets.Load()},
 			"players": len(cs), "you": you,
+			"window": window,
 		})
 	}
 	r.broadcast(r.scoreboardMsg())

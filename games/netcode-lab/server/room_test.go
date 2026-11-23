@@ -138,3 +138,22 @@ func TestCatchUpHoldsOnTimeStarves(t *testing.T) {
 		t.Fatalf("on-time: starved=%d moved=%v", c.starved, c.state != before)
 	}
 }
+
+func TestHistPercentiles(t *testing.T) {
+	var h hist
+	for i := 1; i <= 1000; i++ {
+		h.add(float64(i)/100, 5) // 0.01 .. 10 ms
+	}
+	s := h.stats()
+	if s.Samples != 1000 || s.P50Ms < 4.99 || s.P50Ms > 5.01 || s.P99Ms == nil || *s.P99Ms < 9.89 || *s.P99Ms > 9.91 || s.OverBudget != 500 || s.MaxMs != 10 {
+		t.Fatalf("%+v p99=%v", s, *s.P99Ms)
+	}
+	var small hist
+	small.add(1, 5)
+	if small.stats().P99Ms != nil {
+		t.Fatal("p99 must be absent under 100 samples")
+	}
+	if g := readGC(); g.Goroutines == 0 {
+		t.Fatalf("gc stats %+v", g)
+	}
+}
