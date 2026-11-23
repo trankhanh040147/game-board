@@ -61,3 +61,13 @@ All assets used in Netcode Lab are dedicated to the public domain under the Crea
 | `ground_tile.png` | Seamless arena ground platform tile (grass & earth surface; 70×70 px) | https://kenney.nl/assets/platformer-art-deluxe | Platformer Art Deluxe / `Base pack/Tiles/grassMid.png` | Kenney | CC0 |
 | `punch.ogg` | Punch / melee attack impact sound (0.40s) | https://kenney.nl/assets/impact-sounds | Impact Sounds 1.0 / `Audio/impactPunch_medium_001.ogg` | Kenney | CC0 |
 | `whoosh.ogg` | Fast swing / attack whoosh sound (0.13s) | https://opengameart.org/content/swishes-sound-pack | Swishes Sound Pack / `swish-1.wav` | artisticdude | CC0 |
+
+## UI & Region Map Assets (`games/netcode-lab/client/public/ui/`)
+
+| File Name | What It Is | Source URL | Original Pack / File Name | Author | Licence |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `region_map.svg` | Schematic SVG map of mainland Southeast Asia (Vietnam, Laos, Cambodia, Thailand, Malaysia, Singapore) with markers for Hanoi (`hn`), Ho Chi Minh City (`hcm`), Singapore (`sg`), and animated fiber/subsea route corridors for P16–P18 regions & matchmaking | https://www.naturalearthdata.com / https://github.com/nvkelso/natural-earth-vector | Natural Earth 50m Cultural Vectors / `ne_50m_admin_0_countries` (projected & styled) | Natural Earth & Antigravity | Public Domain (CC0 dedication) |
+| `logo.svg` | "Netcode Lab" wordmark / emblem for start screen (stylized network node crosshair emblem with Blue #2563EB & Orange #EA580C team accents) | Original SVG artwork | `logo.svg` | Antigravity | CC0 1.0 Universal dedication |
+| `server_rack.svg` | Server rack chassis monochrome icon (dual 1U blades, drive bays, LEDs, mount rails) | Original SVG artwork | `server_rack.svg` | Antigravity | CC0 1.0 Universal dedication |
+| `relay_node.svg` | Relay / backbone network routing node monochrome icon (central hub with satellite routing points & pulse waves) | Original SVG artwork | `relay_node.svg` | Antigravity | CC0 1.0 Universal dedication |
+| `cable_cut.svg` | Submarine cable-cut / network fracture warning monochrome icon (warning badge with severed fiber core & discharge spark) | Original SVG artwork | `cable_cut.svg` | Antigravity | CC0 1.0 Universal dedication |
