@@ -17,7 +17,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 4 | Shot budget vs 190 ms est. / 71 ms | not run | — | — |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | not run (preliminary only) | 40 bots, current loop only: 99.92% (64 Hz) / 99.93% (128 Hz) of ticks within budget; per-second p99 max 67.7 / 33.1 ms; no zero-alloc toggle, no human players | [section](#check-5-preliminary--tick-health-with-40-bots-b9-5-p19-p28) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | not run | — | — |
-| 7 | Client smoke (Playwright) | not run | No result recorded in this file | — |
+| 7 | Client smoke (Playwright) | **partial** | 18/0/1 at `6db531d` (review: 18/1 independently), 20/0/1 at `082b412` with WT; shoot skipped: shooting not testable until M3 | [section](#check-7--client-smoke-playwright-b9-7-partial-shooting-not-testable-until-m3) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
 
 ## Check 1 — Determinism: native vs WASM (B.9 #1)
@@ -63,6 +63,21 @@ ok  	netcodelab/server
 ok  	netcodelab/sim
 ```
 
+Race run with output (review V7): `go test -race -count=1 ./...` in `games/netcode-lab` at HEAD `2a993fd`,
+macOS arm64, Go 1.26.4, ~16 s, exit 0. This is the first recorded output for the `-race` claim above.
+
+```
+ok  	netcodelab/net/clock	1.842s
+ok  	netcodelab/net/codec	2.811s
+ok  	netcodelab/net/cond	3.549s
+ok  	netcodelab/server	3.122s
+ok  	netcodelab/sim	3.297s
+ok  	netcodelab/sim/duel	3.561s
+```
+
+No test files: cmd/bot, cmd/duelbot, cmd/duelrelay, cmd/dueltrace, cmd/server, cmd/simtrace, net/transport,
+server/duelrelay, shared.
+
 They cover: codec round-trips of every message, truncated packets error, the ack window
 (dups, gaps, loss, RTT), conditioner delay/order/loss/reorder and the TCP-like stall,
 clock offset and tick estimate, sim walk speed / wall stop / jump height, predictor 0
@@ -84,6 +99,10 @@ the server's state for input #N differs bit for bit from what the bot predicted 
 | | walker-2 | 19200 | 5998 (20.0) | 13 | 21 | 40.78 ms | 159 ms | 5.25 |
 | 5 min (16:55), my side idle, other team members' Chrome/Playwright running, load avg 15 on 8 cores | walker-1 | 19168 | 5993 (20.0) | 42 | 80 | 40.72 ms | 271 ms | 5.25 |
 | | walker-2 | 19170 | 5992 (20.0) | 41 | 69 | 40.72 ms | 295 ms | 5.25 |
+
+**Audit (bots, 2026-11-23, team PID/port rule):** server lifetime unverified for all rows of this table: they were
+taken while several members were active, before the PID/port rule, and the server's lifetime is not shown. Not
+re-run as such; the current-HEAD reruns are in "Check 2 at HEAD" below.
 
 Diagnosis from the server log of the second 5-minute run: 23 "tick started late" warnings
 (50–152 ms late against a 15.6 ms budget), in bursts at 16:55:54, 16:57:18–23, 16:58:25,
@@ -120,6 +139,9 @@ bin/bot -url ws://127.0.0.1:28280/ws -n 1 -d 5m
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 16:58 | WebTransport | 64 Hz | 19201 | 5996 | **15** | 23 | 15 | 40.90 / 0.52 ms | 216.83 ms | not recorded | 6 (85.6 ms) |
 | 17:05 | WebSocket | 64 Hz | 19137 | 5983 | **45** | 92 | 55 | 43.79 / 15.62 ms | 525.67 ms | 5.30 → 14.99 | 14 (206.3 ms) |
+
+**Audit (bots, 2026-11-23, team PID/port rule):** both rows have the server lifetime shown. Each server log has the bot's
+`join` and `leave` 300 s apart (WT 16:58:18 → 17:03:18, WS 17:05:42 → 17:10:42), and the bot reported no errors.
 
 Discarded run: a WebSocket run started at 16:58 joined a leftover 128 Hz smoke-test server of mine
 (its own server failed to bind the port). It is not a default-settings run. Its numbers, for the
@@ -172,6 +194,10 @@ HTTP_PORT=28380 sh scripts/check5-load.sh 128 40 70s 10s
 | Bot RTT median (median over bots) | 40.22 ms | 40.45 ms |
 | Load avg (1 min) before → after | 14.72 → 12.82 | 12.82 → 17.91 |
 
+**Audit (bots, 2026-11-23, team PID/port rule):** server lifetime shown indirectly. Bot 1 received 70 (64 Hz) and 69 (128 Hz)
+stats messages in a 70 s run, and 0 bots reported errors. The server logs were not kept. Superseded by
+"Check 5 at HEAD" below.
+
 Reading: the typical tick is far under budget (p50 ≈ 0.03 ms for 40 players), but single ticks
 take up to 60–68 ms of processing time and tick starts slip by up to 179 ms. On a host with load
 average 13–18 on 8 cores this is mostly descheduling, not work; the same machine shows the same
@@ -191,6 +217,9 @@ while 2 walker bots ran on the default conditioner. Host load average 10–16 on
 | + fixed-timestep catch-up | 8 + 7 | 19 + 15 | |
 | + hold on empty buffer during/just after a stall | **0 + 1** | 0 + 1 | the one starvation was 4 s after the last injected stall (bot process late at load 16), counted per A.14 |
 
+**Audit (bots, 2026-11-23, team PID/port rule):** server lifetime unverified (taken while several members were active,
+before the PID rule; the server's lifetime is not shown).
+
 Independent sleep probe (no server code), 64 Hz for 15 s on the same host: default QoS p50 0.90 ms late, p99
 6.6 ms, max 23 ms; background QoS p99 33 ms, max 65 ms. The stalls are from the host; DECISIONS 22.
 
@@ -209,3 +238,67 @@ line of fire at 0.11 m/tick (7 m/s at 64 Hz); the shooter renders tick 100 and f
 `TestShootOverTheWire` sends the fire input over a real WebSocket through the 20 ms conditioner and gets the
 ShotResult (hit, `recvMs` ≤ `tickStartMs`) and the victim's Damage event back in snapshots.
 The integration part of check 3 (two bots at 40 ms RTT, target crossing the gap) is not run yet.
+
+## Check 7 — Client smoke, Playwright (B.9 #7): partial (shooting not testable until M3)
+
+Forwarded by client (it cannot write here); run by client unless noted. Chromium 148 headless.
+
+Command: `cd games/netcode-lab/client && NETLAB_ADMIN_TOKEN=labtok node smoke/smoke.mjs http://127.0.0.1:38080`
+
+| Client commit | Server | Result | Run by |
+|---|---|---|---|
+| `6db531d` | built from the working tree at `5c4a0fd` | exit 0: **18 passed, 0 failed, 1 skipped** | client |
+| (same) | its own server (V2) | 18 passed, 1 skipped | review, independently |
+| `082b412` | (as reported) | **20 passed, 0 failed, 1 skipped**, now with the WebTransport leg | client |
+
+New since the earlier 15-pass run:
+- Pointer lock refused as a rejected promise: the overlay closes, the drag-to-look note shows, the player moves 5.37 m and dragging turns the view 0.22 rad.
+- Pointer lock refused as a synchronous `WrongDocumentError`: the overlay closes, the message names the error, the player moves 9.95 m.
+- Esc returns to the overlay.
+
+Skipped: shoot. When these runs were taken the server had no hitscan. Status: **partial: shooting not testable until M3.**
+The server-side shooting landed later (`a2afd2d`), but no smoke run with shooting is recorded yet.
+
+## Duel (P21–P23, P25)
+
+Forwarded verbatim from member "duel" (it cannot write here). Real runs on 2026-11-23, M1 Pro. **Server lifetime
+unverified**: these runs predate the PID/port rule, so the relay's lifetime is not shown. They are to be re-run
+after duel fixes `scripts/duel-measure.sh`.
+
+Setup: two `bin/duelbot` peers through `bin/duelrelay` (commit `f4828bf`), WebTransport datagrams, 30 s per run,
+bot input changes about 9/s, 0 desyncs, about 1790 checksums compared per peer. The conditioner applies per client
+and per direction, so peer RTT through the relay is about 82 ms under Default (40 ms) and about 160 ms under Bad
+route. Values are peer0 / peer1.
+
+DEFAULT
+- rollback D0 (auto): 9.20 / 8.77 rollbacks/s, 28.8 / 26.3 frames rolled back/s, max depth 6
+- rollback D1: 9.17 / 8.90 rb/s, 18.8 / 18.3 fr/s
+- rollback D2: 9.07 / 8.33 rb/s, 11.0 / 9.1 fr/s
+- rollback D3: 0.70 / 2.20 rb/s, 0.7 / 2.2 fr/s
+- lockstep auto D=4: 0 rollbacks; stalls 6 / 5 frames (103 / 83 ms) in 30 s, 0.2 frames/s
+- lockstep D=2 (re-run alone): 504 / 503 stall frames, 8326 / 8499 ms, 16.8 frames/s, 43 fps
+
+BAD ROUTE
+- rollback D0: 7.83 / 7.57 rb/s, 44.4 / 42.9 fr/s, max depth 8
+- rollback D1 (auto): 7.87 / 7.43 rb/s, 36.3 / 35.4 fr/s
+- rollback D2: 7.70 / 7.57 rb/s, 29.2 / 25.6 fr/s
+- rollback D3: 7.70 / 7.30 rb/s, 20.1 / 19.9 fr/s
+- rollback D5: 4.17 / 3.93 rb/s, 5.0 / 5.3 fr/s
+- lockstep auto D=6: 137 / 136 stall frames, 2350 / 2347 ms, 4.6 frames/s, 55 fps
+- lockstep D=2: 1018 / 1017 stall frames, 16940 / 16876 ms, 33.9 frames/s, 26 fps
+
+WebSocket under Bad route: every mode stalls about 15–19 frames/s (loss becomes a TCP retransmit stall), at about
+41–44 fps.
+
+Finding: the rollback count stays near the opponent's input-change rate until D covers the one-way trip (about 2.5
+frames at 82 ms). Depth and frames rolled back fall with every extra frame of D.
+
+Contaminated first runs: "wt default lockstep 2" and "ws default rollback 2" first showed RTTs of 120–370 ms because
+they overlapped other work. They were re-run alone; the values above for those rows are the re-runs. The duel member
+did not forward the contaminated values.
+
+Determinism: `make duel-determinism` gives native arm64 == amd64 (Rosetta) == WASM: 25201 lines, sha256
+a49b4b920738736c, 0 mismatches. Review V5 and V8 confirmed it independently.
+
+Reproduce: `make duel-run`, then `sh scripts/duel-measure.sh 30`.
+
