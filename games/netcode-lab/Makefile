@@ -24,9 +24,10 @@ server:
 bot:
 	go build -o $(BIN)/bot ./cmd/bot
 
-## client: production build of the browser client into client/dist (needs npm)
+## client: production build of the browser client into client/dist, plus the duel and infra pages into bin/duel-www (needs npm)
 client: wasm
 	cd client && npm install --no-audit --no-fund && npm run build
+	$(MAKE) duel-www
 
 ## run: serve the built client + game: HTTP :8080 (WebSocket), HTTPS + WebTransport :8443
 run: server client
