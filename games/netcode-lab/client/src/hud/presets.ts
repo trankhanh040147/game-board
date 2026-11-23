@@ -1,0 +1,35 @@
+// Catalogue of HANDOFF B.6. Which presets work is decided by the server (it advertises them); the client never assumes.
+
+export interface PresetInfo { id: string; group: string; idea: string; section: string; line: string }
+
+export const PRESETS: PresetInfo[] = [
+  { id: "P01", group: "Core netcode", idea: "Vocabulary", section: "A.1", line: "RTT, tick, snapshot rate and FPS: the four clocks every number below builds on." },
+  { id: "P02", group: "Core netcode", idea: "Dumb client", section: "A.4", line: "The client draws only server state, so every key press waits about one RTT plus tick and frame waits." },
+  { id: "P03", group: "Core netcode", idea: "Trust client", section: "A.5", line: "The client reports results; instant and fair, but a modded client can claim anything." },
+  { id: "P04", group: "Core netcode", idea: "Prediction", section: "A.6", line: "Run the same movement rules locally on your own inputs: 0 ms network wait, server still decides." },
+  { id: "P05", group: "Core netcode", idea: "Reconciliation", section: "A.7", line: "Number inputs, take the server's acked state, replay the unacked ones: no snap-back." },
+  { id: "P06", group: "Core netcode", idea: "Raw snapshots", section: "A.8", line: "Others are drawn at the latest snapshot: they stand still, then jump every 50 ms." },
+  { id: "P07", group: "Core netcode", idea: "Interpolation", section: "A.9", line: "Draw others about 100 ms in the past, gliding between two known snapshots." },
+  { id: "P08", group: "Core netcode", idea: "Three truths", section: "A.10", line: "Shooter, server and target see three different moments; without rewind, true aim misses." },
+  { id: "P09", group: "Core netcode", idea: "Lag compensation", section: "A.10", line: "The server rewinds other players' hitboxes to what the shooter saw, then traces." },
+  { id: "P10", group: "Core netcode", idea: "Scorecard", section: "A.2", line: "Instant, Smooth, Fair, Cheat-proof: all green only with every technique on." },
+  { id: "P11", group: "Latency budget", idea: "Shot budget", section: "A.11", line: "One shot traced from click to the target seeing it, segment by segment." },
+  { id: "P12", group: "Latency budget", idea: "Send and tick rate", section: "A.11", line: "Higher rates shrink waits and the buffer; CPU and bandwidth grow about linearly." },
+  { id: "P13", group: "Latency budget", idea: "Client FPS", section: "A.11", line: "Frame waits sit at both ends of the budget; the backend does not control them." },
+  { id: "P14", group: "Latency budget", idea: "Peeker's advantage", section: "A.10", line: "The peeker sees the holder first; it can shrink, never reach zero." },
+  { id: "P15", group: "Latency budget", idea: "Budget table", section: "A.11", line: "Formula value beside measured value per segment." },
+  { id: "P16", group: "Infrastructure", idea: "Regions and cables", section: "A.12", line: "Simulated regions and ISP routes; a cable cut hurts only the route to sg." },
+  { id: "P17", group: "Infrastructure", idea: "Beacons and matchmaking", section: "A.12", line: "Median UDP beacon RTT per region; the threshold relaxes while you wait." },
+  { id: "P18", group: "Infrastructure", idea: "Relay / backbone", section: "A.12", line: "Simulated public route versus private backbone: jitter and loss drop." },
+  { id: "P19", group: "Infrastructure", idea: "Tick health", section: "A.12", line: "Count ticks within budget, not the average; GC is the Go tail risk." },
+  { id: "P20", group: "Infrastructure", idea: "Percentiles", section: "A.12", line: "The mean looks fine while p99 does not." },
+  { id: "P21", group: "Other genres (duel)", idea: "Rollback", section: "A.13", line: "Guess the opponent's input, resimulate when the real one differs." },
+  { id: "P22", group: "Other genres (duel)", idea: "Input delay", section: "A.13", line: "Delay both players' inputs D frames to cut rollbacks." },
+  { id: "P23", group: "Other genres (duel)", idea: "Lockstep", section: "A.13", line: "No frame advances until every input for it has arrived." },
+  { id: "P24", group: "Edge cases", idea: "Died behind the wall", section: "A.10", line: "Rewind is fair to the shooter, so the target can die after reaching cover." },
+  { id: "P25", group: "Edge cases", idea: "Glitch lab", section: "A.14", line: "Rubber-banding, teleporting and desync on demand, each named on screen." },
+  { id: "P26", group: "Edge cases", idea: "Sub-tick", section: "A.15", line: "Fire timing inside the tick; not the same as 128 Hz." },
+  { id: "P27", group: "Edge cases", idea: "Compression", section: "A.15", line: "Quantisation, bit packing and delta against the acked baseline." },
+  { id: "P28", group: "Edge cases", idea: "Interest management", section: "A.15", line: "Replicate only entities in nearby grid cells." },
+  { id: "P29", group: "Edge cases", idea: "Transport", section: "A.15", line: "TCP head-of-line blocking versus datagrams under 5% loss." },
+];
