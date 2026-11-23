@@ -21,3 +21,18 @@
 10. **Presets live server-side** (`{"t":"preset","id":"P02"}`, admin token). P04 = predict on + reconcile off (shows the
     A.7 snap-back), P05 = reconcile on. Players may edit their own conditioner without the token.
 11. **Prediction/reconciliation logic in Go** (`sim/predict`), exposed via WASM, so the bot and the browser share it.
+
+## 2026-11-23 — client: M0–M2 client choices
+
+1. **Interpolation timeline = arrival clock, not the synced server clock.** Render time = (server time of the newest
+   snapshot as it arrives with no jitter: max of serverMs − localRecvMs over 2 s) − buffer. This is Source's
+   `cl_interp` model, so what you see is buffer + downlink old (A.9: ≈ 120 ms). The ghost lead in P07 is then measured
+   as synced server now − render time. Interpolation is rendering only; movement rules stay in the WASM sim (A.6).
+2. **Offline spectator camera.** Without a server the page still renders the Courtyard from shared/map.json with a
+   labelled free camera ("not the game's movement rules"). Every network row in the net graph shows "—", the scorecard
+   shows "?", and every Lab preset is disabled with its reason. No value is invented.
+3. **Lab panel renders server settings generically.** It shows exactly the keys the server broadcasts and only the
+   presets the server lists as built. Anything else is disabled with "not built yet" or "server not connected".
+4. **FPS cap above the display refresh runs on a MessageChannel/setTimeout loop**, because requestAnimationFrame is
+   vsync-bound. The net graph shows the measured FPS, so a cap the display cannot present is visible as such.
+5. **Client unit tests use `node --test`** (Node ≥ 23 strips TS types natively), so the client has no test-framework dependency.
