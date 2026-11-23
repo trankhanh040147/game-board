@@ -42,6 +42,9 @@ type statsMsg struct {
 	YouCost map[string]any `json:"youCost"`
 	You     struct {
 		EntitiesPerSnapshot float64            `json:"entitiesPerSnapshot"`
+		Starved             *float64           `json:"starved"`
+		HeldLate            *float64           `json:"heldLate"`
+		HeldOnStall         *float64           `json:"heldOnStall"`
 		EntityBytes         map[string]float64 `json:"entityBytes"`
 	} `json:"you"`
 }
@@ -179,6 +182,18 @@ func (r *statsRecorder) report(bots int) map[string]any {
 		mean[k] = round3(mean[k] / float64(cnt[k]))
 	}
 	out["costMeans"] = mean
+	// Input-buffer counters of the recording bot, last value (cumulative since join).
+	inbuf := map[string]any{}
+	if v := last.You.Starved; v != nil {
+		inbuf["starved"] = *v
+	}
+	if v := last.You.HeldLate; v != nil {
+		inbuf["heldLate"] = *v
+	}
+	if v := last.You.HeldOnStall; v != nil {
+		inbuf["heldOnStall"] = *v
+	}
+	out["youInputBuffer"] = inbuf
 	// Seconds with a tick over budget, with the receive time, to match against host stalls.
 	var slow []string
 	for i, m := range r.kept {

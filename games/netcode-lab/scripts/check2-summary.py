@@ -22,6 +22,7 @@ print(json.dumps({
     "serverPid": rd("server.pid"), "serverAliveAtEnd": rd("server.alive") == "alive", "botErrors": b.get("errors"),
     "transport": mode, "lab": lab, "tickRate": b["tickRate"], "seconds": b["seconds"],
     "corrections": b["corrections"], "serverStarvedTicks": b["serverStarvedTicks"],
+    "serverInputBuffer (stats: starved = repeated, heldLate = held one tick, heldOnStall)": st.get("youInputBuffer"),
     "pacerRaises": b["pacerRaises"], "pacerMarginTicksAtEnd": b["pacerMarginTicks"],
     "rttMedianMs": b["rttMedianMs"], "jitterMs": b["jitterMs"], "maxSnapshotGapMs": b["maxSnapshotGapMs"],
     "cond": b.get("condAtWelcome"),

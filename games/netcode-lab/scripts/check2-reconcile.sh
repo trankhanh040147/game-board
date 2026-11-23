@@ -18,6 +18,7 @@ OUT=${OUT:-$(mktemp -d)}; mkdir -p "$OUT"
 TOKEN=check2-$$
 SRVBIN="$OUT/netlab-check2-server"
 go build -o "$SRVBIN" ./cmd/server && go build -o bin/bot ./cmd/bot
+{ uptime; ps -Ao pcpu,pid,comm -r | head -6 | cut -c1-140; } >"$OUT/host-before.log"
 git rev-parse --short HEAD >"$OUT/commit"; git status --short server sim net cmd/server >>"$OUT/commit"
 if [ "$MODE" = wt ]; then
   NETLAB_ADMIN_TOKEN=$TOKEN "$SRVBIN" -http "$HTTP" -https "$HTTPS" >"$OUT/server.log" 2>&1 &
@@ -38,6 +39,7 @@ PRB=$!
 NETLAB_ADMIN_TOKEN=$TOKEN bin/bot -url "$URL" -info "http://$HTTP" -n 1 -d "$D" -stats -warmup 0s ${LAB:+-lab "$LAB"} >"$OUT/bot.json"
 wait $PRB
 uptime >>"$OUT/uptime.log"
+{ uptime; ps -Ao pcpu,pid,comm -r | head -6 | cut -c1-140; } >"$OUT/host-after.log"
 date +%T >"$OUT/end"
 if kill -0 $SRV 2>/dev/null; then echo alive >"$OUT/server.alive"; else echo dead >"$OUT/server.alive"; fi
 python3 -I scripts/check2-summary.py "$OUT" "$MODE" "${LAB:-defaults}"
