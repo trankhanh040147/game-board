@@ -119,6 +119,7 @@ async function boot() {
   const probe = new MotionProbe();
   let lastFrameMs = 0;
   let frameAvg = 1000 / 60;
+  let presenterSimNote = "";
   const cam = { x: 0, y: 6, z: 30 };
   input.pitch = -0.2;
   if (s) {
@@ -201,6 +202,7 @@ async function boot() {
     for (const [id, e] of lastDrawn) drawn.push({ id, team: (e as any).team ?? 0, x: e.x, z: e.z });
     presenter.record({
       t: now,
+      simNote: presenterSimNote,
       serverNowMs: est.ready ? est.serverTimeMs : null,
       renderServerMs: r,
       truth: s.ghost && s.setting("truthGhost", false) ? s.ghost.players.map((p) => ({ id: p.id, team: teamOf(p.id), x: p.x / F, z: p.z / F })) : null,
@@ -274,7 +276,6 @@ async function boot() {
       { key: "fps", label: "FPS", value: `${fps.fps} (${lastFrameMs.toFixed(1)} ms)`, source: "measured" },
       { key: "kbps", label: "kbps up/down", value: m.kbpsUp === null ? null : `${m.kbpsUp.toFixed(1)} / ${m.kbpsDown!.toFixed(1)}`, source: "measured" },
     ];
-    graph.render(rows);
 
     const mode: ModeState | null = st ? {
       mode: st.authority === "trust" ? "trust" : !st.predict ? "dumb" : "auth",
@@ -284,8 +285,29 @@ async function boot() {
     scorecard.render(mode, st && !s.isBuilt("lagcomp") ? { fair: "lag compensation not built yet (server: M3)" } : {});
 
     if (s.settingsEpoch !== probeEpoch) { probeEpoch = s.settingsEpoch; probe.results = []; }
+    // A.16: the server's conditioner adds simulated delay/jitter/loss to every measured network number.
+    const c = s.cond;
+    const simRtt = c ? c.up.delayMs + c.down.delayMs : 0;
+    const simJit = c ? c.up.jitterMs + c.down.jitterMs : 0;
+    const simLoss = c ? c.up.lossPct + c.down.lossPct : 0;
+    const tag = (part: string | null): Row["source"] => (part ? `measured, incl. simulated ${part}` : "measured");
+    const rttTag = simRtt ? `${simRtt} ms` : null;
+    const jitTag = simJit ? `jitter ${c!.up.jitterMs}/${c!.down.jitterMs} ms` : null;
+    const lossTag = simLoss ? `loss ${c!.up.lossPct}/${c!.down.lossPct} %` : null;
+    const gapTag = simJit || simLoss ? [jitTag, lossTag].filter(Boolean).join(", ") : null;
+    for (const r of rows) {
+      if (r.key === "rtt") r.source = tag(rttTag);
+      if (r.key === "jitter") r.source = tag(jitTag);
+      if (r.key === "loss") r.source = tag(lossTag);
+      if (r.key === "gap") r.source = tag(gapTag);
+    }
+    graph.render(rows);
+    const simNoteRtt = rttTag ? `, incl. simulated ${rttTag} RTT` : "";
+    const simNoteDown = c && c.down.delayMs ? `, incl. simulated ${c.down.delayMs} ms downlink` : "";
+    presenterSimNote = simNoteDown;
+
     const lines: string[] = [];
-    if (s.t.kind === "ws") lines.push(`<span class="warn">WebSocket fallback</span> — ${link.transportNote}; game packets go over TCP.`);
+    if (s.t.kind === "ws") lines.push(`<span class="warn">WebSocket fallback</span> — ${link.transportNote}; game packets go over TCP. Conditioner loss on this path is a retransmit stall that holds later packets (head-of-line blocking, simulated).`);
     if (!s.connected) lines.push(`<span class="warn">Disconnected</span>: ${s.closedReason}. Reload to rejoin.`);
     if (s.activePreset === "custom") lines.push("Custom Lab settings (no preset)");
     else if (s.activePreset) {
@@ -299,14 +321,14 @@ async function boot() {
     const hl: string[] = [];
     if (st) {
       const med = probe.median;
-      hl.push(`input → motion: ${med === null ? "press W from standing still" : `${med.toFixed(0)} ms`} <span class="dim">(measured, median of ${probe.results.length})</span>`);
+      hl.push(`input → motion: ${med === null ? "press W from standing still" : `${med.toFixed(0)} ms`} <span class="dim">(measured${simNoteRtt}, median of ${probe.results.length})</span>`);
       if (st.predict && pi) {
         const shown = pi.pending.slice(-6).map((n: number) => "#" + n).join(" ");
         hl.push(`pending: ${shown || "none"}${pi.pending.length > 6 ? " …" : ""} · replayed: ${s.lastReplayed} · corrections: ${pi.corrections - s.correctionsBase} <span class="dim">(since last Lab change)</span>${st.reconcile ? "" : " · reconcile OFF (hard snap)"}`);
       } else hl.push("prediction off: you see only the server's state of yourself");
       const r = s.renderServerMs(now);
       hl.push(st.interp ? `others: interpolated ${s.bufferMs.toFixed(0)} ms in the past` : "others: raw latest snapshot (no interpolation)");
-      if (st.truthGhost && r !== null && est.ready) hl.push(`truth ghost leads what you see by ${(est.serverTimeMs - r).toFixed(0)} ms <span class="dim">(measured: synced server clock − render time)</span>`);
+      if (st.truthGhost && r !== null && est.ready) hl.push(`truth ghost leads what you see by ${(est.serverTimeMs - r).toFixed(0)} ms <span class="dim">(measured: synced server clock − render time${simNoteDown})</span>`);
     }
     modeHud.innerHTML = hl.join("<br>");
     modeHud.style.display = hl.length ? "" : "none";

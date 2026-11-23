@@ -1,6 +1,6 @@
 // Net graph (B.7). Each row says where its value comes from; null renders as "—", never a placeholder number.
 
-export type Source = "measured" | "server" | "setting" | "est.";
+export type Source = "measured" | "server" | "setting" | "est." | `measured, incl. simulated ${string}`;
 export interface Row { key: string; label: string; value: number | string | null; unit?: string; source: Source; digits?: number }
 
 export class NetGraph {

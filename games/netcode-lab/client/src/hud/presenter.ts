@@ -7,6 +7,7 @@ import { TEAM_COLOR } from "../render/scene";
 export interface PlayerMark { id: number; team: number; x: number; z: number }
 export interface Frame {
   t: number;                        // performance.now()
+  simNote: string;                  // A.16: ", incl. simulated N ms downlink" when the conditioner is on
   serverNowMs: number | null;       // synced server clock
   renderServerMs: number | null;    // the moment others are drawn at
   truth: PlayerMark[] | null;       // debug feed (server's current state); null while truthGhost is off
@@ -109,7 +110,7 @@ export class PresenterView {
     const age = f.serverNowMs !== null && f.renderServerMs !== null ? f.serverNowMs - f.renderServerMs : null;
     const head = [
       `<b>${this.paused ? `PAUSED · frame ${this.cursor + 1}/${this.frames.length} · ${(f.t - this.frames[this.frames.length - 1].t).toFixed(0)} ms` : "live"}</b>`,
-      `<span class="dim">Legend:</span> ● server truth (debug feed${f.truthTick ? `, tick ${f.truthTick}` : ""}) · ○ drawn by this client${age !== null ? ` (${age.toFixed(0)} ms in the past, measured)` : ""} · ▲ your prediction · <span style="color:#fbbf24">—</span> to your last server state`,
+      `<span class="dim">Legend:</span> ● server truth (debug feed${f.truthTick ? `, tick ${f.truthTick}` : ""}) · ○ drawn by this client${age !== null ? ` (${age.toFixed(0)} ms in the past, measured${f.simNote})` : ""} · ▲ your prediction · <span style="color:#fbbf24">—</span> to your last server state`,
     ];
     if (!f.truth) head.push(`<span class="warn">Server truth hidden:</span> turn on truthGhost in the Lab (the server sends positions only then).`);
     head.push(`<span class="dim">Pause/step replays the last 2 s recorded by this browser; the server-side 2 s ring buffer (B.7) needs server.</span>`);

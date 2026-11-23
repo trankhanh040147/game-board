@@ -51,12 +51,32 @@ try {
   const startText = await A.locator("#start").innerText();
   check("join: start screen shows map, sim and server ready", /✓ Courtyard map/.test(startText) && /✓ Shared sim/.test(startText) && /✓ Game server/.test(startText), startText.split("\n").slice(1, 4).join(" | "));
   const a0 = await state(A);
-  check("join: welcome received (id, settings)", a0.id > 0 && !!a0.settings, `id ${a0.id} over ${a0.kind}`);
+  check("join: welcome received (id, settings)", a0.id > 0 && !!a0.settings, `id ${a0.id} over ${a0.kind} (http page on loopback is a secure context)`);
   const B = await join("smoke-b", "&transport=ws");
   const b0 = await state(B);
   check("join: second client over WebSocket", b0.kind === "ws" && b0.id !== a0.id, `id ${b0.id}`);
+  // 1b. HTTPS page (what LAN players open): WebTransport with the pinned self-signed cert, no fallback banner.
+  const info = await (await fetch(`${BASE}/api/info`)).json();
+  if (info.wt) {
+    const httpsBase = `https://${new URL(BASE).hostname}:${info.wt.port}`;
+    const tls = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1280, height: 760 } });
+    const H = await tls.newPage();
+    H.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`[smoke-https] ${m.text()}`); });
+    H.on("pageerror", (e) => consoleErrors.push(`[smoke-https] pageerror: ${e.message}`));
+    await H.goto(`${httpsBase}/?name=smoke-https`);
+    const hOk = await H.waitForFunction(() => window.__netlab?.session?.ready, null, { timeout: 20000 }).then(() => true, () => false);
+    const hKind = hOk ? await H.evaluate(() => window.__netlab.session.t.kind) : "none";
+    await H.waitForTimeout(400);
+    const hBanner = await H.locator("#banner").innerText().catch(() => "");
+    check("join over HTTPS page: WebTransport datagrams, no fallback banner", hKind === "wt" && !/WebSocket fallback/.test(hBanner), `${httpsBase} → ${hKind}`);
+    await tls.close();
+  } else skip("join over HTTPS page", "server reports no WebTransport (/api/info wt = null)");
   const bannerOk = await B.waitForFunction(() => /WebSocket fallback/.test(document.getElementById("banner")?.innerText ?? ""), null, { timeout: 3000 }).then(() => true, () => false);
-  check("WebSocket fallback banner visible", bannerOk);
+  check("WebSocket fallback banner visible and says the stall is simulated", bannerOk && /simulated/.test(await B.locator("#banner").innerText()));
+  const graph = await A.locator("#netgraph").innerText();
+  const cond = await A.evaluate(() => window.__netlab.session.cond);
+  const simOn = cond && (cond.up.delayMs + cond.down.delayMs) > 0;
+  check("A.16: RTT row says it includes simulated delay when the conditioner is on", !simOn || /RTT[^\n]*incl\. simulated/.test(graph), simOn ? graph.split("\n")[0] : "conditioner off");
 
   // 2. Play without pointer lock. Headless Chromium rejects requestPointerLock (a real rejected promise), so this is
   //    the same path an embedded browser view takes. Expect: overlay closes, drag-to-look note, keys move the player.
