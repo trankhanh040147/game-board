@@ -173,6 +173,8 @@ async function boot() {
     };
     s.onKill = (m, now) => combat.feedKill(m, teamOf, s.id, now);
     s.onClaimRejected = (m, now) => {
+      if (m.victimId === 0) return; // position-only claims still in flight when trust mode ends: not a hit claim
+
       combat.feedNote(`<span class="trust">rejected claim</span> from ${m.name}: "hit ${nameOf(m.victimId)}${m.hitbox === HIT_HEAD ? " in the head" : ""}" — ${m.reason}`, now);
       sfx.play("rejected_claim");
     };
@@ -220,6 +222,8 @@ async function boot() {
     el2.textContent = msg;
   };
   input.onActiveChange = (active) => {
+    // A lock (or drag mode) that lands after the Lab or presenter opened would capture every click meant for the panel.
+    if (active && (lab.open || presenter.open)) { input.deactivate(); return; }
     start.style.display = active || lab.open || presenter.open ? "none" : "flex";
     dragNote.style.display = input.dragMode ? "" : "none";
   };
@@ -420,7 +424,7 @@ async function boot() {
   }
 
   // Handle for automated browser checks (Playwright cannot grant pointer lock headless).
-  (window as any).__netlab = { input, session: s, probe, presenter, vfx, world, shotSeen, drawn: () => lastDrawn };
+  (window as any).__netlab = { input, session: s, probe, presenter, vfx, world, shotSeen, drawn: () => lastDrawn, lab };
   lab.local = {
     get fpsCap() { return loop.fpsCap; },
     setFpsCap(v: number) { loop.fpsCap = v as FpsCap; },

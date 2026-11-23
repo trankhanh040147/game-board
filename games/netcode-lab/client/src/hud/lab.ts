@@ -68,6 +68,7 @@ export class LabPanel {
   toggle(force?: boolean) {
     this.open = force ?? !this.open;
     this.root.classList.toggle("open", this.open);
+    this.shownKey = "";
     if (this.open) this.refresh();
     this.onToggle?.(this.open);
   }
@@ -76,9 +77,17 @@ export class LabPanel {
     this.status.innerHTML = isError ? `<span class="err">${text}</span>` : text;
   }
 
+  shownKey = "";
+
   refresh() {
     if (!this.open) return;
     const b = this.backend;
+    // Rebuild only when something shown here changed. The session calls refresh on every control message (stats and
+    // scoreboard arrive at 1 Hz); rebuilding then would replace a button between mouse-down and mouse-up and lose the click.
+    const key = JSON.stringify([b.connected, [...b.builtPresets], b.settings, b.activePreset, b.lastError ?? "", b.cond ?? null,
+      this.token.length > 0, this.local?.fpsCap ?? null, (b.supported ?? []).map((x) => x.key + x.built)]);
+    if (key === this.shownKey) return;
+    this.shownKey = key;
     const canAdmin = b.connected && this.token.length > 0;
     const frag = document.createDocumentFragment();
     this.tokenNote.innerHTML = this.token

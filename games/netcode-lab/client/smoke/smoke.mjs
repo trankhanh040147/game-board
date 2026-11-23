@@ -177,7 +177,10 @@ try {
     await A.evaluate(() => { window.__netlab.input.yaw = 0; window.__netlab.input.pitch = 0; });
     await T.evaluate(() => { window.__netlab.input.yaw = Math.PI; window.__netlab.input.pitch = 0; });
     // Opening the Lab or the presenter view leaves play on purpose; press Play again (drag mode headless).
-    const play = async (p) => { if (await p.locator("#start").isVisible()) await p.click("#start button"); };
+    const play = async (p) => {
+      if (await p.locator("#start").isVisible()) await p.click("#start button");
+      await p.waitForFunction(() => window.__netlab.input.active, null, { timeout: 3000 }); // the lock request has settled
+    };
     await play(A);
     await goX(A, 5.5); await goX(T, 5.5);
     await A.waitForTimeout(500);
@@ -216,11 +219,16 @@ try {
     check("P08 (lag comp off, target strafing): shot event with lagcomp off and a miss reason on screen", !!miss.shot && miss.shot.lagcomp === false && /lag compensation off/.test(miss.reason),
       miss.shot ? `${miss.shot.hitId ? "hit" : "miss"}, seenId ${miss.shot.seenId}, server MovedCm ${miss.shot.movedCm} · "${miss.reason.split("\n")[0]}"` : "no shot event");
     // P24: a real kill (headshot = 100), then the victim's death replay.
+    // Open/close the Lab by state, not by counting F1 presses (an F1 can race the async pointer-lock refusal).
+    const labTo = async (open) => {
+      for (let i = 0; i < 5 && (await A.locator("#lab.open").isVisible()) !== open; i++) { await A.keyboard.press("F1"); await A.waitForTimeout(150); }
+      if ((await A.locator("#lab.open").isVisible()) !== open) throw new Error(`Lab panel did not ${open ? "open" : "close"}`);
+    };
     const preset = async (id) => {
-      if (!(await A.locator("#lab.open").isVisible())) await A.keyboard.press("F1");
+      await labTo(true);
       await A.click(`#lab [data-preset="${id}"]`);
       await A.waitForFunction((id) => window.__netlab.session.activePreset === id, id, { timeout: 3000 });
-      await A.keyboard.press("F1");
+      await labTo(false);
       await play(A);
     };
     await preset("P24");
@@ -235,18 +243,36 @@ try {
     // P03: the modded-client button. Server authority rejects the forged claim; trust mode accepts it.
     await T.waitForFunction(() => !window.__netlab.session.dead, null, { timeout: 6000 }).catch(() => {});
     await preset("P01");
-    await A.keyboard.press("F1");
-    await A.click("#forged-claim");
+    await labTo(true);
+    if (process.env.DEBUG_LAB) {
+      const ks = []; for (let i = 0; i < 6; i++) { ks.push(await A.evaluate(() => window.__netlab.lab.shownKey)); await A.waitForTimeout(500); }
+      const u = [...new Set(ks)]; console.log("DEBUG lab keys", u.length);
+      console.log("DEBUG mutations", await A.evaluate(() => new Promise((res) => { const recs = []; const mo = new MutationObserver((m) => m.forEach((r) => recs.push(r.target.id || r.target.className || r.target.nodeName))); mo.observe(document.getElementById("lab"), { childList: true, subtree: true }); setTimeout(() => { mo.disconnect(); res(JSON.stringify(recs.slice(0, 20)) + " total " + recs.length); }, 2000); })));
+      console.log("DEBUG forged", await A.evaluate(() => { const b = document.getElementById("forged-claim"); const r = b.getBoundingClientRect(); return JSON.stringify({ r, top: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.outerHTML.slice(0, 120), n: document.querySelectorAll("#forged-claim").length }); }));
+      if (u.length > 1) { const a = JSON.parse(u[0]), c = JSON.parse(u[1]); a.forEach((v, i) => { if (JSON.stringify(v) !== JSON.stringify(c[i])) console.log("DEBUG idx", i, JSON.stringify(v).slice(0, 400), "|", JSON.stringify(c[i]).slice(0, 400)); }); }
+    }
+    if (process.env.DEBUG_LAB) await A.evaluate(() => {
+      const lab = window.__netlab.lab, orig = lab.refresh.bind(lab); window.__rebuilds = [];
+      lab.refresh = () => { const before = lab.shownKey; orig(); if (lab.shownKey !== before) {
+        const a = before ? JSON.parse(before) : [], c = JSON.parse(lab.shownKey);
+        window.__rebuilds.push(c.map((v, i) => JSON.stringify(v) !== JSON.stringify(a[i]) ? i + ":" + JSON.stringify(v).slice(0, 160) : null).filter(Boolean).join(" ; ") + " @ " + new Error().stack.split("\n").slice(2, 5).join(" < ")); } };
+    });
+    await A.click("#forged-claim", { timeout: 8000 }).catch(async (e) => {
+      if (process.env.DEBUG_LAB) console.log("DEBUG rebuilds", JSON.stringify(await A.evaluate(() => window.__rebuilds.slice(0, 4))), "\nDEBUG pw", e.message.slice(0, 1500));
+      const st = await A.evaluate(() => { const s = window.__netlab.session, b = document.getElementById("forged-claim"), r = b?.getBoundingClientRect(), lab = document.getElementById("lab");
+        return { connected: s.connected, disabled: b?.disabled, labOpen: lab.className, labRect: JSON.stringify(lab.getBoundingClientRect()), btn: JSON.stringify(r),
+          at: r ? document.elementsFromPoint(r.x + r.width / 2, r.y + r.height / 2).slice(0, 4).map((e) => e.tagName + "#" + e.id + "." + e.className).join(" > ") : "", vw: innerWidth, vh: innerHeight }; });
+      throw new Error(`forged-claim click failed: ${JSON.stringify(st)}`);
+    });
     const rejected = await A.waitForFunction(() => /rejected claim/.test(document.getElementById("killfeed").innerText) ? document.getElementById("killfeed").innerText : null, null, { timeout: 4000 }).then((h) => h.jsonValue(), () => null);
     check("P03 server authority: forged headshot claim is rejected and shown", !!rejected, (rejected ?? "no claimRejected").split("\n").pop());
-    await A.keyboard.press("F1");
     await preset("P03");
-    await A.keyboard.press("F1");
+    await labTo(true);
     await A.click("#forged-claim");
     const trusted = await A.waitForFunction(() => /trust-mode claim/.test(document.getElementById("killfeed").innerText) ? document.getElementById("killfeed").innerText : null, null, { timeout: 4000 }).then((h) => h.jsonValue(), () => null);
     check("P03 trust mode: the same forged claim lands as a kill (labelled trust-mode claim)", !!trusted, (trusted ?? "no trust kill").split("\n").pop());
     await A.click(`#lab [data-preset="P01"]`);
-    await A.keyboard.press("F1");
+    await labTo(false);
   } finally {
     await browser2.close();
   }
