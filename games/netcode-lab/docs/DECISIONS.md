@@ -404,3 +404,22 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
 55. **P26, P27 and P28 back to built:false** (lead ruling). B.6's Observe for each is a meter on screen
     (timing-error histogram, kbps meters, entities/bytes per client). The server data exists, but client's
     panels do not yet. They flip after each panel is verified end to end.
+
+## 2026-11-23 — bots (lead ruling): B.9 check 6 counts stalls, not loss gaps
+
+1. **Threshold stays literal; every gap over it is classified by snapshot ids.** B.9 #6: "with 5% loss, WebSocket
+   mode shows inter-arrival stalls longer than 3× the send interval; datagram mode does not." The threshold stays
+   3 × 50 ms = 150 ms at 20 snapshots/s. Each snapshot inter-arrival gap above it is classified by the per-client
+   snapshot id (`snapId`, 1..255, +1 per snapshot sent to that client, server/room.go):
+   - **Loss gap:** ids are missing in the gap. The data is gone and newer data arrives on time.
+   - **Stall:** no id is missing. The data was delayed and held back.
+   The check is judged on **stalls**; loss gaps are reported beside them, per transport.
+   Reason, A.15:
+   - "TCP delivers in order. If packet 2 is lost, packets 3, 4 and 5 wait for its retransmission (head-of-line
+     blocking)."
+   - "A stale snapshot is worthless once a newer one exists, so snapshots do not go over TCP. UDP delivers whatever
+     arrives."
+   A loss gap is that datagram behaviour; a stall is head-of-line blocking. At 64 Hz and 20/s the send schedule
+   alternates 46.9 and 62.5 ms gaps, so two consecutive datagram losses already exceed 150 ms. Without the
+   classification, loss gaps would be counted as stalls.
+   Code: `snapIDsMissing` in cmd/bot/main.go (test cmd/bot/gap_test.go); `scripts/p29-transport.sh` prints both counts.
