@@ -20,20 +20,38 @@ for MODE in ws wt; do
   if ! kill -0 $SRV 2>/dev/null; then cat "$OUT/server-$MODE.log"; exit 1; fi
   [ "$MODE" = wt ] && URL="https://$HTTPS/wt" || URL="ws://$HTTP/ws"
   uptime >"$OUT/uptime-$MODE.log"
+  bin/bot -kind probe -hz 64 -d "$D" >"$OUT/probe-$MODE.json" &
+  PRB=$!
   NETLAB_ADMIN_TOKEN=$TOKEN bin/bot -url "$URL" -info "http://$HTTP" -n "$N" -d "$D" -cond "$COND" >"$OUT/bot-$MODE.json"
+  wait $PRB
   uptime >>"$OUT/uptime-$MODE.log"
   if kill -0 $SRV 2>/dev/null; then echo alive >"$OUT/server-$MODE.alive"; else echo dead >"$OUT/server-$MODE.alive"; fi
   kill $SRV 2>/dev/null || true
   sleep 1
 done
 python3 -I - "$OUT" <<'PY'
-import json, sys
+import json, re, sys
 out = sys.argv[1]
+def sec(hms):
+    h, m, x = hms.split(":"); return int(h) * 3600 + int(m) * 60 + float(x)
 for m in ["ws", "wt"]:
     d = json.load(open(f"{out}/bot-{m}.json"))
-    print(m, "server", open(f"{out}/server-{m}.alive").read().strip(), "| uptime:", " / ".join(l.split("load averages:")[1].strip() for l in open(f"{out}/uptime-{m}.log")))
+    # host stall intervals: server late ticks (> 3 periods) and probe late wake-ups (> 3 periods)
+    host = []
+    for l in open(f"{out}/server-{m}.log"):
+        if "tick started late" in l:
+            t = sec(re.search(r"T(\d\d:\d\d:\d\d\.\d+)", l).group(1)); x = float(re.search(r"lateMs=([\d.]+)", l).group(1)) / 1000
+            host.append((t - x, t))
+    for e in json.load(open(f"{out}/probe-{m}.json")).get("over3PeriodEvents") or []:
+        t = sec(e["at"]); host.append((t - e["lateMs"] / 1000, t))
+    print(m, "server", open(f"{out}/server-{m}.alive").read().strip(), "| uptime:", " / ".join(l.split("load averages:")[1].strip() for l in open(f"{out}/uptime-{m}.log")), "| host stall events:", len(host))
     for b in d["perBot"]:
         ia = b["snapshotInterArrival"]
-        print(f'  {b["name"]}: cond {json.dumps(b.get("condAtWelcome"))[:0]}snaps {b["snapshots"]} p50 {ia["p50Ms"]} p95 {ia["p95Ms"]} p99 {ia["p99Ms"]} max {ia["maxMs"]} stalls>3x {ia["stallsOver3xInterval"]} hist {json.dumps(ia["histogramByInterval"], sort_keys=True)} errors {b.get("errors")}')
+        unexplained = []
+        for st in ia.get("stallsAt") or []:
+            hms, ln = st.split(); end = sec(hms); start = end - float(ln) / 1000
+            if not any(a <= end + 0.05 and start - 0.05 <= z for a, z in host):
+                unexplained.append(st)
+        print(f'  {b["name"]}: snaps {b["snapshots"]} p50 {ia["p50Ms"]} p95 {ia["p95Ms"]} p99 {ia["p99Ms"]} max {ia["maxMs"]} stalls>3x {ia["stallsOver3xInterval"]} (not overlapping a host stall: {len(unexplained)} {unexplained[:8]}) hist {json.dumps(ia["histogramByInterval"], sort_keys=True)} errors {b.get("errors")}')
 print("raw:", out)
 PY
