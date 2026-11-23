@@ -7,7 +7,7 @@ HTTPS ?= 0.0.0.0:8443
 N ?= 3
 D ?= 30s
 
-.PHONY: all wasm server bot client run dev test determinism bots duel duel-www duel-run duel-determinism
+.PHONY: all wasm server bot client run dev test determinism bots duel duel-www duel-run duel-determinism infra infra-run
 
 all: wasm server bot
 
@@ -55,7 +55,7 @@ duel: duel-www
 	go build -o $(BIN)/duelrelay ./cmd/duelrelay
 	go build -o $(BIN)/duelbot ./cmd/duelbot
 
-## duel-www: build the duel page into bin/duel-www (served by bin/duelrelay)
+## duel-www: build the duel and infra pages into bin/duel-www (served by bin/duelrelay and bin/infra)
 duel-www:
 	mkdir -p $(PUBLIC)
 	GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o $(PUBLIC)/duel.wasm ./wasm/duel
@@ -76,3 +76,14 @@ duel-determinism:
 	go build -o $(BIN)/dueltrace ./cmd/dueltrace
 	GOARCH=amd64 go build -o $(BIN)/dueltrace-amd64 ./cmd/dueltrace
 	sh wasm/duel/test/determinism.sh $(BIN) $(PUBLIC)
+
+## infra: M7 regions, beacons, matchmaker, /metrics (+ duel relay) in bin/infra, plus beaconbot, matchmaker, relay
+infra: duel-www
+	go build -o $(BIN)/infra ./cmd/infra
+	go build -o $(BIN)/beaconbot ./cmd/beaconbot
+	go build -o $(BIN)/matchmaker ./cmd/matchmaker
+	go build -o $(BIN)/relay ./cmd/relay
+
+## infra-run: bin/infra on :18720 (HTTP: infra.html, duel.html, /metrics) and :18721 (HTTPS + WebTransport)
+infra-run: infra
+	$(BIN)/infra
