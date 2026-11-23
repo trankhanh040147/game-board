@@ -42,8 +42,8 @@ All assets used in Netcode Lab are dedicated to the public domain under the Crea
 | `muzzle_flash.png` | Muzzle flash sprite (transparent additive particle, 256x256) | https://kenney.nl/assets/particle-pack | Particle Pack (1.1) / `PNG (Transparent)/muzzle_01.png` | Kenney | CC0 |
 | `impact_decal.png` | Bullet impact scorch decal (transparent alpha blend, 256x256) | https://kenney.nl/assets/particle-pack | Particle Pack (1.1) / `PNG (Transparent)/scorch_01.png` | Kenney | CC0 |
 | `hit_marker.png` | Hit marker reticle (transparent crosshair indicator, 148x148) | https://kenney.nl/assets/crosshair-pack | Crosshair Pack (1.1) / `PNG/Outline (2×)/crosshair-002.png` | Kenney | CC0 |
-| `headshot.png` | Headshot indicator icon (transparent target crosshair on head, 128x128) | https://kenney.nl/assets/board-game-icons | Board Game Icons (1.0) / Composite of `character.svg` & `card_target.svg` | Kenney | CC0 |
-| `kill_icon.png` | Kill feed skull icon (transparent skull silhouette, 128x128) | https://kenney.nl/assets/board-game-icons | Board Game Icons (1.0) / `Vector/Icons/skull.svg` | Kenney | CC0 |
+| `headshot.png` | Headshot indicator icon (target crosshair reticle centered over head silhouette, PNG, transparent, 128×128) | https://kenney.nl/assets/board-game-icons | Board Game Icons (1.0) / `character.png` & crosshair target | Kenney | CC0 |
+| `kill_icon.png` | Kill feed skull icon (skull silhouette, PNG, transparent, 128×128) | https://kenney.nl/assets/board-game-icons | Board Game Icons (1.0) / `PNG/Double (128px)/skull.png` | Kenney | CC0 |
 
 ## Sky Texture (`games/netcode-lab/client/public/textures/sky/`)
 
