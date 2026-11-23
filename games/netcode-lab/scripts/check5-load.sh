@@ -13,7 +13,7 @@ SRVBIN="$OUT/netlab-check5-server"
 go build -o "$SRVBIN" ./cmd/server && go build -o bin/bot ./cmd/bot
 NETLAB_ADMIN_TOKEN=$TOKEN "$SRVBIN" -http "$HTTP" -https "" >"$OUT/server.log" 2>&1 &
 SRV=$!; echo "server pid $SRV"; trap 'kill $SRV 2>/dev/null' EXIT
-sleep 1
+i=0; until curl -sf "http://$HTTP/api/info" >/dev/null 2>&1 || [ $i -ge 50 ]; do sleep 0.2; i=$((i+1)); done   # wait until listening (slow start under load)
 if ! kill -0 $SRV 2>/dev/null; then cat "$OUT/server.log"; exit 1; fi
 uptime
 NETLAB_ADMIN_TOKEN=$TOKEN bin/bot -url "ws://$HTTP/ws" -n "$N" -d "$D" -tick "$HZ" -stats -warmup "$W" -perbot=false ${LOOP:+-lab "{\"loop\":\"$LOOP\"}" -statsreset}

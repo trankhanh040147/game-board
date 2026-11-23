@@ -17,7 +17,7 @@ git rev-parse --short HEAD >"$OUT/commit"; git status --short server sim net cmd
 NETLAB_ADMIN_TOKEN=$TOKEN "$SRVBIN" -http "$HTTP" -https "" >"$OUT/server.log" 2>&1 &
 SRV=$!; echo $SRV >"$OUT/server.pid"
 trap 'kill $SRV 2>/dev/null || true' EXIT
-sleep 1
+i=0; until curl -sf "http://$HTTP/api/info" >/dev/null 2>&1 || [ $i -ge 50 ]; do sleep 0.2; i=$((i+1)); done   # wait until listening (slow start under load)
 if ! kill -0 $SRV 2>/dev/null; then cat "$OUT/server.log"; exit 1; fi
 if [ "$CFG" = fast ]; then ARGS='-tick 128 -lab {"sendRate":128,"fpsCap":144} -fps 144 -buf 15.625'
 else ARGS='-fps 60 -buf 100'; fi

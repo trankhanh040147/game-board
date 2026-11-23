@@ -30,7 +30,7 @@ SRV=$!; echo $SRV >"$OUT/server.pid"
 ( while :; do uptime; sleep 30; done ) >"$OUT/uptime.log" 2>&1 &
 UPT=$!
 trap 'kill $SRV $UPT 2>/dev/null || true' EXIT
-sleep 1
+i=0; until curl -sf "http://$HTTP/api/info" >/dev/null 2>&1 || [ $i -ge 50 ]; do sleep 0.2; i=$((i+1)); done   # wait until listening (slow start under load)
 if ! kill -0 $SRV 2>/dev/null; then cat "$OUT/server.log"; exit 1; fi
 date +%T >"$OUT/start"
 bin/bot -kind probe -hz 64 -d "$D" >"$OUT/probe.json" &
