@@ -71,3 +71,19 @@ All assets used in Netcode Lab are dedicated to the public domain under the Crea
 | `server_rack.svg` | Server rack chassis monochrome icon (dual 1U blades, drive bays, LEDs, mount rails) | Original SVG artwork | `server_rack.svg` | Antigravity | CC0 1.0 Universal dedication |
 | `relay_node.svg` | Relay / backbone network routing node monochrome icon (central hub with satellite routing points & pulse waves) | Original SVG artwork | `relay_node.svg` | Antigravity | CC0 1.0 Universal dedication |
 | `cable_cut.svg` | Submarine cable-cut / network fracture warning monochrome icon (warning badge with severed fiber core & discharge spark) | Original SVG artwork | `cable_cut.svg` | Antigravity | CC0 1.0 Universal dedication |
+
+## Input Prompts & Controls (`games/netcode-lab/client/public/ui/keys/`)
+
+| File Name | What It Is | Source URL | Original Pack / File Name | Author | Licence |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `key_w.svg` | W key prompt (move forward) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_w.svg` | Kenney | CC0 |
+| `key_a.svg` | A key prompt (move left) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_a.svg` | Kenney | CC0 |
+| `key_s.svg` | S key prompt (move back) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_s.svg` | Kenney | CC0 |
+| `key_d.svg` | D key prompt (move right) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_d.svg` | Kenney | CC0 |
+| `key_space.svg` | Spacebar prompt (jump) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_space.svg` | Kenney | CC0 |
+| `mouse_move.svg` | Mouse look / camera orientation prompt (4-way directional mouse) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/mouse_move.svg` | Kenney | CC0 |
+| `mouse_left.svg` | Left click / fire weapon prompt (highlighted primary button) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/mouse_left.svg` | Kenney | CC0 |
+| `key_f1.svg` | F1 function key prompt (toggle Lab overlay) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_f1.svg` | Kenney | CC0 |
+| `key_f2.svg` | F2 function key prompt (toggle presenter mode) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_f2.svg` | Kenney | CC0 |
+| `key_esc.svg` | Escape key prompt (menu / release pointer lock) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_escape.svg` | Kenney | CC0 |
+| `key_tab.svg` | Tab key prompt (toggle scoreboard) | https://kenney.nl/assets/input-prompts | Input Prompts (Pixel / Vector) / `Keyboard & Mouse/Vector/keyboard_tab.svg` | Kenney | CC0 |
