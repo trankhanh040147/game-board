@@ -5,14 +5,17 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"math"
 	"math/rand/v2"
+	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -204,7 +207,7 @@ func run(ctx context.Context, url, name string, seed uint64) Summary {
 	b := &bot{name: name, start: time.Now(), rng: rand.New(rand.NewPCG(seed, seed*7+1)),
 		pred: sim.NewPredictor(sim.Courtyard(), sim.State{}), pacer: clock.NewPacer(), welcomed: make(chan struct{})}
 	sum := Summary{Name: name}
-	conn, err := transport.DialWS(ctx, url)
+	conn, err := dial(ctx, url)
 	if err != nil {
 		sum.Errors = append(sum.Errors, err.Error())
 		return sum
@@ -296,10 +299,36 @@ loop:
 	return sum
 }
 
+// dial picks the transport from the URL: ws:// = WebSocket, https:// = WebTransport
+// (the cert hash is fetched from -info, like the browser does).
+func dial(ctx context.Context, url string) (transport.Conn, error) {
+	if !strings.HasPrefix(url, "https://") {
+		return transport.DialWS(ctx, url)
+	}
+	resp, err := http.Get(*infoURL + "/certhash")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var ch struct {
+		Base64 string `json:"base64"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ch); err != nil {
+		return nil, err
+	}
+	hash, err := base64.StdEncoding.DecodeString(ch.Base64)
+	if err != nil {
+		return nil, err
+	}
+	return transport.DialWT(ctx, url, hash)
+}
+
+var infoURL = flag.String("info", "http://127.0.0.1:8080", "plain-HTTP base URL serving /certhash (for https:// WebTransport URLs)")
+
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
 
 func main() {
-	url := flag.String("url", "ws://127.0.0.1:8080/ws", "server WebSocket URL")
+	url := flag.String("url", "ws://127.0.0.1:8080/ws", "server URL: ws://host:8080/ws (WebSocket) or https://host:8443/wt (WebTransport)")
 	n := flag.Int("n", 1, "number of bots")
 	dur := flag.Duration("d", 30*time.Second, "how long to run (0 = until Ctrl-C)")
 	kind := flag.String("kind", "walker", "bot behaviour (walker)")

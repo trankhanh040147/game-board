@@ -2,10 +2,16 @@ package transport
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"net/http"
 	"sync"
 
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/webtransport-go"
 )
 
@@ -108,4 +114,36 @@ func WTHandler(srv *webtransport.Server, onConn func(Conn)) http.Handler {
 		}
 		onConn(newWTConn(s, str))
 	})
+}
+
+// DialWT opens a WebTransport session for a headless client and its control
+// stream. The server certificate is pinned by SHA-256 (like the browser's
+// serverCertificateHashes); it is self-signed, so the chain is not checked.
+func DialWT(ctx context.Context, url string, certSHA256 []byte) (Conn, error) {
+	tr := &webtransport.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, // replaced by the hash pin below
+			VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
+				if len(raw) == 0 {
+					return errors.New("no certificate")
+				}
+				sum := sha256.Sum256(raw[0])
+				if !bytes.Equal(sum[:], certSHA256) {
+					return errors.New("certificate hash mismatch")
+				}
+				return nil
+			},
+		},
+		QUICConfig: &quic.Config{EnableDatagrams: true, EnableStreamResetPartialDelivery: true},
+	}
+	_, s, err := tr.Dial(ctx, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	str, err := s.OpenStreamSync(ctx)
+	if err != nil {
+		s.CloseWithError(1, "no control stream")
+		return nil, err
+	}
+	return newWTConn(s, str), nil
 }
