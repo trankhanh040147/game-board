@@ -368,3 +368,15 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
    and shows why the formula and the measurement differ (for example the server's input buffer in "tick wait").
 5. **P19 shows tick-time percentiles, not buckets**: the server sends p50/p95/p99/p999/max for the whole window.
    The panel keeps the last numbers seen per loop mode so the two loops can be compared after a switch.
+
+## 2026-11-23 — scribe (lead-approved): P22 "Observe" reads what is measured
+
+52. **P22 shows depth and frames rolled back, not "fewer rollbacks", as the effect of input delay below the one-way
+    trip** (deviates from the HANDOFF B.6 P22 Observe text "Higher D gives fewer rollbacks"). Measured: the rollback
+    count stays near the opponent's input-change rate (≈ 9/s) until D covers the one-way trip (≈ 2.5 frames at 82 ms
+    peer RTT), then collapses; frames rolled back and depth fall with every frame of D. Evidence: MEASUREMENTS "Duel
+    (P21–P23, P25)", Default route: "rollback D2: 9.07 / 8.33 rb/s, 11.0 / 9.1 fr/s", "rollback D3: 0.70 / 2.20 rb/s,
+    0.7 / 2.2 fr/s"; scribe's duel-page walk at `4b5a2e6` (DEMO.md P22): D 0→4 gave 7.4, 8.9, 8.9, 0.7, 0.3 rollbacks/s
+    and 23.7, 18.4, 11.7, 1.3, 0.4 frames rolled back/s. Reason: A.13 says input delay hides the first part of the
+    trip and rollback corrects the rest; the count only drops once nothing is left to correct. DEMO.md P22 tells the
+    presenter to point at frames rolled back and depth, and at the count's drop once D ≥ 3 on the default route.

@@ -203,35 +203,43 @@ Status: not built yet
 
 ## Infrastructure (A.12)
 
-Run 2026-11-23 @ `078053b`: `NETLAB_ADMIN_TOKEN=… bin/infra -http 127.0.0.1:18520 -https 127.0.0.1:18555 -www bin/duel-www`, then `bin/beaconbot -base http://127.0.0.1:18520 -n 6 -d 16s -cut-at 8s`. All regions, ISP profiles and the cable cut are **simulated**. The regions **page** (`/infra.html`) returned HTTP 200 but was not walked in a browser by scribe. The shooter client cannot join a region room yet (duel asked client for `?region=`).
+Walk 2026-11-23 @ `4b5a2e6` from the **main server** (same server as the duel walk): headless Chrome 156 opened `/infra.html`; beacons over WebTransport datagrams, 10 pings per region, median shown. All regions, ISP profiles, last miles, routes and the cable cut are **simulated** (A.16); the RTTs are measured by the browser over them. A first walk at `bc5f5cf` through `bin/infra` gave the same picture.
+P20 below is from the earlier `beaconbot` run at `078053b`: `bin/beaconbot -base http://127.0.0.1:18520 -n 6 -d 16s -cut-at 8s` against `bin/infra`.
 
 ### P16 — Regions and fragile cables
 
-Status: verified with beaconbot 2026-11-23 @ 078053b (page not walked)
+Status: verified 2026-11-23 @ 4b5a2e6 (infra.html in Chromium, main server)
 
 - **Idea:** Regions and fragile cables. See [CONCEPTS.md](CONCEPTS.md#a12).
-- **What to click:** Regions page (`make infra-run`, or `bin/infra`): pick an ISP; press **cable cut**.
+- **What to click:** Open `https://<host-ip>:8443/infra.html`. ISP viettel, last mile good, route direct → **Ping beacons**. Enter the admin token → **Cut cables to sg** → Ping again → **Repair** → Ping again.
 - **What to point at (B.6):** Ping and the budget bar change by region; a cable cut hurts only `sg`. Labelled simulated.
 - **Observed:**
-  - Beacon RTT p50 per region over 16 s (cable cut on at 8 s): hcm 9.9–16.1 ms, hn 32.9–41.1 ms, sg 98.8–118.4 ms (p99 291–433 ms). Only sg rose. Labelled simulated.
+  - Before: hcm 10.9 · hn 32.9 · sg 42.6 ms (median of 10, 0 lost).
+  - Cut ON ("Cable cut: ON (simulated)"): hcm 10.0 · hn 32.2 · **sg 176.8 ms**. Route table for sg · viettel direct went to "118 / 29 / 3.2%" (RTT / jitter / loss, simulated).
+  - Repaired: hcm 10.4 · hn 34.6 · sg 42.5 ms. Only sg changed.
 
 ### P17 — Beacons and matchmaking
 
-Status: partly: with beaconbot 2026-11-23 @ 078053b, matching seen; the relaxation step was not exercised
+Status: verified 2026-11-23 @ 4b5a2e6 (infra.html in Chromium, main server)
 
 - **Idea:** Beacons and matchmaking. See [CONCEPTS.md](CONCEPTS.md#a12).
-- **What to click:** Regions page: open a matchmaking ticket.
+- **What to click:** Set ISP vnpt, last mile **bad**, route relay: public → Ping → **Find match with this RTT map**.
 - **What to point at (B.6):** Matchmaker UI shows ticket, RTT map, chosen region and the relaxation step.
 - **Observed:**
-  - All 6 tickets: "ticket opened, threshold 60 ms" → "matched to hcm (10–18 ms ≤ 60 ms)" at 0 s, with the RTT map (e.g. hcm 9.99, hn 36.06, sg 43.21 ms). Nobody waited, so the 60 → 100 ms relaxation did not trigger.
+  - RTT map: hcm 78.8 · hn 108.4 · sg 122.4 ms — no region under 60 ms.
+  - Ticket t1: "0 s: ticket opened, threshold 60 ms" → "10 s: relaxed threshold to 100 ms after 10 s" → "10.1 s: matched to hcm (79 ms ≤ 100 ms)", game room `/r/hcm/ws`.
 
 ### P18 — Relay / backbone
 
-Status: not checked by scribe
+Status: partly: 2026-11-23 @ 4b5a2e6 — the simulated route table shows backbone with less jitter and loss, and backbone medians beat public; per-sample loss did not improve and the budget bar is not on this page
 
 - **Idea:** Relay / backbone. See [CONCEPTS.md](CONCEPTS.md#a12).
-- **What to click:** Regions page: route public vs backbone (`beaconbot -route relay-public|relay-backbone`).
+- **What to click:** ISP vnpt, last mile bad: switch **Route** between direct, relay: public, relay: backbone and Ping each time.
 - **What to point at (B.6):** Jitter and loss graphs and the budget bar improve. Labelled simulated.
+- **Observed:**
+  - Route table (simulated, sg · vnpt): direct 135 / 33 / 3.5%, relay-public 141 / 39 / 4.5%, relay-backbone 97 / 3 / 0% (RTT / jitter / loss, with the cable cut on).
+  - Measured medians (vnpt, bad last mile): public hcm 79.6 · hn 109.4 · sg 139.7 ms; backbone hcm 73.8 · hn 111.0 · sg 120.3 ms.
+  - Lost of 10: public hn 2, sg 1; backbone sg 3 — the bad last mile adds loss on every route, and 10 samples are too few to compare loss.
 
 ### P19 — Tick health
 
@@ -254,38 +262,50 @@ Status: partly: with beaconbot 2026-11-23 @ 078053b, percentiles seen; Prometheu
 
 ## Other genres (A.13), in the duel mini-mode
 
-Run 2026-11-23 @ `078053b`: `bin/duelrelay -http 127.0.0.1:18510 -https 127.0.0.1:18553`, then `bin/duelbot -pair -url ws://127.0.0.1:18510/duel/ws -info http://127.0.0.1:18510/api/duel/info -d 10s -profile bad <mode>` (two headless peers, "bad" route profile). The duel **page** (`/duel.html`) was not walked in a browser by scribe.
+Walk 2026-11-23 @ `4b5a2e6` from the **main server**: `NETLAB_ADMIN_TOKEN=… bin/server -http 127.0.0.1:18502 -https 127.0.0.1:18545` (PID recorded, alive for the whole walk) serves `/duel.html` and the relay at `/duel/ws` and `/duel/wt`. One headless Chrome 156 window opened `/duel.html?room=s12` (WebTransport datagrams, link "Default (40 ms)", simulated); the opponent was `bin/duelbot -room s12 -url ws://127.0.0.1:18502/duel/ws -info http://127.0.0.1:18502/api/duel/info -profile default` (input changes ≈ 9/s). Peer RTT through the relay 82–88 ms. Each row is a 10 s window after 2.5 s settling, read from the page's session stats. A first walk at `bc5f5cf` through `bin/infra` gave the same picture (D0→D3: 7.3, 8.8, 9.1, 0.0 rollbacks/s).
 
 ### P21 — Rollback
 
-Status: verified with bots 2026-11-23 @ 078053b (page not walked)
+Status: verified 2026-11-23 @ 4b5a2e6 (duel page in Chromium, main server)
 
 - **Idea:** Rollback. See [CONCEPTS.md](CONCEPTS.md#a13).
-- **What to click:** Duel page (`make duel-run`, or `bin/duelrelay`): mode **rollback**, D = 0.
+- **What to click:** Open `https://<host-ip>:8443/duel.html` in two windows side by side (or one window plus `bin/duelbot`). Click **P21 Rollback** (rollback, D = 0).
 - **What to point at (B.6):** HUD: rollbacks per second, frames rolled back.
 - **Observed:**
-  - `-mode rollback -delay 0`: 6.1 and 6.4 rollbacks/s, 30.7 and 36.7 frames rolled back/s, max depth 8, peer RTT ≈ 173 ms, desync none.
+  - Banner: "P21 Rollback · When the real input arrives and differs, the machine loads a saved state and re-simulates to the present."
+  - Rollback table: 7.4 rollbacks/s, 23.7 frames rolled back/s, avg depth 3.2, max 8 frames; status "rollback, D = 0 manual · 61 frames/s simulated"; peer RTT 82 ms.
 
 ### P22 — Input delay
 
-Status: partly: with bots 2026-11-23 @ 078053b, D = 2 cut frames rolled back and stalls, not the rollback count
+Status: verified 2026-11-23 @ 4b5a2e6 (as measured; see the note on the B.6 wording)
 
 - **Idea:** Input delay. See [CONCEPTS.md](CONCEPTS.md#a13).
-- **What to click:** Duel page: change input delay D (auto or a frame count).
+- **What to click:** Click **P22 Input delay** (D auto), then set **D** to 0, 1, 2, 3, 4 and press **Restart both**.
 - **What to point at (B.6):** Higher D gives fewer rollbacks.
 - **Observed:**
-  - D = 0 → D = 2 (rollback): rollbacks/s 6.1 → 6.1 (side 0), frames rolled back/s 30.7 → 24.0, avg depth 5.0 → 3.9, stall frames/s 6.5 → 1.9.
-  - B.6 expects "higher D gives fewer rollbacks"; in these 10 s runs the count stayed the same and the depth dropped.
+  - What the page measures: **frames rolled back** fall with every frame of D (23.7 → 0.4 per s) and the average **depth** falls from 3.2 to 1.3 frames by D = 2, while the rollback **count** stays near the opponent's input-change rate (≈ 9/s) until D covers the one-way trip (≈ 2.5 frames at 82 ms RTT). Then it collapses (table below).
+  - D auto picked **0** at ping 83 ms (A.13 rule: 0 below 100 ms): 10.1 rollbacks/s, 30.7 frames/s.
+  - Duel's 30 s bot runs agree ([MEASUREMENTS.md](MEASUREMENTS.md#duel-p21p23-p25), Default): "rollback D2: 9.07 / 8.33 rb/s, 11.0 / 9.1 fr/s", "rollback D3: 0.70 / 2.20 rb/s, 0.7 / 2.2 fr/s".
+  - B.6 says "Higher D gives fewer rollbacks". That holds only once D covers the one-way trip; below it, D cuts depth, not count. DECISIONS 52 records this.
+
+| D | rollbacks/s | frames rolled back/s | avg depth | opponent input changes/s |
+|---|---|---|---|---|
+| 0 | 7.4 | 23.7 | 3.20 | 7.6 |
+| 1 | 8.9 | 18.4 | 2.07 | 9.0 |
+| 2 | 8.9 | 11.7 | 1.31 | 9.7 |
+| 3 | 0.7 | 1.3 | 1.86 | 8.8 |
+| 4 | 0.3 | 0.4 | 1.33 | 9.3 |
 
 ### P23 — Lockstep
 
-Status: verified with bots 2026-11-23 @ 078053b (page not walked)
+Status: verified 2026-11-23 @ 4b5a2e6 (duel page in Chromium, main server)
 
 - **Idea:** Lockstep. See [CONCEPTS.md](CONCEPTS.md#a13).
-- **What to click:** Duel page: mode **lockstep**, D = 2.
+- **What to click:** Click **P23 Lockstep** (D auto), then set D = 2 and press **Restart both**.
 - **What to point at (B.6):** Stalls under jitter where rollback does not.
 - **Observed:**
-  - `-mode lockstep -delay 2`: 22.6 fps, 37.5 stall frames/s (6.2 s of 10 s stalled), 0 rollbacks, desync none — against 1.9 stall frames/s for rollback at the same D.
+  - Lockstep, D auto = 4 (ping 85 ms, "lockstep buffer"): 0 rollbacks, 0.2 stall frames/s, 60 frames/s simulated.
+  - Lockstep, D = 2: 20.6 stall frames/s and only 43 frames/s simulated — the frame waits for the late input. Rollback at D = 0 on the same link: 0.0 stall frames/s.
 
 ## Edge cases and extras (A.10, A.14, A.15)
 
@@ -305,11 +325,15 @@ Status: partly: death replay seen on the victim page; the "reached cover" case a
 
 ### P25 — Glitch lab
 
-Status: not checked by scribe
+Status: verified 2026-11-23 @ 4b5a2e6 (duel page in Chromium, main server); desync banner names the seed
 
 - **Idea:** Glitch lab. See [CONCEPTS.md](CONCEPTS.md#a14).
-- **What to click:** Duel page glitch buttons; see duel's results in [MEASUREMENTS.md](MEASUREMENTS.md#duel-p21p23-p25).
+- **What to click:** Click **P25 Inject nondeterminism** (or "Inject nondeterminism (this window)").
 - **What to point at (B.6):** Each glitch is reproducible on demand and named on screen.
+- **Observed:**
+  - Desync banner: "DESYNC at frame 125: my checksum 5499d5501b82b2b8, opponent's 2bbe03c522aa5dc8. This window flipped bit 12 of fighter 0 x at frame 125 (seed 2722834198). Restart both to resync."
+  - Checksums table: frames compared 356, my session seed 2722834198, status "DESYNC at frame 125"; the stage border turns red.
+  - Only the duel glitch (desync) was walked. The shooter glitches in B.6 P25 (server-only speed modifier rubber-band, loss burst teleport) were not walked here.
 
 ### P26 — Sub-tick
 
