@@ -165,23 +165,30 @@ Same walk as Core netcode above.
 
 ### P11 — Shot budget
 
-Status: not built yet
+Status: verified 2026-11-23 @ 118cbcf (perf panel on screen); the server still lists P11 as not built, so it is reached with F3, not a preset button
 
-- **Idea:** Shot budget. See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P11**. Toggles it sets (HANDOFF B.6): Trace every shot on the server-synced clock: click → next client frame → send → server receive → tick start → snapshot send → target receive → interpolation delay → target frame
-- **What to point at:** Stacked bar of 7 measured segments next to the `est.` 190 ms; last shot plus a rolling average of 20.
+- **Idea:** Shot budget. See [CONCEPTS.md](CONCEPTS.md#a11).
+- **What to click:** Play page: press **F3** to open the perf panel; land real hits on another player (the target half of each segment comes back only from hits).
+- **What to point at (B.6):** Stacked bar of 7 measured segments next to the `est.` 190 ms; last shot plus a rolling average of 20.
+- **Observed:**
+  - [screen] Walk 2026-11-23 @ `118cbcf` (perf panel mounted in `0feb23a`, glitch buttons in `118cbcf`): headless Chrome 156, separate player, target and control browsers (control page with `?admin=`), 2 walker bots, `bin/server -http 127.0.0.1:18502 -https 127.0.0.1:18545` (PID recorded, alive for the whole walk, stopped by PID). Host load average 38–87 on 8 cores at the end of the walk. The perf panel opens with **F3** (or on its presets).
+  - [screen] After 8 hits: "est. (A.11 formula) 189 ms", "last shot #993 203 ms", "avg of last 8 complete 210 ms", as stacked bars of 7 segments: click → input sent (shooter frame) · uplink · wait for server tick · wait for snapshot send · downlink to target · target interpolation · target frame wait.
+  - [screen] Note under the bars: "est.: A.11 formula with this room's settings and your conditioner delays (simulated)".
 
 ### P12 — Send and tick rate
 
-Status: partly: rates and buffer seen; the cost meters and the budget bar are not on screen
+Status: verified 2026-11-23 @ 118cbcf (cost meters on screen)
 
 - **Idea:** Send and tick rate. See [CONCEPTS.md](CONCEPTS.md#a11).
-- **What to click:** On the **control page** (`https://<host>:8443/?admin=<token>`, a second browser or device): F1 → **P12** → F1. The play page stays in play. Read the net graph.
+- **What to click:** On the **control page**: F1 → **P12**, then under Server settings set **tickRate** 128 and **sendRate** 20, 64, 128. Play page: F3.
 - **What to point at (B.6):** Bar drops to about 103 (64/s) and about 80 (128 Hz); cost rises roughly linearly.
 - **Observed:**
-  - [screen] Net graph: snapshots "64.0/s (set 64)", interp buffer "31 ms (2× interval)", max snapshot gap 26 ms, kbps down 110.6 (P01: 64.9).
-  - [page data] Server `stats` (not rendered): total egress 554 kbps at 64/s vs 299 kbps at 20/s, 5 clients ("payload bytes; transport framing not counted").
-  - Not on screen: server ms per tick / bytes per client meters and the budget bar (P11 is not built).
+  - [screen] Perf panel "P12 cost at 128 Hz, N snapshots/s (measured)", 5 clients, "payload bytes; transport framing not counted":
+  - [screen] 20/s: total egress 296.6 kbps; you down / up 59.0 / 71.0 kbps · 19.9 snaps/s; server ms per tick p50 / p99 0.011 / 4.079 (budget 7.81).
+  - [screen] 64/s: total egress 573.3 kbps; you 115.1 / 77.2 kbps · 67.1 snaps/s; tick p50 / p99 0.022 / 6.895.
+  - [screen] 128/s: total egress 924.7 kbps; you 185.6 / 82.9 kbps · 127.9 snaps/s; tick p50 / p99 0.030 / 4.005.
+  - Egress grows 1 : 1.9 : 3.1 for 1 : 3.2 : 6.4 times the rate — roughly linear plus a fixed part (inputs, control). Tick p99 is noisy on this loaded host.
+  - [screen] Earlier walk at `078053b`: net graph "snapshots 64.0/s (set 64)", interp buffer 31 ms. The budget bar for P12 is the P11 bar above at the chosen rates.
 
 ### P13 — Client FPS
 
@@ -204,12 +211,14 @@ Status: not built yet
 
 ### P15 — Budget table
 
-Status: not built yet
+Status: verified 2026-11-23 @ 118cbcf (perf panel on screen); not a preset button yet (reached with F3)
 
-- **Idea:** Budget table. See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P15**. Toggles it sets (HANDOFF B.6): The P11 data as a table: formula value (A.11) beside measured value per segment for current settings
-- **What to point at:** Agreement within a stated tolerance; differences explained.
-
+- **Idea:** Budget table. See [CONCEPTS.md](CONCEPTS.md#a11).
+- **What to click:** Play page: F3, after a few hits (same run as P11).
+- **What to point at (B.6):** Agreement within a stated tolerance; differences explained.
+- **Observed:**
+  - [screen] "P15 budget table: formula vs measured", n = 8 hits (est. / measured avg / diff, ms): shooter frame 8.3 / 18.1 / +9.8; uplink 20.0 / 22.9 / +2.9; wait for server tick 7.8 / 39.7 / +31.9; wait for snapshot send 25.0 / 9.8 / −15.2; downlink 20.0 / 21.4 / +1.4; target interpolation 100.0 / 89.2 / −10.8; target frame wait 8.3 / 9.3 / +1.0; **total 189 / 210 / +21 (11%)** — within the ±15% tolerance.
+  - [screen] Flagged segments carry their reason, e.g. "wait for server tick — formula: half a tick on average; one shot lands anywhere in [0, 1 tick], and the server buffers inputs (pacer margin)", and "click → input sent — measured includes waiting for the 10 shots/s fire cooldown and the pacer's input tick".
 
 ## Infrastructure (A.12)
 
@@ -253,11 +262,16 @@ Status: partly: 2026-11-23 @ 4b5a2e6 — the simulated route table shows backbon
 
 ### P19 — Tick health
 
-Status: not built yet
+Status: partly: 2026-11-23 @ 118cbcf — the loop switch works and both loops are shown side by side, but the numbers were taken at load average 38–87 and are not a loop comparison
 
-- **Idea:** Tick health. See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P19**. Toggles it sets (HANDOFF B.6): Tick-duration histogram, **% ticks within budget**, GC pauses from `runtime/metrics`. Toggle "allocating loop" (allocate per entity per tick, naive encoding) versus "zero-alloc loop" (pre-allocated buffers, `s = s[:0]`, `sync.Pool`); `GOMEMLIMIT` setting; 50 bots
-- **What to point at:** The naive loop shows GC spikes and a lower % within budget; the zero-alloc loop is flat. `-gcflags=-m` findings documented.
+- **Idea:** Tick health. See [CONCEPTS.md](CONCEPTS.md#a12).
+- **What to click:** Control page: F3 → **zero-alloc** / **allocating** at the top of the perf panel (admin token), then **reset window**. Play page: F3.
+- **What to point at (B.6):** The naive loop shows GC spikes and a lower % within budget; the zero-alloc loop is flat. `-gcflags=-m` findings documented.
+- **Observed:**
+  - [screen] zero-alloc (10 s window): "Ticks within budget (15.63 ms): 100.00% of 623 · over budget 0"; tick p50 0.020 · p95 0.340 · p99 2.300 · max 15.363 ms; GC 39 cycles, pause p99 83.886 ms.
+  - [screen] allocating (10 s window): "97.95% of 390 · over budget 8"; tick p50 0.020 · p95 1.450 · p99 1045.400 · max 1045.400 ms; GC 41 cycles, pause p99 1073.742 ms.
+  - [screen] "last seen per loop" table shows both rows. A 1 s GC pause on a 4 MB heap points at the host (load 38–87), not the loop; bots' P19 runs in MEASUREMENTS also call timing inconclusive under load.
+  - Display bug for the panel owner: with no limit set it shows "GOMEMLIMIT 8796093022208 MB" (the unset maximum printed as MB) instead of "none".
 
 ### P20 — Percentiles
 
@@ -341,15 +355,16 @@ Status: partly: the cover case was staged and seen on the victim page (2026-11-2
 
 ### P25 — Glitch lab
 
-Status: verified 2026-11-23 @ 4b5a2e6 (duel page in Chromium, main server); desync banner names the seed
+Status: verified 2026-11-23 @ 118cbcf for the shooter glitches (rubber-band, teleport) and @ 4b5a2e6 for the duel desync
 
 - **Idea:** Glitch lab. See [CONCEPTS.md](CONCEPTS.md#a14).
-- **What to click:** Click **P25 Inject nondeterminism** (or "Inject nondeterminism (this window)").
+- **What to click:** Shooter: control page F1 → Glitch lab → **Rubber-band (server-only speed ×0.6)** (click again to stop) or **Teleport: 400 ms loss burst (everyone)**. Duel: duel page → **P25 Inject nondeterminism**.
 - **What to point at (B.6):** Each glitch is reproducible on demand and named on screen.
 - **Observed:**
-  - [screen] Desync banner: "DESYNC at frame 125: my checksum 5499d5501b82b2b8, opponent's 2bbe03c522aa5dc8. This window flipped bit 12 of fighter 0 x at frame 125 (seed 2722834198). Restart both to resync."
-  - [screen] Checksums table: frames compared 356, my session seed 2722834198, status "DESYNC at frame 125"; the stage border turns red.
-  - Only the duel glitch (desync) was walked. The shooter glitches in B.6 P25 (server-only speed modifier rubber-band, loss burst teleport) were not walked here.
+  - [screen] Rubber-band while holding W: glitch box "Glitch: Rubber-banding — The server moves you at 60% speed and your client does not know: every snapshot corrects your prediction back (A.14, server-only speed modifier). corrections since last Lab change: 29 (measured)"; mode HUD "corrections: 29". [page data] speedScale 0.6, back to 1 after the second click.
+  - [screen] Teleport: glitch box "Glitch: Teleporting — Every snapshot is lost for longer than the interpolation buffer: other players freeze, then jump to where they are now (A.14). max snapshot gap: 411 ms (measured, last 1 s)".
+  - [page data] A strafing target as drawn on the player page, sampled every 80 ms: steps of 0.6–0.7 m, then one jump of 2.6 m (−9.72 → −12.31) when the burst ended.
+  - [screen] Duel desync (`4b5a2e6`): "DESYNC at frame 125: my checksum 5499d5501b82b2b8, opponent's 2bbe03c522aa5dc8. This window flipped bit 12 of fighter 0 x at frame 125 (seed 2722834198). Restart both to resync."; checksums table "frames compared 356, my session seed 2722834198"; the stage border turns red.
 
 ### P26 — Sub-tick
 
@@ -386,11 +401,16 @@ Status: partly: preset applies; entities and bytes per client are not on screen
 
 ### P29 — Transport
 
-Status: not built yet
+Status: partly: 2026-11-23 @ 118cbcf — WebSocket shows about 4× the stalls, but datagrams were not stall-free
 
-- **Idea:** Transport. See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P29**. Toggles it sets (HANDOFF B.6): WebTransport datagrams versus WebSocket, with 5% loss
-- **What to point at:** Snapshot inter-arrival histogram: TCP shows stalls, datagrams do not.
+- **Idea:** Transport. See [CONCEPTS.md](CONCEPTS.md#a15).
+- **What to click:** Two play pages, one normal (WebTransport) and one with `?transport=ws`; on each set the conditioner loss to 5% (page script below); F3.
+- **What to point at (B.6):** Snapshot inter-arrival histogram: TCP shows stalls, datagrams do not.
+- **Observed:**
+  - [page data] Conditioner set on both pages with `session.setCond({lossPct:5},{lossPct:5})` (this left delay at 0 ms, so RTT read 1–3 ms).
+  - [screen] WebTransport, 25 s: "send interval 50.0 ms · 1152 gaps", "Stalls > 3× interval (150 ms): 6 · max gap 450 ms"; net graph loss up/down 4.3 / 6.3 % "incl. simulated loss 5/5 %".
+  - [screen] WebSocket, 25 s: "494 gaps", "Stalls > 3× interval (150 ms): 23 · max gap 322 ms"; net graph loss 0.0 / 0.0 % (TCP turns loss into retransmit stalls), jitter 41 ms.
+  - The panel counts every gap > 150 ms. Bots' B.9 check 6 run separates loss gaps from stalls by snapshot id (DECISIONS: check 6 counts stalls) and found WS 106–119 vs WT 4–5 stalls ([MEASUREMENTS.md](MEASUREMENTS.md)).
 
 ## Playtest notes
 
