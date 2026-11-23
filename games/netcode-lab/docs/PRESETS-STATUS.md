@@ -2,7 +2,7 @@
 
 "Built" is the flag the server sends in `welcome.presets` (`server/settings.go`). A preset is flipped to built only
 when its effect works **and** something on screen shows it. Page = where the preset lives when it is not this
-room's Lab.
+room's Lab; the link carries `?preset=Pxx` so the page can apply that preset's state (duel's pages must read it).
 
 | Preset | Built | Server side | Client / page side | Owner of what is missing |
 |---|---|---|---|---|
@@ -19,7 +19,7 @@ room's Lab.
 | P11 Shot budget | ✗ | done: recvMs/tickStartMs, shotSeen → shotTrace | panel built by duel (`hud/perf.ts`, d8ffe39) but **not mounted in main.ts**, so `client/smoke/perf.mjs` cannot run | client/duel: mount `window.__perf = mountPerf(session, hud)` |
 | P12 Send and tick rate | ✓ | done (64/s; cost meters in stats) | rates apply; cost meters are in the same unmounted panel | client/duel: mount the panel |
 | P13 Client FPS | ✓ | done (fpsCap broadcast to every client; 128 Hz + 144 FPS) | `game/loop.ts` applies `fpsCap` | – |
-| P14 Peeker's advantage | ✗ | no server hook needed (ShotResult + history exist) | peek test not built | bots |
+| P14 Peeker's advantage | ✗ | done (d41e342): admin `{t:"peekTest"}` runs bots' peek bots against this server and broadcasts "our measurement" with Riot as `ref`; live: 3 crossings, 179.4 ms | show `peekTest` results in duel's perf panel ("our measurement" + ref) | duel (panel), client (mount) |
 | P15 Budget table | ✗ | done (`stats.budgetEst`, est.) | panel unmounted (as P11) | client/duel: mount the panel |
 | P16 Regions and fragile cables | ✗ (page) | region rooms, ISP routes, cable cut: duel's `server/regions`, now mounted by the game server (4b5a2e6) | `/infra.html` (duel) | duel: confirm the page works from the main URL, then flip |
 | P17 Beacons and matchmaking | ✗ (page) | beacons + matchmaker mounted (4b5a2e6) | `/infra.html` | duel: as P16 |
