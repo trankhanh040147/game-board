@@ -16,7 +16,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
 | 4 | Shot budget vs 190 ms est. / 71 ms | not run | — | — |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | not run (preliminary only) | 40 bots, current loop: 128 Hz tick time p99 1.52 ms, 99.81% within budget; start lateness 97.38% within budget (host). No P19 toggle, no human players | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots) |
-| 6 | Transport stalls at 5% loss, WS vs datagrams | not run | — | — |
+| 6 | Transport stalls at 5% loss, WS vs datagrams | **partial** | Gaps > 3× send interval per bot in 2 min: WS 106–119, WT 4–5 (expected ≈ 0.3 from loss alone; load avg up to 36, no gap timestamps yet) | [section](#check-6--p29--snapshot-inter-arrival-websocket-vs-webtransport-datagrams-at-5-loss-2026-11-23-bots) |
 | 7 | Client smoke (Playwright) | **partial** | 18/0/1 at `6db531d` (review: 18/1 independently), 20/0/1 at `082b412` with WT; shoot skipped: shooting not testable until M3 | [section](#check-7--client-smoke-playwright-b9-7-partial-shooting-not-testable-until-m3) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
 
@@ -488,3 +488,87 @@ Reading against B.9 #5 ("p99 tick time under budget and ≥ 99% of ticks within 
 
 GC allocates about 6 MB/s at 64 Hz and 9 MB/s at 128 Hz for 40 players (609 MB and 909 MB over ~100 s). The
 41.9 ms GC pause max at 128 Hz is larger than one tick budget.
+
+## Check 6 / P29 — snapshot inter-arrival, WebSocket vs WebTransport datagrams at 5% loss (2026-11-23, bots)
+
+Bots on protocol v3 (`9079108`: decode with baselines, ack `snapId`). Clean worktree build at `84c8dd4`. The
+conditioner for every player was set by an admin client (`-cond`, `all:true`) to 20 ms each way and 5% loss each
+way. Send rate 20/s, so the interval is 50 ms and a stall means a gap over 150 ms. Three walker bots per transport,
+2 minutes, a fresh server for each transport (the WT server also serves WS on its HTTP port).
+
+```
+HTTP_PORT=18650 HTTPS_PORT=18651 sh scripts/p29-transport.sh 2m 5 3
+```
+
+Server lifetime: both servers were alive at the end (`kill -0`), and no bot reported errors.
+
+| Transport | Bot | Snapshots | Inter-arrival p50 / p95 / p99 / max (ms) | **Gaps > 3× interval** | Histogram (multiples of 50 ms) |
+|---|---|---|---|---|---|
+| WebSocket | 1 | 2400 | 46.97 / 83.25 / 242.09 / 269.27 | **106** | 0–1×: 1808, 1–2×: 479, 2–3×: 6, 3–4×: 65, 4–5×: 39, 5–6×: 2 |
+| WebSocket | 2 | 2399 | 46.95 / 99.55 / 229.08 / 247.18 | **112** | 0–1×: 1814, 1–2×: 465, 2–3×: 7, 3–4×: 63, 4–5×: 49 |
+| WebSocket | 3 | 2398 | 46.94 / 145.32 / 240.77 / 252.70 | **119** | 0–1×: 1807, 1–2×: 458, 2–3×: 13, 3–4×: 64, 4–5×: 54, 5–6×: 1 |
+| WebTransport | 1 | 2266 | 47.16 / 93.33 / 109.55 / 225.95 | **4** | 0–1×: 1542, 1–2×: 668, 2–3×: 51, 3–4×: 3, 4–5×: 1 |
+| WebTransport | 2 | 2287 | 47.15 / 86.63 / 110.42 / 294.54 | **4** | 0–1×: 1581, 1–2×: 638, 2–3×: 63, 3–4×: 3, 5–6×: 1 |
+| WebTransport | 3 | 2286 | 47.14 / 88.68 / 110.20 / 206.97 | **5** | 0–1×: 1577, 1–2×: 647, 2–3×: 56, 3–4×: 4, 4–5×: 1 |
+
+Host load average (1/5/15 min), start / end: WS 29.96 20.42 11.71 / 21.49 20.52 12.89; WT 20.65 20.36 12.88 / 35.76
+24.78 15.51.
+
+Reading:
+- **WebSocket:** no snapshot is lost (2398–2400 in 120 s). Instead, about 4.6% of gaps are over 3× the interval,
+  in a cluster at 150–270 ms: the simulated TCP retransmit stall blocks every later snapshot (DECISIONS 8).
+- **WebTransport:** about 5.4% of snapshots are lost (2266–2287 received), so the gaps sit at 1–2× and 2–3×. That is
+  one or two drops in a row with no stall behind them.
+- **Not met in the strict sense:** WT still shows 4–5 gaps over 3× per bot. Five percent loss gives three drops in
+  a row with p ≈ 1.25·10⁻⁴, so only about 0.3 such gaps are expected per bot in 2 minutes. The load average reached
+  35.8 during the WT run, so these are probably host pauses, but this run kept no gap timestamps that would prove it.
+- **Status:** B.9 #6 is **partial**. The WS-vs-datagram contrast is clear (106–119 vs 4–5 stalls per bot), but
+  "datagram mode does not stall" is not shown on this host.
+
+## P14 — peeker's advantage, our measurement (2026-11-23 20:12–20:14, bots)
+
+Protocol: research R3 item 2. Clean worktree build at `453daf7`. Code in cmd/bot/peek.go.
+- **Holder (blue):** stands still at its spawn and does not shoot.
+- **Peeker (orange):** hides behind the 2 m low wall at (−1, −2). It moves out to (5, −2), past the wall's east
+  edge, holds 0.5 s, comes back and waits 1.5 s. This repeats for 20 crossings.
+- **Visibility:** line of sight from one player's eye to the other's eye height, tested against the map boxes
+  (`sim.TraceMap`).
+- **Times:** all three are in server ms.
+  - `t_expose` = the server time of the tick that processed the first peeker input whose resulting position is
+    visible from the holder. The tick comes from the snapshot's `lastProcessedInputSeq` (one input per tick), and
+    the time from its `serverTimeMs`.
+  - `t_peekerSees` = the first 60 FPS frame of the peeker client in which its own predicted position sees the
+    holder. Frame times are mapped to server ms with the peeker's clock sync.
+  - `t_holderSees` = the first 60 FPS frame of the holder client in which the interpolated peeker is visible.
+    Interpolation uses the client's arrival-clock model: render server time = local now + max(serverMs − recvMs over
+    2 s) − 100 ms buffer.
+- **Advantage** = `t_holderSees − t_peekerSees`.
+- **Deviations from R3:**
+  - The crossing id is a counter shared by the two bots in one process; the server has no crossing id.
+  - Frames are modelled at 60 FPS with ±2 ms loop granularity; there is no renderer.
+
+```
+HTTP_PORT=18660 sh scripts/p14-peek.sh default 20
+HTTP_PORT=18670 sh scripts/p14-peek.sh bad 20      # Bad route: 40 ms each way, jitter 15 ms, loss 1% (client Lab profile)
+```
+
+| Profile | Crossings | **Advantage, mean ± sd (min–max)** | t_peekerSees − t_expose | t_holderSees − t_expose | RTT median (holder / peeker) | Peeker corrections |
+|---|---|---|---|---|---|---|
+| Default (40 ms RTT) | 20 / 20 | **160.83 ± 9.67 ms** (149.91–183.07) | −42.73 ± 8.23 ms | 118.09 ± 5.02 ms | 40.86 / 41.95 ms | 9 |
+| Bad route (≈ 88 ms RTT measured) | 20 / 20 | **186.01 ± 16.51 ms** (146.94–216.69) | −58.14 ± 11.86 ms | 127.86 ± 9.50 ms | 87.86 / 88.68 ms | 69 |
+
+Label: **our measurement**. Riot's figures (A.11: about 141 → 101 → 71 ms) are a `ref` only and a different
+measurement.
+
+Context:
+- Both runs ran at the same time on separate servers.
+- Host load average went from 31.66 to 39.43 (1 min). Server late ticks over 3 periods: 27 (default) and 25 (bad).
+- Server lifetime: PIDs 48964 and 48961 were alive at the end, and no bot reported errors.
+
+Reading:
+- **Holder side:** about 118 ms after exposure, which is close to the R3 estimate of downlink 20 + buffer 100.
+- **Peeker side:** it sees the holder about 43 ms **before** the server has it exposed. Its prediction runs ahead
+  of the server by about RTT/2 plus the pacer margin.
+- **Total:** the advantage is therefore about 120 + 40 ms. Under Bad route the holder side grows less than the
+  extra 20 ms of delay, because the arrival-clock model keys on the least-delayed snapshot, and jitter widens the spread.
+- **Caveat:** peeker corrections (9 and 69) mean some exposures may be off by the correction size.
