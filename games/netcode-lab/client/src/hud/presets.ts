@@ -2,6 +2,12 @@
 
 export interface PresetInfo { id: string; group: string; idea: string; section: string; line: string }
 
+/** docs/presets.json (scribe): banner sentence, observe criterion and CONCEPTS anchor per preset. */
+export interface PresetDoc { id: string; group: string; idea: string; observe: string; banner: string; concept: string }
+const found = import.meta.glob<PresetDoc[]>("../../../docs/presets.json", { eager: true, import: "default" });
+export const PRESET_DOCS = new Map<string, PresetDoc>((Object.values(found)[0] ?? []).map((p) => [p.id, p]));
+export const conceptUrl = (anchor: string) => `./concepts.html#${anchor}`;
+
 export const PRESETS: PresetInfo[] = [
   { id: "P01", group: "Core netcode", idea: "Vocabulary", section: "A.1", line: "RTT, tick, snapshot rate and FPS: the four clocks every number below builds on." },
   { id: "P02", group: "Core netcode", idea: "Dumb client", section: "A.4", line: "The client draws only server state, so every key press waits about one RTT plus tick and frame waits." },

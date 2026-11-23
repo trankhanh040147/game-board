@@ -12,6 +12,7 @@ import { fetchInfo, WsTransport, WtTransport, webTransportPossible, type Transpo
 import { Session } from "./net/session";
 import { loadAssets } from "./render/assets";
 import { PresenterView } from "./hud/presenter";
+import { PRESET_DOCS, conceptUrl } from "./hud/presets";
 
 const hud = document.body;
 const offlineBackend: LabBackend = { connected: false, builtPresets: new Set(), settings: null, activePreset: null, applyPreset() {}, setSetting() {} };
@@ -287,7 +288,12 @@ async function boot() {
     if (s.t.kind === "ws") lines.push(`<span class="warn">WebSocket fallback</span> — ${link.transportNote}; game packets go over TCP.`);
     if (!s.connected) lines.push(`<span class="warn">Disconnected</span>: ${s.closedReason}. Reload to rejoin.`);
     if (s.activePreset === "custom") lines.push("Custom Lab settings (no preset)");
-    else if (s.activePreset || s.banner) lines.push(`${s.activePreset ? `<b>${s.activePreset}</b> ` : ""}${s.banner}`);
+    else if (s.activePreset) {
+      const d = PRESET_DOCS.get(s.activePreset);
+      lines.push(d
+        ? `<b>${d.id} ${d.idea}</b> — ${d.banner} <a href="${conceptUrl(d.concept)}" target="_blank" rel="noopener">Read ${d.concept.toUpperCase().replace("A", "A.")} →</a>`
+        : `<b>${s.activePreset}</b> ${s.banner}`);
+    }
     banner.set(lines);
 
     const hl: string[] = [];

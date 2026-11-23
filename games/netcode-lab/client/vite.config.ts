@@ -4,7 +4,11 @@ const server = process.env.NETLAB_SERVER ?? "http://localhost:8080";
 
 export default defineConfig({
   base: "./",
-  build: { outDir: "dist", emptyOutDir: true },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+    rollupOptions: { input: { main: "index.html", concepts: "concepts.html" } },
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,

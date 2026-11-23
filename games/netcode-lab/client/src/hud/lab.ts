@@ -1,4 +1,4 @@
-import { PRESETS } from "./presets";
+import { PRESETS, PRESET_DOCS, conceptUrl } from "./presets";
 import { el } from "./widgets";
 
 /** What the Lab panel needs from the network layer. Filled by the server connection once core's protocol lands. */
@@ -129,8 +129,11 @@ export class LabPanel {
       btn.addEventListener("click", () => b.applyPreset(p.id, this.token));
       const reason = !b.connected ? "server not connected" : !built ? "not built yet" : !this.token ? "needs admin token" : "";
       const sp = b.presets?.find((x) => x.id === p.id);
-      if (sp?.banner) row.title = sp.banner;
-      row.append(btn, el("span", {}, `${p.idea} <span class="dim">(${p.section})</span>${reason ? ` <span class="why dim">· ${reason}</span>` : ""}`));
+      if (sp?.banner && !PRESET_DOCS.has(p.id)) row.title = sp.banner;
+      const doc = PRESET_DOCS.get(p.id);
+      const sec = doc ? `<a href="${conceptUrl(doc.concept)}" target="_blank" rel="noopener">${p.section}</a>` : p.section;
+      row.append(btn, el("span", {}, `${p.idea} <span class="dim">(${sec})</span>${reason ? ` <span class="why dim">· ${reason}</span>` : ""}`));
+      if (doc) row.title = `${doc.banner}\nObserve: ${doc.observe}`;
       frag.appendChild(row);
     }
     this.body.replaceChildren(frag);

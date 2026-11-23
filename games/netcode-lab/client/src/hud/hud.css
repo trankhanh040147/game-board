@@ -49,3 +49,5 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 #presenter .pinfo { flex-shrink:0; padding:8px 14px 12px; border-top:1px solid #1f2937; font-size:12px; }
 #presenter .warn { color:#fbbf24; }
 #dragnote { left:50%; bottom:12px; transform:translateX(-50%); font-size:12px; color:#fbbf24; }
+#banner a { pointer-events:auto; color:#93c5fd; }
+#lab a { color:#93c5fd; }

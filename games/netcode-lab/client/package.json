@@ -11,6 +11,7 @@
     "smoke": "node smoke/smoke.mjs"
   },
   "dependencies": {
+    "marked": "17.0.0",
     "three": "0.187.0"
   },
   "devDependencies": {
