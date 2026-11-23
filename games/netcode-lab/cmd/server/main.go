@@ -8,11 +8,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"netcodelab/net/transport"
@@ -28,6 +32,7 @@ func main() {
 	dist := flag.String("dist", "client/dist", "built client directory")
 	extraWWW := flag.String("www", "bin/duel-www", "extra built pages served after -dist (infra.html, duel.html); empty disables")
 	infra := flag.Bool("infra", true, "mount the M7 infrastructure demo: region rooms /r/{hcm,hn,sg}, beacons, matchmaker, /metrics")
+	botBin := flag.String("bot", "bin/bot", "bot binary for the Lab's P14 peek test (make bot); empty disables")
 	pprofOn := flag.Bool("pprof", false, "serve net/http/pprof at /debug/pprof/ (P19 allocation profiling; off by default)")
 	relaxAfter := flag.Float64("relax-after", 10, "matchmaker: seconds before the threshold relaxes")
 	verbose := flag.Bool("v", false, "debug logging")
@@ -50,6 +55,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	room := server.NewRoom(log, token)
+	if *botBin != "" {
+		room.SetPeekRunner(peekRunner(*botBin, *httpAddr))
+	}
 	cfg := server.Config{HTTPAddr: *httpAddr, HTTPSAddr: *httpsAddr, DistDir: *dist}
 	if *extraWWW != "" {
 		cfg.ExtraWWW = []string{*extraWWW}
@@ -94,5 +102,39 @@ func main() {
 	if err := server.Serve(ctx, log, room, cfg); err != nil {
 		log.Error("server", "err", err)
 		os.Exit(1)
+	}
+}
+
+// peekRunner runs bots' P14 peek test (cmd/bot -kind peek) against this
+// server's own WebSocket and returns its "peek" report.
+func peekRunner(bin, httpAddr string) server.PeekRunner {
+	return func(ctx context.Context, crossings, bufferMs int) (json.RawMessage, error) {
+		if _, err := os.Stat(bin); err != nil {
+			return nil, fmt.Errorf("bot binary %s not found (make bot)", bin)
+		}
+		host, port, err := net.SplitHostPort(httpAddr)
+		if err != nil {
+			return nil, err
+		}
+		if host == "" || host == "0.0.0.0" || host == "::" {
+			host = "127.0.0.1"
+		}
+		base := net.JoinHostPort(host, port)
+		cmd := exec.CommandContext(ctx, bin, "-kind", "peek", "-url", "ws://"+base+"/ws", "-info", "http://"+base,
+			"-crossings", strconv.Itoa(crossings), "-peekbuf", strconv.Itoa(bufferMs),
+			// The bot runs for its whole -d even when the crossings are done:
+			// size it to the run (a 3-crossing run finished well inside 120 s).
+			"-d", fmt.Sprintf("%ds", min(120, 20+8*crossings)), "-perbot=false")
+		out, err := cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("peek bots: %w", err)
+		}
+		var res struct {
+			Peek json.RawMessage `json:"peek"`
+		}
+		if err := json.Unmarshal(out, &res); err != nil || len(res.Peek) == 0 {
+			return nil, fmt.Errorf("peek bots: unexpected output (%d bytes)", len(out))
+		}
+		return res.Peek, nil
 	}
 }

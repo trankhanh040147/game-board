@@ -221,3 +221,13 @@ Settings keys and defaults: `authority "server"`, `predict true`, `reconcile tru
 `interp true`, `interpMs 100`, `interpAuto true`, `interpK 2`, `lagcomp true`,
 `historyMs 1000`, `favorVictimRttMs 0` (off), `speedScale 1` (server-only, 0.25–2), `loop "zeroalloc"` (P19, or `"naive"`), `goMemLimitMB 0`, `subtick true` (P26), `interest false` + `interestCellM 8` (P28), `compQuant/compBitpack/compDelta false` (P27), `tickRate 64` (20/30/64/128), `sendRate 20` (10/20/30/64/128,
 ≤ tickRate), `fpsCap 60` (0 = uncapped, 30/60/144), `truthGhost false`, `transport "wt"`.
+
+### P14 peek test (v3 addition)
+
+Admin `{t:"peekTest", token, crossings?: 10 (max 40)}` runs bots' `bin/bot -kind peek` (holder + peeker) against
+this server. It joins two bot players for 20 s + 8 s per crossing (max 120 s), one run at a time. Broadcasts:
+`{t:"peekTest", state:"running", crossings, setup{tickRate, sendRate, interpMs, fpsCap, lagcomp, cond, condLabel:"simulated"}}`,
+then `{t:"peekTest", state:"done", result:{label:"our measurement", crossingsStarted, crossingsComplete,
+advantageMs{mean,sd,min,max}, peekerSeesMinusExposeMs, holderSeesMinusExposeMs, bufferMs, frameMs, crossings[...]},
+setup, ref:{label:"ref", source, values:[{what, ms}], note}}` or `state:"error", error`. Show `result` as
+"our measurement" and `ref` only beside it. Server flag `-bot` (default `bin/bot`; empty disables).

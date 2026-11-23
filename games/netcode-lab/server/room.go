@@ -58,6 +58,7 @@ type Room struct {
 
 	tick        atomic.Uint32
 	hist        *history
+	peek        peekState
 	pool        bufPool
 	ents        []codec.Entity // zero-alloc loop scratch
 	dbg         codec.Debug
@@ -623,24 +624,25 @@ func (c *Client) onDatagram(b []byte) {
 // ---- connections and control ----
 
 type ctrlIn struct {
-	T        string          `json:"t"`
-	Name     string          `json:"name,omitempty"`
-	Token    string          `json:"token,omitempty"`
-	Settings json.RawMessage `json:"settings,omitempty"`
-	ID       string          `json:"id,omitempty"`
-	Target   int             `json:"target,omitempty"` // cond: player id, 0 = self
-	All      bool            `json:"all,omitempty"`    // cond: every client and the default for new joins
-	Up       *cond.Params    `json:"up,omitempty"`
-	Down     *cond.Params    `json:"down,omitempty"`
-	Text     string          `json:"text,omitempty"`
-	Spectate bool            `json:"spectate,omitempty"` // join as presenter/spectator: no player entity
-	Kind     string          `json:"kind,omitempty"`     // glitch
-	On       bool            `json:"on,omitempty"`       // glitch rubberband
-	Ms       int             `json:"ms,omitempty"`       // glitch lossBurst
-	RTTMs    float64         `json:"rttMs,omitempty"`    // report
-	JitterMs float64         `json:"jitterMs,omitempty"` // report
-	LossPct  float64         `json:"lossPct,omitempty"`  // report
-	FPS      float64         `json:"fps,omitempty"`      // report
+	T         string          `json:"t"`
+	Name      string          `json:"name,omitempty"`
+	Token     string          `json:"token,omitempty"`
+	Settings  json.RawMessage `json:"settings,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	Target    int             `json:"target,omitempty"` // cond: player id, 0 = self
+	All       bool            `json:"all,omitempty"`    // cond: every client and the default for new joins
+	Up        *cond.Params    `json:"up,omitempty"`
+	Down      *cond.Params    `json:"down,omitempty"`
+	Text      string          `json:"text,omitempty"`
+	Spectate  bool            `json:"spectate,omitempty"`  // join as presenter/spectator: no player entity
+	Kind      string          `json:"kind,omitempty"`      // glitch
+	On        bool            `json:"on,omitempty"`        // glitch rubberband
+	Ms        int             `json:"ms,omitempty"`        // glitch lossBurst
+	Crossings int             `json:"crossings,omitempty"` // peekTest
+	RTTMs     float64         `json:"rttMs,omitempty"`     // report
+	JitterMs  float64         `json:"jitterMs,omitempty"`  // report
+	LossPct   float64         `json:"lossPct,omitempty"`   // report
+	FPS       float64         `json:"fps,omitempty"`       // report
 	// shotSeen (P11, target side)
 	ShooterID int     `json:"shooterId,omitempty"`
 	ShotSeq   uint32  `json:"shotSeq,omitempty"`
@@ -956,6 +958,8 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 		c.mu.Lock()
 		c.reportRTT, c.reportJitter, c.reportLoss, c.reportFPS = in.RTTMs, in.JitterMs, in.LossPct, in.FPS
 		c.mu.Unlock()
+	case "peekTest":
+		r.handlePeek(c, in)
 	case "glitch":
 		r.handleGlitch(c, in)
 	case "statsReset":
