@@ -236,3 +236,59 @@ func TestInputLeadNotStale(t *testing.T) {
 		t.Fatalf("empty window reported %d, want LeadNone", s.Own.InputLead)
 	}
 }
+
+// P10: the scorecard for every combination of the five toggles, against
+// A.2/A.5/A.10: Instant = prediction + reconciliation (or trust: the client
+// simulates itself), Smooth = interpolation, Fair = lag compensation (or
+// trust: the client claims its hits), Cheat-proof = server authority.
+func TestScorecardAllCombinations(t *testing.T) {
+	for mask := 0; mask < 32; mask++ {
+		s := DefaultSettings()
+		s.Authority = map[bool]string{true: "trust", false: "server"}[mask&1 != 0]
+		s.Predict, s.Reconcile, s.Interp, s.LagComp = mask&2 != 0, mask&4 != 0, mask&8 != 0, mask&16 != 0
+		trust := s.Authority == "trust"
+		want := map[string]bool{
+			"instant":    trust || (s.Predict && s.Reconcile),
+			"smooth":     s.Interp,
+			"fair":       trust || s.LagComp,
+			"cheatProof": !trust,
+		}
+		got := scorecard(s)
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("%+v: %s = %v, want %v", s, k, got[k], v)
+			}
+		}
+		allGreen := got["instant"] && got["smooth"] && got["fair"] && got["cheatProof"]
+		if allGreen != (!trust && s.Predict && s.Reconcile && s.Interp && s.LagComp) {
+			t.Fatalf("all green only with predict, reconcile, interp, lagcomp and authority (B.6 P10): %+v", s)
+		}
+	}
+	// The presets as the teaching sequence shows them.
+	card := func(id string) map[string]bool {
+		for _, p := range Presets() {
+			if p.ID == id {
+				s := DefaultSettings()
+				p.apply(&s)
+				return scorecard(s)
+			}
+		}
+		t.Fatalf("no preset %s", id)
+		return nil
+	}
+	if c := card("P02"); c["instant"] || !c["cheatProof"] {
+		t.Fatalf("P02 dumb client: Instant ✗, Cheat-proof ✓ (A.4): %v", c)
+	}
+	if c := card("P03"); !c["instant"] || !c["fair"] || c["cheatProof"] {
+		t.Fatalf("P03 trust: Instant ✓, Fair ✓, Cheat-proof ✗ (A.5): %v", c)
+	}
+	if c := card("P06"); c["smooth"] {
+		t.Fatalf("P06 raw snapshots: Smooth ✗ (A.8): %v", c)
+	}
+	if c := card("P08"); c["fair"] {
+		t.Fatalf("P08 three truths: Fair ✗ (A.10): %v", c)
+	}
+	if c := card("P10"); !(c["instant"] && c["smooth"] && c["fair"] && c["cheatProof"]) {
+		t.Fatalf("P10: all green: %v", c)
+	}
+}
