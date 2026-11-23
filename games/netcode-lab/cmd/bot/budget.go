@@ -14,7 +14,7 @@ import (
 //	shooterFrame  click -> the shooter's next frame (click uniform within a frame)
 //	sendWait      that frame -> the pacer sends the fire input (not in the A.11 table)
 //	uplink        send -> server receive (ShotResult.recvMs, after the uplink conditioner)
-//	tickWait      receive -> start of the tick that resolved it (includes the input playout buffer)
+//	playoutBuffer receive -> start of the tick that resolved it (the input waits for its stamped tick, DECISIONS 51)
 //	snapshotWait  tick start -> send of the target's first snapshot carrying the Damage event
 //	downlink      that send -> target receive
 //	interp        receive -> render time reaches the shot (arrival clock + buffer, client model)
@@ -86,7 +86,7 @@ func (bu *budget) onDamage(b *bot, seq uint32, snapServerMs, nowMs, maxOff float
 func (bu *budget) report() map[string]any {
 	bu.mu.Lock()
 	defer bu.mu.Unlock()
-	names := []string{"shooterFrame", "sendWait", "uplink", "tickWait", "snapshotWait", "downlink", "interp", "targetFrame", "total"}
+	names := []string{"shooterFrame", "sendWait", "uplink", "playoutBuffer", "snapshotWait", "downlink", "interp", "targetFrame", "total"}
 	seg := map[string][]float64{}
 	n := 0
 	for _, s := range bu.shots {
