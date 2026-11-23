@@ -265,7 +265,8 @@ func Presets() []Preset {
 			Banner: "The server rewinds other players to what you were seeing (red = your view, blue = rewound server hitbox) and traces there."},
 		{ID: "P10", Title: "Scorecard", Section: "A.2", Built: true, apply: base,
 			Banner: "Prediction + reconciliation, interpolation, lag compensation and server authority: all four goals green."},
-		{ID: "P11", Title: "Shot budget", Section: "A.11"},
+		{ID: "P11", Title: "Shot budget", Section: "A.11", Built: true, apply: base,
+			Banner: "Every shot traced on the server-synced clock, click to target frame, in 7 measured segments next to the A.11 estimate (est. 190 ms)."},
 		{ID: "P12", Title: "Send and tick rate", Section: "A.11", Built: true,
 			apply: func(s *Settings) {
 				base(s)
@@ -278,12 +279,19 @@ func Presets() []Preset {
 				s.TickRate, s.SendRate, s.FPSCap = 128, 128, 144
 			},
 			Banner: "128 Hz ticks and snapshots plus 144 FPS clients: both frame waits shrink too (formula ~71 ms, est.)."},
-		{ID: "P14", Title: "Peeker's advantage", Section: "A.11"},
-		{ID: "P15", Title: "Budget table", Section: "A.11"},
+		{ID: "P14", Title: "Peeker's advantage", Section: "A.11", Built: true, apply: base,
+			Banner: "Run the peek test from the panel: a holder bot and a peeker bot; the result is our measurement, with Riot's figures beside it as ref."},
+		{ID: "P15", Title: "Budget table", Section: "A.11", Built: true, apply: base,
+			Banner: "The shot budget as a table: A.11 formula (est.) beside the measured value per segment; the tick wait is our input playout buffer."},
 		{ID: "P16", Title: "Regions and fragile cables", Section: "A.12", Page: "/infra.html?preset=P16"},
 		{ID: "P17", Title: "Beacons and matchmaking", Section: "A.12", Page: "/infra.html?preset=P17"},
 		{ID: "P18", Title: "Relay / backbone", Section: "A.12", Page: "/infra.html?preset=P18"},
-		{ID: "P19", Title: "Tick health", Section: "A.12"},
+		{ID: "P19", Title: "Tick health", Section: "A.12", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.Loop = "naive"
+			},
+			Banner: "The allocating loop is on: watch GC pauses and % of ticks within budget, then switch to the zero-alloc loop in the panel."},
 		{ID: "P20", Title: "Percentiles", Section: "A.12", Page: "/infra.html?preset=P20"},
 		{ID: "P21", Title: "Rollback", Section: "A.13", Page: "/duel.html?preset=P21"},
 		{ID: "P22", Title: "Input delay", Section: "A.13", Page: "/duel.html?preset=P22"},
@@ -297,7 +305,7 @@ func Presets() []Preset {
 				return CondPair{Up: condDelay(50), Down: condDelay(50)}
 			},
 			Banner: "Rewind is fair to the shooter, so the target can die after reaching cover on its own screen. RTT is raised to 100 ms (simulated) to make it visible."},
-		{ID: "P25", Title: "Glitch lab", Section: "A.14",
+		{ID: "P25", Title: "Glitch lab", Section: "A.14", Built: true,
 			apply: func(s *Settings) {
 				base(s)
 				s.SpeedScale = rubberBandScale
@@ -321,7 +329,14 @@ func Presets() []Preset {
 				s.Interest = true
 			},
 			Banner: "Each client gets only the players in nearby 8 m grid cells: fewer entities and bytes per client, and less server work per tick. Compare with it off, with many bots."},
-		{ID: "P29", Title: "Transport", Section: "A.15"},
+		{ID: "P29", Title: "Transport", Section: "A.15", Built: true,
+			apply: func(s *Settings) { base(s) },
+			cond: func() CondPair {
+				c := DefaultCond()
+				c.Down.LossPct = 5
+				return c
+			},
+			Banner: "5% downlink loss (simulated): on WebSocket a lost segment stalls everything behind it (TCP model); on WebTransport datagrams only the lost snapshot is missing."},
 	}
 }
 
