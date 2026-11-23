@@ -111,14 +111,15 @@ func decode(ep *codec.Endpoint, b []byte, now float64) any {
 		}
 		evs := make([]any, len(s.Events))
 		for i, e := range s.Events {
-			evs[i] = map[string]any{"type": int(e.Type), "data": bytesToJS(e.Data)}
+			evs[i] = decodeEvent(e)
 		}
 		out["type"] = "snapshot"
 		out["serverTick"] = int(s.ServerTick)
 		out["serverTimeMs"] = s.ServerTimeMs
 		out["lastProcessedInputSeq"] = int(s.LastProcessedInputSeq)
 		out["own"] = map[string]any{"state": stateToJS(s.Own.State), "health": int(s.Own.Health), "inputBuffer": int(s.Own.InputBuffer),
-			"starved": int(s.Own.Starved), "inputLead": int(s.Own.InputLead)}
+			"starved": int(s.Own.Starved), "inputLead": int(s.Own.InputLead),
+			"dead": s.Own.Dead, "life": int(s.Own.Life)}
 		out["baselineId"] = int(s.BaselineID)
 		out["entities"] = ents
 		out["events"] = evs
@@ -148,6 +149,45 @@ func decode(ep *codec.Endpoint, b []byte, now float64) any {
 	return out
 }
 
+func pos3(p [3]int32) any { return []any{int(p[0]), int(p[1]), int(p[2])} }
+
+func decodeEvent(e codec.Event) any {
+	r := codec.Reader{B: e.Data}
+	switch e.Type {
+	case codec.EvShotResult:
+		var v codec.ShotResult
+		v.Read(&r)
+		if r.Err == nil {
+			return map[string]any{"type": "shot", "shotSeq": int(v.ShotSeq), "resolveTick": int(v.ResolveTick),
+				"renderTick": int(v.RenderTick), "renderFrac": int(v.RenderFrac), "rewoundTick": int(v.RewoundTick), "rewoundFrac": int(v.RewoundFrac),
+				"flags": int(v.Flags), "lagcomp": v.Flags&codec.ShotLagComp != 0, "clamped": v.Flags&codec.ShotClamped != 0,
+				"favoured": v.Flags&codec.ShotFavoured != 0, "killed": v.Flags&codec.ShotKilled != 0, "trust": v.Flags&codec.ShotTrustMode != 0,
+				"hitId": int(v.HitID), "hitbox": int(v.Hitbox), "damage": int(v.Damage), "victimHp": int(v.VictimHP),
+				"seenId": int(v.SeenID), "seenHitbox": int(v.SeenHitbox), "movedCm": int(v.MovedCm),
+				"seenPos": pos3(v.SeenPos), "usedPos": pos3(v.UsedPos), "wallDistM": float64(v.WallDistCm) / 100,
+				"recvMs": v.RecvMs, "tickStartMs": v.TickStartMs}
+		}
+	case codec.EvDamage:
+		var v codec.Damage
+		v.Read(&r)
+		if r.Err == nil {
+			return map[string]any{"type": "damage", "shotSeq": int(v.ShotSeq), "shooterId": int(v.ShooterID), "hitbox": int(v.Hitbox),
+				"damage": int(v.Damage), "health": int(v.Health), "resolveTick": int(v.ResolveTick), "flags": int(v.Flags),
+				"killed": v.Flags&codec.ShotKilled != 0}
+		}
+	case codec.EvDeath:
+		var v codec.Death
+		v.Read(&r)
+		if r.Err == nil {
+			return map[string]any{"type": "death", "life": int(v.Life), "shooterId": int(v.ShooterID), "hitbox": int(v.Hitbox),
+				"flags": int(v.Flags), "lagcomp": v.Flags&codec.ShotLagComp != 0, "shotSeq": int(v.ShotSeq), "resolveTick": int(v.ResolveTick),
+				"rewoundTick": int(v.RewoundTick), "rewoundFrac": int(v.RewoundFrac), "hitPos": pos3(v.HitPos), "nowPos": pos3(v.NowPos),
+				"shooterPos": pos3(v.ShooterPos), "shooterYaw": int(v.ShooterYaw), "shooterPitch": int(v.ShooterPitch), "respawnTick": int(v.RespawnTick)}
+		}
+	}
+	return map[string]any{"type": "unknown", "code": int(e.Type), "data": bytesToJS(e.Data)}
+}
+
 func pongFromJS(v js.Value) codec.Pong {
 	return codec.Pong{
 		ClientSendMs: v.Get("clientSendMs").Float(), ServerRecvMs: v.Get("serverRecvMs").Float(), ServerSendMs: v.Get("serverSendMs").Float(),
@@ -157,11 +197,12 @@ func pongFromJS(v js.Value) codec.Pong {
 
 func main() {
 	api := map[string]any{
-		"apiVersion":      1,
-		"protocolVersion": 1,
+		"apiVersion":      2,
+		"protocolVersion": 2,
 		"FX":              int(sim.One),
 		"BTN": map[string]any{"forward": int(sim.BtnForward), "back": int(sim.BtnBack), "left": int(sim.BtnLeft),
 			"right": int(sim.BtnRight), "jump": int(sim.BtnJump), "fire": int(sim.BtnFire)},
+		"HIT":  map[string]any{"none": int(sim.HitNone), "body": int(sim.HitBody), "head": int(sim.HitHead)},
 		"ANIM": map[string]any{"onGround": int(codec.AnimOnGround), "moving": int(codec.AnimMoving), "dead": int(codec.AnimDead)},
 		"PLAYER": map[string]any{"halfWidth": m(sim.HalfWidth), "height": m(sim.Height), "eyeHeight": m(sim.EyeHeight),
 			"body": map[string]any{"half": m(sim.BodyHalf), "top": m(sim.BodyTop)},
@@ -189,8 +230,13 @@ func main() {
 		}),
 		"reconcile": fn(func(a []js.Value) any {
 			p := get[*sim.Predictor](a[0])
-			r := p.Reconcile(stateFromJS(a[1]), uint32(a[2].Int()), sim.Fx(a[3].Int()), a[4].Truthy())
-			return map[string]any{"state": stateToJS(p.State), "corrected": r.Corrected, "replayed": r.Replayed,
+			var r sim.ReconcileResult
+			if len(a) >= 7 {
+				r = p.ReconcileLife(stateFromJS(a[1]), uint32(a[2].Int()), sim.Fx(a[3].Int()), a[4].Truthy(), uint8(a[5].Int()), a[6].Truthy())
+			} else {
+				r = p.Reconcile(stateFromJS(a[1]), uint32(a[2].Int()), sim.Fx(a[3].Int()), a[4].Truthy())
+			}
+			return map[string]any{"state": stateToJS(p.State), "corrected": r.Corrected, "replayed": r.Replayed, "respawned": r.Respawned,
 				"delta": []any{int(r.Delta[0]), int(r.Delta[1]), int(r.Delta[2])}}
 		}),
 		"predictorInfo": fn(func(a []js.Value) any {
@@ -253,7 +299,26 @@ func main() {
 				"received": float64(s.Received), "duplicates": float64(s.Duplicates), "old": float64(s.Old), "remoteGaps": float64(s.RemoteGaps)}
 		}),
 
-		"newClock": fn(func(a []js.Value) any { return put(&clock.Sync{}) }),
+		"encodeClaim": fn(func(a []js.Value) any {
+			ep := get[*codec.Endpoint](a[0])
+			v := a[1]
+			c := codec.Claim{InputSeq: uint32(optInt(v, "seq")), ClientTick: uint32(optInt(v, "clientTick")),
+				Pos:      [3]int32{int32(optInt(v, "x")), int32(optInt(v, "y")), int32(optInt(v, "z"))},
+				VictimID: uint8(optInt(v, "victimId")), Hitbox: uint8(optInt(v, "hitbox"))}
+			var w codec.Writer
+			codec.AppendClaim(&w, ep.NextHeader(codec.TClaim, a[2].Float()), &c)
+			return bytesToJS(w.B)
+		}),
+		"aimDir": fn(func(a []js.Value) any {
+			d := sim.AimDir(int16(a[0].Int()), int16(a[1].Int()))
+			return []any{d[0], d[1], d[2]}
+		}),
+		"traceMap": fn(func(a []js.Value) any {
+			o := sim.EyePos([3]sim.Fx{int32(a[0].Int()), int32(a[1].Int()), int32(a[2].Int())})
+			return sim.TraceMap(world, o, sim.AimDir(int16(a[3].Int()), int16(a[4].Int())), 300)
+		}),
+		"fireCooldownTicks": fn(func(a []js.Value) any { return (a[0].Int() + 9) / 10 }),
+		"newClock":          fn(func(a []js.Value) any { return put(&clock.Sync{}) }),
 		"clockPong": fn(func(a []js.Value) any {
 			get[*clock.Sync](a[0]).OnPong(pongFromJS(a[1]), a[2].Float())
 			return nil

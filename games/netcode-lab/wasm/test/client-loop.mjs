@@ -44,7 +44,7 @@ ws.onmessage = (ev) => {
     stats.entitiesSeen = Math.max(stats.entitiesSeen, msg.entities.length);
     S.pacerFeedback(pacer, msg.own.starved, now);
     if (msg.lastProcessedInputSeq > 0) {
-      const r = S.reconcile(pred, msg.own.state, msg.lastProcessedInputSeq, S.dtForRate(settings.tickRate), settings.reconcile);
+      const r = S.reconcile(pred, msg.own.state, msg.lastProcessedInputSeq, S.dtForRate(settings.tickRate), settings.reconcile, msg.own.life, msg.own.dead);
       if (r.corrected) stats.corrections++;
       stats.replayed += r.replayed;
     }
@@ -72,7 +72,13 @@ clearInterval(pingTimer); clearInterval(tickTimer);
 const now = performance.now();
 const est = S.clockEstimate(clock, now);
 const info = S.predictorInfo(pred);
-const out = {
+const apiCheck = {
+  aimDir: S.aimDir(0, 0).map((v) => +v.toFixed(3)),
+  traceFromSpawnM: +S.traceMap(info.state.x, info.state.y, info.state.z, info.state.yaw, 0).toFixed(2),
+  claimBytes: S.encodeClaim(conn, { seq: 1, x: 0, y: 0, z: 0, victimId: 0, hitbox: 0 }, now).length,
+  fireCooldownTicks64: S.fireCooldownTicks(64),
+};
+const out = { apiCheck,
   seconds: Number(secs), ...stats,
   predictorCorrections: info.corrections, pendingAtEnd: info.pending.length,
   rttMs: +est.rttMs.toFixed(2), jitterMs: +est.jitterMs.toFixed(2), serverTick: Math.round(est.serverTick), tickRate: est.tickRate,
