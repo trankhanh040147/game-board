@@ -127,7 +127,9 @@ type Client struct {
 	inputLead      int8
 	ackedTick      uint32
 	ackedBaseline  uint8
-	inScratch      codec.Input        // reused by onDatagram (one uplink goroutine per client)
+	inScratch      codec.Input // reused by onDatagram (one uplink goroutine per client)
+	burstMu        sync.Mutex
+	burstTimer     *time.Timer        // P25 loss-burst restore, stopped on leave
 	recvMs         map[uint32]float64 // arrival time of fire inputs (shot id = input seq), for P11
 	claims         []codec.Claim
 	reportRTT      float64 // client-reported (clock sync) RTT, from {t:"report"}
@@ -819,6 +821,7 @@ func (r *Room) removeClient(c *Client) {
 	r.mu.Lock()
 	delete(r.clients, c.id)
 	r.mu.Unlock()
+	c.stopBurst()
 	c.up.Close()
 	c.down.Close()
 	c.conn.Close("bye")

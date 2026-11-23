@@ -62,7 +62,13 @@ func (r *Room) handleGlitch(c *Client, in ctrlIn) {
 			burst := prev
 			burst.LossPct = 100
 			t.down.SetParams(burst)
-			time.AfterFunc(time.Duration(ms)*time.Millisecond, func() { restoreLoss(t.down, prev) })
+			tm := time.AfterFunc(time.Duration(ms)*time.Millisecond, func() { restoreLoss(t.down, prev) })
+			t.burstMu.Lock()
+			if t.burstTimer != nil {
+				t.burstTimer.Stop()
+			}
+			t.burstTimer = tm
+			t.burstMu.Unlock()
 		}
 		msg["ms"] = ms
 		msg["targets"] = len(targets)
@@ -81,4 +87,14 @@ func restoreLoss(l *cond.Link, prev cond.Params) {
 		cur.LossPct = prev.LossPct
 		l.SetParams(cur)
 	}
+}
+
+// stopBurst cancels a pending loss-burst restore when the player leaves (review V17).
+func (c *Client) stopBurst() {
+	c.burstMu.Lock()
+	if c.burstTimer != nil {
+		c.burstTimer.Stop()
+		c.burstTimer = nil
+	}
+	c.burstMu.Unlock()
 }

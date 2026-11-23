@@ -390,3 +390,17 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
     - Input packets decode into a per-client scratch.
     - Left on purpose: 1 Hz stats JSON (control path), first fill of the delta-baseline slots and buffer pools
       (warm-up), and quic-go's own copy per WebTransport datagram.
+54. **P04 scorecard: Instant needs prediction and reconciliation** (lead ruling, 2026-11-23). The sources
+    disagree:
+    - HANDOFF A.6, prediction alone: "Scorecard: Instant ✓, Cheat-proof ✓."
+    - The A.10 summary table: "Instant | prediction + reconciliation".
+    - B.6 P10: "All green only with predict, reconcile, interp, lagcomp and authority on".
+
+    The rule stays `instant = predict && reconcile` (with authority server; trust mode is instant by itself).
+    Instant = predict alone would turn all four cells green with reconcile off, which contradicts P10. A.7 gives
+    the reason: without reconciliation the client "jerk[s] the character back" on every answer, so the input is
+    not felt as instant. The P04 banner says so: "Instant also needs reconciliation (A.7): with it off, every
+    snapshot snaps you back". Test: `TestScorecardAllCombinations`.
+55. **P26, P27 and P28 back to built:false** (lead ruling). B.6's Observe for each is a meter on screen
+    (timing-error histogram, kbps meters, entities/bytes per client). The server data exists, but client's
+    panels do not yet. They flip after each panel is verified end to end.

@@ -31,14 +31,14 @@ room's Lab; the link carries `?preset=Pxx` so the page can apply that preset's s
 | P23 Lockstep | ✗ (page) | as P21 | `/duel.html` | duel |
 | P24 Died behind the wall | ✓ | done (Death event, 50 ms each way) | death replay; smoke covers a real kill | – |
 | P25 Glitch lab | ✗ | done (1a91d01): `{t:"glitch", kind:"rubberband", on}` and `{t:"glitch", kind:"lossBurst", ms, target/all}`, each broadcast as `{t:"glitch", name, explain}`; preset turns rubber-band on | buttons + showing the glitch name; desync inject is on `/duel.html` | client (buttons, name), duel (desync) |
-| P26 Sub-tick | ✓ | done (timing error per shot + histograms per mode) | client sends subtickFrac; histogram panel not built | client (panel) |
-| P27 Compression | ✓ | done (quant/bitpack/delta, raw/quant/bitpack/delta meters) | client decodes deltas; meter panel not built | client (panel) |
-| P28 Interest management | ✓ | done (3×3 grid, entitiesPerSnapshot) | effect visible (players outside vanish); meter panel not built | client (panel) |
+| P26 Sub-tick | ✗ | done (timing error per shot + histograms per mode) | client sends subtickFrac; histogram panel not built | client (panel) |
+| P27 Compression | ✗ | done (quant/bitpack/delta, raw/quant/bitpack/delta meters) | client decodes deltas; meter panel not built | client (panel) |
+| P28 Interest management | ✗ | done (3×3 grid, entitiesPerSnapshot) | effect visible (players outside vanish); meter panel not built | client (panel) |
 | P29 Transport | ✗ | done (WS: simulated TCP head-of-line, fast retransmit vs RTO; WT: datagram loss) | inter-arrival histogram in the unmounted panel | client/duel (mount), bots (run) |
 
-Open question for the lead: **P04 scorecard.** A.6 says prediction alone gives "Instant ✓, Cheat-proof ✓". The
+Resolved (DECISIONS 54): **P04 scorecard.** A.6 says prediction alone gives "Instant ✓, Cheat-proof ✓". The
 A.10 table says "Instant | prediction + reconciliation", and B.6 P10 says "all green only with predict, reconcile,
 interp, lagcomp and authority on". The server follows A.10/P10, so P04 (reconcile off) shows Instant ✗.
 
-Note: P26–P28 were marked built in C3 because their effect works and is visible in play, but their meters
-have no panel yet. If "built" must also mean "meter on screen", they should go back to ✗ until client's panels land.
+P26–P28 went back to ✗ (DECISIONS 55): their B.6 Observe is a meter on screen, and the panels have not landed.
+P04 scorecard ruling: DECISIONS 54.
