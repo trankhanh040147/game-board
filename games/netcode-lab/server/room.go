@@ -736,6 +736,7 @@ func (r *Room) HandleConn(conn transport.Conn) {
 	r.log.Info("join", "id", c.id, "name", c.name, "team", c.teamName(), "transport", conn.Kind(), "remote", conn.RemoteAddr())
 	defer r.removeClient(c)
 	r.welcome(c)
+	r.send(c, r.fillMsg()) // fill state is otherwise only broadcast on change
 	r.broadcastPlayers()
 	// The loop ends when the connection closes (removeClient), so reads need
 	// no per-read cancellation (that allocated on every message, P19).

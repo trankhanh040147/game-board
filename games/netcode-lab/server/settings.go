@@ -293,19 +293,19 @@ func allPresets() []Preset {
 			Banner: "Run the peek test from the panel: a holder bot and a peeker bot; the result is our measurement, with Riot's figures beside it as ref."},
 		{ID: "P15", Title: "Budget table", Section: "A.11", Built: true, apply: base,
 			Banner: "The shot budget as a table: A.11 formula (est.) beside the measured value per segment; the tick wait is our input playout buffer."},
-		{ID: "P16", Title: "Regions and fragile cables", Section: "A.12", Page: "/infra.html?preset=P16"},
-		{ID: "P17", Title: "Beacons and matchmaking", Section: "A.12", Page: "/infra.html?preset=P17"},
-		{ID: "P18", Title: "Relay / backbone", Section: "A.12", Page: "/infra.html?preset=P18"},
+		{ID: "P16", Title: "Regions and fragile cables", Built: true, Section: "A.12", Page: "/infra.html?preset=P16"},
+		{ID: "P17", Title: "Beacons and matchmaking", Built: true, Section: "A.12", Page: "/infra.html?preset=P17"},
+		{ID: "P18", Title: "Relay / backbone", Built: true, Section: "A.12", Page: "/infra.html?preset=P18"},
 		{ID: "P19", Title: "Tick health", Section: "A.12", Built: true,
 			apply: func(s *Settings) {
 				base(s)
 				s.Loop = "naive"
 			},
 			Banner: "The allocating loop is on: watch GC pauses and % of ticks within budget, then switch to the zero-alloc loop in the panel."},
-		{ID: "P20", Title: "Percentiles", Section: "A.12", Page: "/infra.html?preset=P20"},
-		{ID: "P21", Title: "Rollback", Section: "A.13", Page: "/duel.html?preset=P21"},
-		{ID: "P22", Title: "Input delay", Section: "A.13", Page: "/duel.html?preset=P22"},
-		{ID: "P23", Title: "Lockstep", Section: "A.13", Page: "/duel.html?preset=P23"},
+		{ID: "P20", Title: "Percentiles", Built: true, Section: "A.12", Page: "/infra.html?preset=P20"},
+		{ID: "P21", Title: "Rollback", Built: true, Section: "A.13", Page: "/duel.html?preset=P21"},
+		{ID: "P22", Title: "Input delay", Built: true, Section: "A.13", Page: "/duel.html?preset=P22"},
+		{ID: "P23", Title: "Lockstep", Built: true, Section: "A.13", Page: "/duel.html?preset=P23"},
 		{ID: "P24", Title: "Died behind the wall", Section: "A.10", Built: true,
 			apply: func(s *Settings) {
 				base(s)

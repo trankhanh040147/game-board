@@ -78,8 +78,8 @@ func TestControlProtocol(t *testing.T) {
 	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "token") {
 		t.Fatal(e)
 	}
-	ctrl(t, c, map[string]any{"t": "preset", "id": "P18", "token": "secret"})
-	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "not built") {
+	ctrl(t, c, map[string]any{"t": "preset", "id": "P99", "token": "secret"})
+	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "unknown preset") {
 		t.Fatal(e)
 	}
 	ctrl(t, c, map[string]any{"t": "preset", "id": "P02", "token": "secret"})
