@@ -19,6 +19,7 @@ core (claude), client (claude), review, research (hermes), art (antigravity), bo
 | A2 | art | CC0 player/rifle models, map textures | `31b586b` |
 | R2 | research | Tick-health / zero-alloc proposal (P19, B.9 check 5) | Proposal routed to core. |
 | S1–S3 | scribe | STATUS, DEMO skeleton, CONCEPTS, README, presets.json | `bdaa72b`, `fc23a53`, `dc74641`, `e1d1883` (README), `56de3a9` (presets.json) |
+| S4 | scribe | DEMO.md walk of P01, P02, P04–P07 in Chromium | `5af19ac`: P01, P02 verified; P07 verified through settings (ghost lead 120 ms); P04 partly (input → motion 44 ms); P05 partly (corrections 4, not 0); P06 partly (stepping not checked visually). |
 
 ### In progress
 
