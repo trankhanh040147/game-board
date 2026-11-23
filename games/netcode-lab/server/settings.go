@@ -294,7 +294,12 @@ func Presets() []Preset {
 				return CondPair{Up: condDelay(50), Down: condDelay(50)}
 			},
 			Banner: "Rewind is fair to the shooter, so the target can die after reaching cover on its own screen. RTT is raised to 100 ms (simulated) to make it visible."},
-		{ID: "P25", Title: "Glitch lab", Section: "A.14"},
+		{ID: "P25", Title: "Glitch lab", Section: "A.14",
+			apply: func(s *Settings) {
+				base(s)
+				s.SpeedScale = rubberBandScale
+			},
+			Banner: "Glitches on demand: a server-only speed modifier rubber-bands you (on now); the loss-burst button makes others teleport; the duel page injects nondeterminism (desync)."},
 		{ID: "P26", Title: "Sub-tick", Section: "A.15", Built: true,
 			apply: func(s *Settings) {
 				base(s)

@@ -292,3 +292,44 @@ func TestScorecardAllCombinations(t *testing.T) {
 		t.Fatalf("P10: all green: %v", c)
 	}
 }
+
+func TestGlitches(t *testing.T) {
+	room, url := newTestServer(t)
+	c, err := transport.DialWS(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close("")
+	ctrl(t, c, map[string]any{"t": "join", "name": "g"})
+	next(t, c, "welcome")
+	ctrl(t, c, map[string]any{"t": "glitch", "token": "secret", "kind": "rubberband", "on": true})
+	g := next(t, c, "glitch")
+	if g["name"] != "Rubber-banding" || g["speedScale"].(float64) != 0.6 {
+		t.Fatalf("%v", g)
+	}
+	room.mu.Lock()
+	scale := room.params.SpeedScale
+	room.mu.Unlock()
+	if scale != sim.FromFloat(0.6) {
+		t.Fatalf("server speed scale %v", scale)
+	}
+	ctrl(t, c, map[string]any{"t": "glitch", "token": "secret", "kind": "lossBurst", "ms": 150})
+	g = next(t, c, "glitch")
+	if g["name"] != "Teleporting" || g["targets"].(float64) != 1 {
+		t.Fatalf("%v", g)
+	}
+	room.mu.Lock()
+	cl := room.clients[1]
+	room.mu.Unlock()
+	if cl.down.Params().LossPct != 100 {
+		t.Fatal("burst not applied")
+	}
+	time.Sleep(400 * time.Millisecond)
+	if cl.down.Params().LossPct != 0 {
+		t.Fatal("burst not restored")
+	}
+	ctrl(t, c, map[string]any{"t": "glitch", "token": "nope", "kind": "lossBurst"})
+	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "token") {
+		t.Fatal(e)
+	}
+}

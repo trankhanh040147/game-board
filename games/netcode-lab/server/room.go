@@ -633,6 +633,9 @@ type ctrlIn struct {
 	Down     *cond.Params    `json:"down,omitempty"`
 	Text     string          `json:"text,omitempty"`
 	Spectate bool            `json:"spectate,omitempty"` // join as presenter/spectator: no player entity
+	Kind     string          `json:"kind,omitempty"`     // glitch
+	On       bool            `json:"on,omitempty"`       // glitch rubberband
+	Ms       int             `json:"ms,omitempty"`       // glitch lossBurst
 	RTTMs    float64         `json:"rttMs,omitempty"`    // report
 	JitterMs float64         `json:"jitterMs,omitempty"` // report
 	LossPct  float64         `json:"lossPct,omitempty"`  // report
@@ -947,6 +950,8 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 		c.mu.Lock()
 		c.reportRTT, c.reportJitter, c.reportLoss, c.reportFPS = in.RTTMs, in.JitterMs, in.LossPct, in.FPS
 		c.mu.Unlock()
+	case "glitch":
+		r.handleGlitch(c, in)
 	case "statsReset":
 		if !r.checkToken(in.Token) {
 			r.errorTo(c, "statsReset: bad admin token")
