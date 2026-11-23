@@ -187,13 +187,18 @@ try {
     // Aim at the target as this client draws it (interpolated), after mouse-down so the press cannot move the aim.
     const aimAndFire = async (aimY = 1.0) => {
       await A.evaluate(() => { window.__shot = null; const s = window.__netlab.session; if (!s.__wrapped) { const prev = s.onSnapEvent; s.onSnapEvent = (e, now) => { prev(e, now); if (e.type === "shot") { window.__shot = e; window.__marker = getComputedStyle(document.getElementById("hitmarker")).display; } }; s.__wrapped = true; } });
-      const aim = () => A.evaluate(([tid, aimY]) => {
-        const n = window.__netlab, e = n.drawn().get(tid), m = n.session.ownView(performance.now());
-        const dx = e.x - m.x, dz = e.z - m.z; n.input.yaw = Math.atan2(-dx, -dz); n.input.pitch = Math.atan2(((e.y ?? 0) + aimY) - (m.y + 1.6), Math.hypot(dx, dz));
+      // Aim and press in one JS turn: aim at where this client draws the target at this instant (interpolated at the
+      // current render time), then press. The client stamps that same instant as the shot's render time, so aim and
+      // render time cannot drift apart while the target moves (the earlier P08 flake: a ~20 ms gap ≈ 14 cm at 7 m/s).
+      await A.evaluate(([tid, aimY]) => {
+        const n = window.__netlab, s = n.session, now = performance.now();
+        const e = s.interp.sample(s.renderServerMs(now)).entities.get(tid), m = s.ownView(now);
+        const dx = e.x - m.x, dz = e.z - m.z;
+        n.input.yaw = Math.atan2(-dx, -dz); n.input.pitch = Math.atan2((e.y + aimY) - (m.y + 1.6), Math.hypot(dx, dz));
+        document.getElementById("view").dispatchEvent(new MouseEvent("mousedown", { button: 0, buttons: 1, bubbles: true }));
       }, [t.id, aimY]);
-      // Aim before the press (the first fire tick may be sampled right after it) and again after it.
-      await A.mouse.move(640, 380); await aim(); await A.mouse.down(); await aim();
-      await A.waitForTimeout(30); await A.mouse.up();
+      await A.waitForTimeout(30);
+      await A.evaluate(() => document.dispatchEvent(new MouseEvent("mouseup", { button: 0, buttons: 0, bubbles: true })));
       await A.waitForFunction(() => window.__shot, null, { timeout: 5000 }).catch(() => {});
       await A.waitForTimeout(200);
       return A.evaluate(() => ({
@@ -216,7 +221,7 @@ try {
     await T.keyboard.down("KeyA"); await A.waitForTimeout(350);
     const miss = await aimAndFire();
     await T.keyboard.up("KeyA");
-    check("P08 (lag comp off, target strafing): shot event with lagcomp off and a miss reason on screen", !!miss.shot && miss.shot.lagcomp === false && /lag compensation off/.test(miss.reason),
+    check("P08 (lag comp off, target strafing): your ray hit the target at your render time, the server checked current positions, reason on screen", !!miss.shot && miss.shot.lagcomp === false && miss.shot.seenId === t.id && /lag compensation off/.test(miss.reason),
       miss.shot ? `${miss.shot.hitId ? "hit" : "miss"}, seenId ${miss.shot.seenId}, server MovedCm ${miss.shot.movedCm} · "${miss.reason.split("\n")[0]}"` : "no shot event");
     // P24: a real kill (headshot = 100), then the victim's death replay.
     // Open/close the Lab by state, not by counting F1 presses (an F1 can race the async pointer-lock refusal).
