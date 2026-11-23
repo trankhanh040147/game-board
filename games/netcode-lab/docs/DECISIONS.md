@@ -294,3 +294,30 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
     bit-packed 161 B, delta at rest 67 B, delta moving 127 B.
 49. **Presets marked built in C3**: P12, P13 (rates and FPS change, formula ~103 / ~71 ms est.), P26, P27, P28.
     P11, P15, P19 and P29 stay `built:false`: their server data exists, but nothing shows it on screen yet.
+
+## 2026-11-23 — duel: M7 infrastructure (P16–P18, P20)
+
+1. **Regions are three game Rooms in one process** (`server/regions`), at `/r/{hcm,hn,sg}/ws|wt`. The route of a
+   player (region × ISP × last mile × direct/relayed) is applied by a wrapping `transport.Conn` that injects a
+   self `cond` control right after the join, so the Room's own per-client conditioner carries it and `room.go`
+   needs no region hook. A cable cut re-injects the route on every live connection to sg. All route values are
+   simulated settings (A.16), illustrative and taken from A.12's anecdotal ranges; RTTs shown or exported are what
+   clients measure over them.
+2. **Beacon** = `/beacon/{region}/wt` (QUIC datagrams; `/ws` fallback where loss becomes a TCP stall) that echoes
+   each datagram through the route's conditioner both ways. The client sends one control message first: a
+   WebTransport control stream reaches the server only once something is written on it. 10 pings, median.
+3. **Matchmaker** (`server/matchmaker`) is in-process in `cmd/infra` and standalone in `cmd/matchmaker`, same JSON.
+   Default 60 ms relaxing to 100 ms after 10 s (A.12 says 20–30 s is "sensible, not benchmarked"; 10 s keeps the
+   demo short, `-relax-after` changes it). Regions in the RTT map without a fleet are ignored and named in the
+   ticket (A.12's pitfall). One ticket matches alone: there is no team-size wait.
+4. **P18 relayed routes** are route options (`relay-public`, `relay-backbone`) on the same conditioner; `cmd/relay` is
+   also a real UDP relay with the same two simulated profiles for B.8.
+5. **Metrics** (`server/promx`, client_golang v1.23.2, the newest that adds no upgrade to existing deps): RTT and
+   jitter histograms and probe/loss counters by region × ISP × platform, from beacon reports and from the game
+   clients' own `report` messages in region rooms; cable-cut gauge; matchmaker counters; Go runtime. Exposed at
+   `/metrics` on `cmd/infra`. The shooter Room's tick histograms are not exported yet (needs a hook in core's code).
+6. **Alert** `ISPRouteP95High`: p95 RTT of one region × ISP > 150 ms for 1 min (Prometheus rule, shown on the
+   Grafana dashboard). 150 ms sits above the worst p95 without a cut in our runs (with 15% Wi-Fi and 5% bad-line
+   players) and below sg's p95 during the simulated cut.
+7. **`cmd/infra` runs next to the game server** (ports 18720/18721) until core mounts `regions.Manager.Mount`,
+   `matchmaker.MM.Mount`, `promx.Handler` and `duelrelay` in `server/http.go`. docker compose runs both processes.
