@@ -60,7 +60,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	s := Snapshot{
 		ServerTick: 123456, ServerTimeMs: 98765.4321, LastProcessedInputSeq: 41,
 		Own: OwnState{State: sim.State{Pos: [3]int32{-5, 0, 1 << 20}, Vel: [3]int32{1, -2, 3}, OnGround: true, Yaw: -9, Pitch: 9},
-			Health: 75, InputBuffer: 2, Starved: 65535, InputLead: -3},
+			Health: 75, InputBuffer: 2, Starved: 65535, InputLead: -3, Dead: true, Life: 9},
 		Entities: []Entity{{ID: 3, Team: 1, Pos: [3]int32{1, 2, 3}, Yaw: 4, Pitch: 5, Health: 100, Anim: AnimMoving | AnimOnGround}},
 		Events:   []Event{{Type: 9, Data: []byte{1, 2, 3}}},
 	}
@@ -163,5 +163,44 @@ func TestAckEndpoint(t *testing.T) {
 func TestSeqGreaterWraps(t *testing.T) {
 	if !SeqGreater(1, 65535) || SeqGreater(65535, 1) || !SeqGreater(100, 99) {
 		t.Fatal("wrap logic")
+	}
+}
+
+func TestEventsAndClaimRoundTrip(t *testing.T) {
+	sr := ShotResult{ShotSeq: 41, ResolveTick: 1000, RenderTick: 990, RenderFrac: 123, RewoundTick: 990, RewoundFrac: 123,
+		Flags: ShotLagComp | ShotKilled, HitID: 3, Hitbox: 2, Damage: 100, VictimHP: 0, SeenID: 3, SeenHitbox: 2, MovedCm: 77,
+		SeenPos: [3]int32{1, 2, 3}, UsedPos: [3]int32{-4, 5, -6}, WallDistCm: 4321, RecvMs: 12.5, TickStartMs: 13.25}
+	r := &Reader{B: sr.Append(nil)}
+	var sr2 ShotResult
+	sr2.Read(r)
+	if sr2 != sr || r.Off != len(r.B) || r.Err != nil {
+		t.Fatalf("%+v", sr2)
+	}
+	if len(r.B) > 255 {
+		t.Fatal("event too big for u8 length")
+	}
+	d := Damage{ShotSeq: 41, ShooterID: 2, Hitbox: 1, Damage: 25, Health: 75, ResolveTick: 1000, Flags: 1}
+	r = &Reader{B: d.Append(nil)}
+	var d2 Damage
+	d2.Read(r)
+	if d2 != d || r.Off != len(r.B) {
+		t.Fatal(d2)
+	}
+	de := Death{Life: 3, ShooterID: 2, Hitbox: 2, Flags: 1, ShotSeq: 9, ResolveTick: 10, RewoundTick: 8, RewoundFrac: 5,
+		HitPos: [3]int32{1, 2, 3}, NowPos: [3]int32{4, 5, 6}, ShooterPos: [3]int32{7, 8, 9}, ShooterYaw: -5, ShooterPitch: 6, RespawnTick: 200}
+	r = &Reader{B: de.Append(nil)}
+	var de2 Death
+	de2.Read(r)
+	if de2 != de || r.Off != len(r.B) {
+		t.Fatal(de2)
+	}
+	var w Writer
+	c := Claim{InputSeq: 5, ClientTick: 6, Pos: [3]int32{7, -8, 9}, VictimID: 4, Hitbox: 2}
+	AppendClaim(&w, Header{}, &c)
+	h, rr := roundTrip(t, w.B)
+	var c2 Claim
+	ReadClaim(rr, &c2)
+	if h.Type != TClaim || c2 != c || rr.Off != len(w.B) {
+		t.Fatal(c2)
 	}
 }

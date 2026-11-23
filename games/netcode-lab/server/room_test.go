@@ -77,7 +77,7 @@ func TestControlProtocol(t *testing.T) {
 	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "token") {
 		t.Fatal(e)
 	}
-	ctrl(t, c, map[string]any{"t": "preset", "id": "P03", "token": "secret"})
+	ctrl(t, c, map[string]any{"t": "preset", "id": "P11", "token": "secret"})
 	if e := next(t, c, "error"); !strings.Contains(e["msg"].(string), "not built") {
 		t.Fatal(e)
 	}
@@ -126,14 +126,14 @@ func TestTickStats(t *testing.T) {
 // input hold the player (counted), on-time ticks repeat input (counted, A.14).
 func TestCatchUpHoldsOnTimeStarves(t *testing.T) {
 	room := NewRoom(slog.New(slog.NewTextHandler(io.Discard, nil)), "x")
-	c := &Client{room: room, inbuf: map[uint32]sim.Cmd{}, started: true, lastInput: sim.Input{Buttons: sim.BtnForward}}
+	c := &Client{room: room, inbuf: map[uint32]sim.Cmd{}, recvMs: map[uint32]float64{}, started: true, alive: true, lastInput: sim.Input{Buttons: sim.BtnForward}}
 	c.state = sim.State{Pos: room.m.Spawn("blue", 0), OnGround: true}
 	before := c.state
-	c.simulate(sim.DtForRate(64), true)
+	c.simulate(sim.DtForRate(64), true, DefaultSettings())
 	if c.held != 1 || c.starved != 0 || c.state != before {
 		t.Fatalf("catch-up: held=%d starved=%d moved=%v", c.held, c.starved, c.state != before)
 	}
-	c.simulate(sim.DtForRate(64), false)
+	c.simulate(sim.DtForRate(64), false, DefaultSettings())
 	if c.starved != 1 || c.state == before {
 		t.Fatalf("on-time: starved=%d moved=%v", c.starved, c.state != before)
 	}

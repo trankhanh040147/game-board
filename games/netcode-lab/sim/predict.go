@@ -27,6 +27,9 @@ type Predictor struct {
 
 	Corrections uint64 // server state differed from what we predicted for that input
 	Replayed    uint64 // total inputs replayed on top of server state
+
+	life     uint8
+	haveLife bool
 }
 
 func NewPredictor(m *Map, s State) *Predictor {
@@ -62,6 +65,9 @@ func (p *Predictor) Pending() []Cmd {
 type ReconcileResult struct {
 	Corrected bool
 	Replayed  int
+	// Respawned: the server's life counter changed (death/respawn teleport);
+	// the jump is not a misprediction and is not counted.
+	Respawned bool
 	// Delta is old predicted position minus new predicted position, for
 	// visual smoothing of corrections.
 	Delta [3]Fx
@@ -71,7 +77,22 @@ type ReconcileResult struct {
 // rebases on the server state and replays the unacked inputs (A.7). Without
 // replay it hard-snaps to the server state (the P04 "no reconciliation" view).
 func (p *Predictor) Reconcile(server State, lastSeq uint32, dt Fx, replay bool) ReconcileResult {
+	return p.ReconcileLife(server, lastSeq, dt, replay, p.life, false)
+}
+
+// ReconcileLife is Reconcile with the server's life counter and dead flag
+// (snapshot own state). While dead, or when life changed, differences are not
+// counted as corrections: the server moved the player on purpose.
+func (p *Predictor) ReconcileLife(server State, lastSeq uint32, dt Fx, replay bool, life uint8, dead bool) ReconcileResult {
 	var r ReconcileResult
+	if p.haveLife && life != p.life {
+		r.Respawned = true
+	}
+	p.life, p.haveLife = life, true
+	exempt := r.Respawned || dead
+	if dead {
+		replay = false // the server does not move a dead player; neither do we
+	}
 	before := p.State
 	drop := 0
 	for i, pc := range p.pending {
@@ -79,7 +100,7 @@ func (p *Predictor) Reconcile(server State, lastSeq uint32, dt Fx, replay bool) 
 			break
 		}
 		drop = i + 1
-		if pc.cmd.Seq == lastSeq && pc.after != server {
+		if pc.cmd.Seq == lastSeq && pc.after != server && !exempt {
 			r.Corrected = true
 		}
 	}

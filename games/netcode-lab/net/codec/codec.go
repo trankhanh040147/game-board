@@ -18,6 +18,7 @@ const (
 	TPing        uint8 = 4 // C->S
 	TPong        uint8 = 5 // S->C
 	TDebug       uint8 = 6 // S->C, truth overlay only
+	TClaim       uint8 = 7 // C->S, trust mode / modded client
 )
 
 const HeaderSize = 9
@@ -166,6 +167,8 @@ type OwnState struct {
 	InputBuffer uint8  // inputs waiting in the server's buffer for this client
 	Starved     uint16 // ticks the server repeated the last input (wraps)
 	InputLead   int8   // clientTick of the newest input minus server tick at arrival
+	Dead        bool   // flags bit 0
+	Life        uint8  // +1 on every respawn: a teleport, not a misprediction
 }
 
 // Entity flags (Entity.Anim).
@@ -211,6 +214,12 @@ func AppendSnapshot(w *Writer, h Header, s *Snapshot) {
 	w.U8(s.Own.InputBuffer)
 	w.U16(s.Own.Starved)
 	w.U8(uint8(s.Own.InputLead))
+	var of uint8
+	if s.Own.Dead {
+		of |= 1
+	}
+	w.U8(of)
+	w.U8(s.Own.Life)
 	w.U8(s.BaselineID)
 	w.U8(uint8(len(s.Entities)))
 	for i := range s.Entities {
@@ -242,6 +251,8 @@ func ReadSnapshot(r *Reader, s *Snapshot) {
 	s.Own.InputBuffer = r.U8()
 	s.Own.Starved = r.U16()
 	s.Own.InputLead = int8(r.U8())
+	s.Own.Dead = r.U8()&1 != 0
+	s.Own.Life = r.U8()
 	s.BaselineID = r.U8()
 	n := int(r.U8())
 	s.Entities = s.Entities[:0]

@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+
 	"fmt"
+	"netcodelab/net/cond"
 	"slices"
 )
 
@@ -24,6 +26,12 @@ type Settings struct {
 	FPSCap     int     `json:"fpsCap"` // 0 = uncapped
 	TruthGhost bool    `json:"truthGhost"`
 	Transport  string  `json:"transport"` // "ws" | "wt": preferred transport for clients
+	// FavorVictimRttMs: when > 0 and the shooter's RTT is above it, the server
+	// does not rewind for that shooter (A.10 mitigation, P24).
+	FavorVictimRttMs int `json:"favorVictimRttMs"`
+	// SpeedScale is a server-only movement modifier (P25 rubber-band, B.9
+	// check 2): the client does not know it, so predictions are corrected.
+	SpeedScale float64 `json:"speedScale"`
 }
 
 // DefaultSettings match A.1 / B.4.
@@ -33,7 +41,7 @@ func DefaultSettings() Settings {
 		InterpMs: 100, InterpAuto: true, InterpK: 2,
 		LagComp: true, HistoryMs: 1000,
 		TickRate: 64, SendRate: 20, FPSCap: 60,
-		Transport: "wt",
+		Transport: "wt", SpeedScale: 1,
 	}
 }
 
@@ -58,15 +66,17 @@ type SettingInfo struct {
 
 func SupportedSettings() []SettingInfo {
 	return []SettingInfo{
-		{Key: "authority", Kind: "enum", Allowed: []string{"server", "trust"}, Built: false, Note: "only 'server' is built (trust mode is M3)"},
+		{Key: "authority", Kind: "enum", Allowed: []string{"server", "trust"}, Built: true, Note: "trust: the server relays client claims (type 7) instead of simulating (A.5)"},
 		{Key: "predict", Kind: "bool", Built: true, Note: "client-side, WASM Predictor"},
 		{Key: "reconcile", Kind: "bool", Built: true, Note: "client-side, WASM Predictor.reconcile"},
 		{Key: "interp", Kind: "bool", Built: true, Note: "client-side render of other players"},
 		{Key: "interpMs", Kind: "int", Min: 0, Max: 250, Built: true, Note: "client-side"},
 		{Key: "interpAuto", Kind: "bool", Built: true, Note: "client-side: buffer = interpK x send interval"},
 		{Key: "interpK", Kind: "float", Min: 0.5, Max: 5, Built: true, Note: "client-side"},
-		{Key: "lagcomp", Kind: "bool", Built: false, Note: "M3"},
-		{Key: "historyMs", Kind: "int", Min: 0, Max: 1000, Built: false, Note: "M3"},
+		{Key: "lagcomp", Kind: "bool", Built: true, Note: "server rewinds other players to the shooter's render time"},
+		{Key: "historyMs", Kind: "int", Min: 0, Max: 1000, Built: true, Note: "lag-comp rewind cap"},
+		{Key: "favorVictimRttMs", Kind: "int", Min: 0, Max: 300, Built: true, Note: "0 = off; no rewind for shooters above this RTT (P24)"},
+		{Key: "speedScale", Kind: "float", Min: 0.25, Max: 2, Built: true, Note: "server-only movement modifier, not known to clients (rubber-band, P25)"},
 		{Key: "tickRate", Kind: "enum", Allowed: allowedTick, Built: true},
 		{Key: "sendRate", Kind: "enum", Allowed: allowedSend, Built: true, Note: "must be <= tickRate"},
 		{Key: "fpsCap", Kind: "enum", Allowed: allowedFPS, Built: true, Note: "client-side, 0 = uncapped"},
@@ -77,8 +87,14 @@ func SupportedSettings() []SettingInfo {
 
 // Validate checks every field against B.4.
 func (s Settings) Validate() error {
-	if s.Authority != "server" {
-		return fmt.Errorf("authority %q not built yet (only \"server\")", s.Authority)
+	if s.Authority != "server" && s.Authority != "trust" {
+		return fmt.Errorf("authority %q (server | trust)", s.Authority)
+	}
+	if s.FavorVictimRttMs < 0 || s.FavorVictimRttMs > 300 {
+		return fmt.Errorf("favorVictimRttMs out of range")
+	}
+	if s.SpeedScale < 0.25 || s.SpeedScale > 2 {
+		return fmt.Errorf("speedScale out of range 0.25..2")
 	}
 	if !slices.Contains(allowedTick, s.TickRate) {
 		return fmt.Errorf("tickRate %d not in %v", s.TickRate, allowedTick)
@@ -151,7 +167,12 @@ func Presets() []Preset {
 				s.Predict, s.Reconcile, s.Interp = false, false, false
 			},
 			Banner: "The client only draws what the server sends: correct, cheat-proof, and you move one RTT plus waits late."},
-		{ID: "P03", Title: "Trust the client", Section: "A.5"},
+		{ID: "P03", Title: "Trust the client", Section: "A.5", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.Authority = "trust"
+			},
+			Banner: "The client reports its own position and hits; the server relays. Instant and fair for honest players, and a modded client can headshot through walls."},
 		{ID: "P04", Title: "Prediction", Section: "A.6", Built: true,
 			apply: func(s *Settings) {
 				base(s)
@@ -177,9 +198,20 @@ func Presets() []Preset {
 				s.Interp, s.InterpAuto, s.InterpK, s.TruthGhost = true, true, 2, true
 			},
 			Banner: "Others are drawn about 100 ms in the past, gliding between two snapshots; the ghost is the server's present."},
-		{ID: "P08", Title: "Three truths", Section: "A.10"},
-		{ID: "P09", Title: "Lag compensation", Section: "A.10"},
-		{ID: "P10", Title: "Scorecard", Section: "A.2"},
+		{ID: "P08", Title: "Three truths", Section: "A.10", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.LagComp, s.TruthGhost = false, true
+			},
+			Banner: "Shooter, server and target see three different moments; without rewind the server checks the target's present and you miss what you aimed at."},
+		{ID: "P09", Title: "Lag compensation", Section: "A.10", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.LagComp, s.TruthGhost = true, true
+			},
+			Banner: "The server rewinds other players to what you were seeing (red = your view, blue = rewound server hitbox) and traces there."},
+		{ID: "P10", Title: "Scorecard", Section: "A.2", Built: true, apply: base,
+			Banner: "Prediction + reconciliation, interpolation, lag compensation and server authority: all four goals green."},
 		{ID: "P11", Title: "Shot budget", Section: "A.11"},
 		{ID: "P12", Title: "Send and tick rate", Section: "A.11"},
 		{ID: "P13", Title: "Client FPS", Section: "A.11"},
@@ -193,7 +225,15 @@ func Presets() []Preset {
 		{ID: "P21", Title: "Rollback", Section: "A.13"},
 		{ID: "P22", Title: "Input delay", Section: "A.13"},
 		{ID: "P23", Title: "Lockstep", Section: "A.13"},
-		{ID: "P24", Title: "Died behind the wall", Section: "A.10"},
+		{ID: "P24", Title: "Died behind the wall", Section: "A.10", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.LagComp, s.HistoryMs, s.TruthGhost = true, 1000, true
+			},
+			cond: func() CondPair {
+				return CondPair{Up: condDelay(50), Down: condDelay(50)}
+			},
+			Banner: "Rewind is fair to the shooter, so the target can die after reaching cover on its own screen. RTT is raised to 100 ms (simulated) to make it visible."},
 		{ID: "P25", Title: "Glitch lab", Section: "A.14"},
 		{ID: "P26", Title: "Sub-tick", Section: "A.15"},
 		{ID: "P27", Title: "Compression", Section: "A.15"},
@@ -201,3 +241,5 @@ func Presets() []Preset {
 		{ID: "P29", Title: "Transport", Section: "A.15"},
 	}
 }
+
+func condDelay(ms float64) cond.Params { return cond.Params{DelayMs: ms} }

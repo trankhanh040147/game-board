@@ -56,7 +56,14 @@ type Room struct {
 	lastStallNs  int64     // start time (since r.start) of the last late tick
 	wbuf         codec.Writer
 
-	tick           atomic.Uint32
+	tick      atomic.Uint32
+	hist      *history
+	round     roundState
+	teamScore [2]int
+	spawnSeq  int
+	tickNowMs float64 // server time at the start of the current tick
+	outbox    []any   // control messages produced inside a tick, sent after unlock
+
 	tickStartNs    atomic.Int64 // since start
 	periodNs       atomic.Int64
 	tickRate       atomic.Int32
@@ -67,7 +74,7 @@ func NewRoom(log *slog.Logger, adminToken string) *Room {
 	r := &Room{
 		log: log, start: time.Now(), m: sim.Courtyard(), params: sim.DefaultParams(),
 		adminToken: adminToken, settings: DefaultSettings(), presetID: "P01",
-		clients: map[uint8]*Client{}, defCond: DefaultCond(),
+		clients: map[uint8]*Client{}, defCond: DefaultCond(), hist: newHistory(),
 	}
 	r.setRate(r.settings.TickRate)
 	return r
@@ -104,12 +111,28 @@ type Client struct {
 	inputLead     int8
 	ackedTick     uint32
 	ackedBaseline uint8
+	recvMs        map[uint32]float64 // arrival time of fire inputs (shot id = input seq), for P11
+	claims        []codec.Claim
+	reportRTT     float64 // client-reported (clock sync) RTT, from {t:"report"}
+	reportFPS     float64
+	reportLoss    float64
+	reportJitter  float64
 
 	// owned by the tick loop (room.mu)
-	state    sim.State
-	health   uint8
-	snapLast uint32
-	snapBuf  uint8
+	spectator      bool
+	state          sim.State
+	health         uint8
+	alive          bool
+	life           uint8
+	respawnAtMs    float64
+	kills, deaths  int
+	shots, hits    int
+	lastFireSeq    uint32
+	fires          []fire
+	events         []pendingEvent
+	rejectedClaims int
+	snapLast       uint32
+	snapBuf        uint8
 }
 
 func (r *Room) checkToken(tok string) bool {
@@ -167,18 +190,48 @@ func (r *Room) step(lateMs float64) {
 		r.lastStallNs = t0.Sub(r.start).Nanoseconds()
 	}
 	nowNs := t0.Sub(r.start).Nanoseconds()
+	r.tickNowMs = float64(nowNs) / 1e6
 	for _, c := range r.clients {
+		if !c.spectator && !c.alive && r.tickNowMs >= c.respawnAtMs {
+			r.respawn(c)
+		}
+	}
+	for _, c := range r.clients {
+		if c.spectator {
+			continue
+		}
 		// Inputs the client sent during a stall wait in the socket and then
 		// pass the uplink conditioner, so for one uplink delay (+ jitter + 2
 		// ticks) after a stall an empty buffer is still the stall's effect.
 		up := c.up.Params()
 		grace := int64((up.DelayMs+up.JitterMs)*1e6) + 2*period
 		before := c.starved
-		c.simulate(dt, r.lastStallNs > 0 && nowNs-r.lastStallNs <= grace)
+		c.simulate(dt, r.lastStallNs > 0 && nowNs-r.lastStallNs <= grace, s)
 		if c.starved != before {
 			r.log.Debug("input starvation", "id", c.id, "tick", tick, "msSinceStall", float64(nowNs-r.lastStallNs)/1e6, "lateMs", lateMs)
 		}
 	}
+	for _, c := range r.clients {
+		c.mu.Lock()
+		claims := c.claims
+		c.claims = nil
+		c.mu.Unlock()
+		if len(claims) > 0 {
+			r.processClaims(c, claims, tick, s)
+		}
+	}
+	// History holds the state after this tick's movement; shots fired this
+	// tick are resolved against it (and earlier ticks when rewinding).
+	r.hist.record(tick, r.tickNowMs, r.clients)
+	for _, c := range r.clients {
+		for _, f := range c.fires {
+			if c.alive {
+				r.resolveFire(c, f, tick, r.tickNowMs, s)
+			}
+		}
+		c.fires = c.fires[:0]
+	}
+	r.updateRound(r.tickNowMs)
 	r.sendAcc += s.SendRate
 	if r.sendAcc >= s.TickRate {
 		r.sendAcc -= s.TickRate
@@ -192,12 +245,38 @@ func (r *Room) step(lateMs float64) {
 	if len(r.lates) > 4*s.TickRate {
 		r.lates = r.lates[len(r.lates)-4*s.TickRate:]
 	}
+	out := r.outbox
+	r.outbox = nil
 	r.mu.Unlock()
+	for _, m := range out {
+		r.broadcast(m)
+	}
+}
+
+// apply runs one input for this player. Dead players do not move; in trust
+// mode the position comes from the client's claims instead (A.5). A fire
+// input is queued for resolution after every player has moved this tick.
+func (c *Client) apply(cmd sim.Cmd, dt sim.Fx, set Settings, real bool) {
+	r := c.room
+	if !c.alive || set.Authority == "trust" {
+		delete(c.recvMs, cmd.Seq)
+		return
+	}
+	sim.Step(r.m, &c.state, cmd.In, dt, &r.params)
+	if !real || cmd.In.Buttons&sim.BtnFire == 0 {
+		return
+	}
+	recv := c.recvMs[cmd.Seq]
+	delete(c.recvMs, cmd.Seq)
+	if c.lastFireSeq != 0 && cmd.Seq-c.lastFireSeq < FireCooldownTicks(set.TickRate) {
+		return
+	}
+	c.lastFireSeq = cmd.Seq
+	c.fires = append(c.fires, fire{cmd: cmd, state: c.state, recvMs: recv})
 }
 
 // simulate consumes this tick's input(s) from the playout buffer (B.4 rule 3).
-func (c *Client) simulate(dt sim.Fx, afterStall bool) {
-	r := c.room
+func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings) {
 	c.mu.Lock()
 	if !c.started {
 		// Prime the playout buffer: start one input deeper than the target so
@@ -241,13 +320,13 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool) {
 			c.starved++
 			in := c.lastInput
 			in.Buttons &^= sim.BtnFire | sim.BtnJump
-			sim.Step(r.m, &c.state, in, dt, &r.params)
+			c.apply(sim.Cmd{In: in}, dt, set, false)
 			break
 		}
 		delete(c.inbuf, cmd.Seq)
 		c.lastProcessed = cmd.Seq
 		c.lastInput = cmd.In
-		sim.Step(r.m, &c.state, cmd.In, dt, &r.params)
+		c.apply(cmd, dt, set, true)
 	}
 	c.snapLast, c.snapBuf = c.lastProcessed, uint8(min(len(c.inbuf), 255))
 	c.mu.Unlock()
@@ -258,7 +337,13 @@ func (r *Room) sendSnapshots(tick uint32, s Settings) {
 	ents := make([]codec.Entity, 0, len(r.clients))
 	var dbg codec.Debug
 	for _, c := range r.clients {
+		if c.spectator {
+			continue
+		}
 		e := codec.Entity{ID: c.id, Team: c.team, Pos: c.state.Pos, Yaw: c.state.Yaw, Pitch: c.state.Pitch, Health: c.health}
+		if !c.alive {
+			e.Anim |= codec.AnimDead
+		}
 		if c.state.OnGround {
 			e.Anim |= codec.AnimOnGround
 		}
@@ -272,12 +357,26 @@ func (r *Room) sendSnapshots(tick uint32, s Settings) {
 	var snap codec.Snapshot
 	for _, c := range r.clients {
 		c.mu.Lock()
-		starved, lead := c.starved, c.inputLead
+		starved, lead, acked := c.starved, c.inputLead, c.ackedTick
 		c.mu.Unlock()
 		snap = codec.Snapshot{
 			ServerTick: tick, ServerTimeMs: now, LastProcessedInputSeq: c.snapLast,
-			Own: codec.OwnState{State: c.state, Health: c.health, InputBuffer: c.snapBuf, Starved: uint16(starved), InputLead: lead},
+			Own: codec.OwnState{State: c.state, Health: c.health, InputBuffer: c.snapBuf, Starved: uint16(starved), InputLead: lead,
+				Dead: !c.alive && !c.spectator, Life: c.life},
 		}
+		// Events ride every snapshot until the client acks one that carried them.
+		keep := c.events[:0]
+		for _, pe := range c.events {
+			if (pe.firstTick != 0 && acked >= pe.firstTick) || now-pe.addedMs > eventMaxAgeMs {
+				continue
+			}
+			if pe.firstTick == 0 {
+				pe.firstTick = tick
+			}
+			keep = append(keep, pe)
+			snap.Events = append(snap.Events, pe.ev)
+		}
+		c.events = keep
 		snap.Entities = snap.Entities[:0]
 		for _, e := range ents {
 			if e.ID != c.id {
@@ -329,10 +428,24 @@ func (c *Client) onDatagram(b []byte) {
 			}
 			if len(c.inbuf) < 128 {
 				c.inbuf[cmd.Seq] = cmd
+				if cmd.In.Buttons&sim.BtnFire != 0 {
+					c.recvMs[cmd.Seq] = now
+				}
 			}
 		}
 		lead := int64(in.Cmds[len(in.Cmds)-1].ClientTick) - int64(tick)
 		c.inputLead = int8(max(-128, min(127, lead)))
+		c.mu.Unlock()
+	case codec.TClaim:
+		var cl codec.Claim
+		codec.ReadClaim(&rd, &cl)
+		if rd.Err != nil {
+			return
+		}
+		c.mu.Lock()
+		if len(c.claims) < 64 {
+			c.claims = append(c.claims, cl)
+		}
 		c.mu.Unlock()
 	case codec.TPing:
 		var p codec.Ping
@@ -378,6 +491,11 @@ type ctrlIn struct {
 	Up       *cond.Params    `json:"up,omitempty"`
 	Down     *cond.Params    `json:"down,omitempty"`
 	Text     string          `json:"text,omitempty"`
+	Spectate bool            `json:"spectate,omitempty"` // join as presenter/spectator: no player entity
+	RTTMs    float64         `json:"rttMs,omitempty"`    // report
+	JitterMs float64         `json:"jitterMs,omitempty"` // report
+	LossPct  float64         `json:"lossPct,omitempty"`  // report
+	FPS      float64         `json:"fps,omitempty"`      // report
 }
 
 type presetOut struct {
@@ -452,12 +570,12 @@ func (r *Room) HandleConn(conn transport.Conn) {
 	}
 	jcancel()
 
-	c, err := r.addClient(conn, join.Name)
+	c, err := r.addClient(conn, join.Name, join.Spectate)
 	if err != nil {
 		conn.Close(err.Error())
 		return
 	}
-	r.log.Info("join", "id", c.id, "name", c.name, "team", teamNames[c.team], "transport", conn.Kind(), "remote", conn.RemoteAddr())
+	r.log.Info("join", "id", c.id, "name", c.name, "team", c.teamName(), "transport", conn.Kind(), "remote", conn.RemoteAddr())
 	defer r.removeClient(c)
 	r.welcome(c)
 	r.broadcastPlayers()
@@ -476,11 +594,15 @@ func (r *Room) HandleConn(conn transport.Conn) {
 			r.errorTo(c, "bad json")
 			continue
 		}
+		if in.T == "debugpos" {
+			r.relayDebug(c, m.Data)
+			continue
+		}
 		r.handleControl(c, in)
 	}
 }
 
-func (r *Room) addClient(conn transport.Conn, name string) (*Client, error) {
+func (r *Room) addClient(conn transport.Conn, name string, spectate bool) (*Client, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var id uint8
@@ -495,7 +617,9 @@ func (r *Room) addClient(conn transport.Conn, name string) (*Client, error) {
 	}
 	var count [2]int
 	for _, o := range r.clients {
-		count[o.team]++
+		if !o.spectator {
+			count[o.team]++
+		}
 	}
 	team := uint8(0)
 	if count[1] < count[0] {
@@ -507,10 +631,10 @@ func (r *Room) addClient(conn transport.Conn, name string) (*Client, error) {
 	if name == "" {
 		name = "player"
 	}
-	c := &Client{room: r, id: id, name: name, team: team, conn: conn, inbuf: map[uint32]sim.Cmd{}, health: 100}
-	c.state = sim.State{Pos: r.m.Spawn(teamNames[team], int(id)), OnGround: true}
-	if team == 1 {
-		c.state.Yaw = sim.AngleFromRadians(3.14159265) // orange spawns face +Z, toward blue
+	c := &Client{room: r, id: id, name: name, team: team, conn: conn, inbuf: map[uint32]sim.Cmd{}, recvMs: map[uint32]float64{},
+		spectator: spectate}
+	if !spectate {
+		r.respawn(c) // spawn point, full health, life 1
 	}
 	ordered := conn.Kind() == transport.KindWS
 	seed := uint64(time.Now().UnixNano()) ^ uint64(id)<<32
@@ -546,11 +670,22 @@ func stateJSON(s sim.State) map[string]any {
 		"onGround": s.OnGround, "yaw": s.Yaw, "pitch": s.Pitch}
 }
 
+func (c *Client) teamName() string {
+	if c.spectator {
+		return "spectator"
+	}
+	return teamNames[c.team]
+}
+
 func (r *Room) welcome(c *Client) {
 	r.mu.Lock()
 	msg := map[string]any{
 		"t": "welcome", "protocolVersion": ProtocolVersion,
-		"id": c.id, "name": c.name, "team": teamNames[c.team], "transport": c.conn.Kind(),
+		"id": c.id, "name": c.name, "team": c.teamName(), "spectator": c.spectator, "transport": c.conn.Kind(),
+		"scorecard": scorecard(r.settings), "round": r.roundMsg(), "life": c.life,
+		"fireCooldownTicks": FireCooldownTicks(r.settings.TickRate),
+		"rules": map[string]any{"damageBody": DamageBody, "damageHead": DamageHead, "respawnMs": RespawnMs,
+			"roundMs": RoundMs, "intermissionMs": IntermissionMs, "rpm": 600, "historyKeepMs": historyKeepMs},
 		"settings": r.settings, "presetId": r.presetID, "banner": bannerOf(r.presetID),
 		"supportedSettings": SupportedSettings(), "presets": presetList(),
 		"cond": CondPair{Up: c.up.Params(), Down: c.down.Params()},
@@ -572,7 +707,7 @@ func (r *Room) broadcastPlayers() {
 	}
 	var ps []p
 	for _, c := range r.clients {
-		ps = append(ps, p{c.id, c.name, teamNames[c.team]})
+		ps = append(ps, p{c.id, c.name, c.teamName()})
 	}
 	r.mu.Unlock()
 	sort.Slice(ps, func(i, j int) bool { return ps[i].ID < ps[j].ID })
@@ -581,7 +716,8 @@ func (r *Room) broadcastPlayers() {
 
 func (r *Room) broadcastSettings() {
 	r.mu.Lock()
-	msg := map[string]any{"t": "settings", "settings": r.settings, "presetId": r.presetID, "banner": bannerOf(r.presetID)}
+	msg := map[string]any{"t": "settings", "settings": r.settings, "presetId": r.presetID, "banner": bannerOf(r.presetID),
+		"scorecard": scorecard(r.settings), "fireCooldownTicks": FireCooldownTicks(r.settings.TickRate)}
 	r.mu.Unlock()
 	r.broadcast(msg)
 }
@@ -591,6 +727,7 @@ func (r *Room) applySettings(s Settings, preset string) {
 	rateChanged := s.TickRate != r.settings.TickRate
 	r.settings, r.presetID = s, preset
 	r.sendAcc = 0
+	r.params.SpeedScale = sim.FromFloat(s.SpeedScale)
 	if rateChanged {
 		r.setRate(s.TickRate)
 		r.durs = r.durs[:0]
@@ -642,6 +779,12 @@ func (r *Room) handleControl(c *Client, in ctrlIn) {
 		r.errorTo(c, "unknown preset "+in.ID)
 	case "cond":
 		r.handleCond(c, in)
+	case "report":
+		c.mu.Lock()
+		c.reportRTT, c.reportJitter, c.reportLoss, c.reportFPS = in.RTTMs, in.JitterMs, in.LossPct, in.FPS
+		c.mu.Unlock()
+	case "history":
+		r.send(c, r.historyMsg())
 	case "chat":
 		t := in.Text
 		if len(t) > 200 {
@@ -783,7 +926,8 @@ func (r *Room) sendStats() {
 			"players": len(cs), "you": you,
 		})
 	}
+	r.broadcast(r.scoreboardMsg())
 }
 
 // ProtocolVersion is sent in welcome; bump on wire changes.
-const ProtocolVersion = 1
+const ProtocolVersion = 2
