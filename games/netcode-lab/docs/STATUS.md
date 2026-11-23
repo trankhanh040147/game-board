@@ -34,13 +34,14 @@ core (claude), client (claude), review (hermes), research (hermes), art (antigra
 | A4–A6 | art | Duel sprites; region map, logo, UI icons; key/mouse prompts | `fc2893a`, `2a993fd`, `ad6bda4` |
 | V3–V10 | review | Reviews; V10: M3 checklist 10/14 pass | Reports delivered to lead. |
 | S6–S9 | scribe | STATUS, B.9 table, PLAYTEST.md, README refresh | `d638d67`, `bbee2c5`, `56196a5` + `bd04544` (PLAYTEST), `8225bba` (README) |
+| S11 | scribe | DEMO.md walk of every built preset, duel and infra sections | `26144cc` at `078053b`: verified P01–P05, P07–P10; partly P06, P12, P13, P24, P26, P27, P28; duel P21, P23 and infra P16 verified with bots (pages not walked); P17, P20, P22 partly; P18, P25 not checked. |
 
 ### In progress
 
 | ID | Member | Task | Notes |
 |----|--------|------|-------|
 | C3 | core | M5 + M6 | Committed since: `e398ce1`, `c0b9b6d`, `a9160d0`, `be6f729`, `a308c2b`, `8819ee7` (protocol v3), `7b1b19c` (not yet checked by scribe). |
-| K5 | client | Wire the client to the current protocol | **Blocking:** at `aa01c11` the client expects WASM API v2 while `sim.wasm` is v3 (since `8819ee7`); browsers cannot join and the smoke fails (1 passed, 1 failed). |
+| K5 | client | Wire the client to the current protocol | API v3 landed in `078053b`; browsers join again (smoke 35 passed, 1 failed: the P08 shot test is flaky). Open from S11: P12 cost meters, P26 timing histogram, P27 byte meters and P28 entity counts are in the server `stats` but not rendered. |
 | B3 | bots | Checks 2, 3, 5 and the peek test | — |
 | D2 | duel | Then M7 | M7 infra/deploy already committed: `f4dd649`, `838102e`, `aa01c11` (not yet checked by scribe beyond `make infra` and `docker compose config -q`). |
 
