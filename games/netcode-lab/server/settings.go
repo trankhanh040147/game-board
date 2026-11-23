@@ -32,6 +32,11 @@ type Settings struct {
 	// SpeedScale is a server-only movement modifier (P25 rubber-band, B.9
 	// check 2): the client does not know it, so predictions are corrected.
 	SpeedScale float64 `json:"speedScale"`
+	// Loop selects the server loop (P19): "zeroalloc" reuses buffers,
+	// "naive" allocates per tick/client/entity. Same bytes on the wire.
+	Loop string `json:"loop"`
+	// GoMemLimitMB sets runtime/debug.SetMemoryLimit (0 = no limit).
+	GoMemLimitMB int `json:"goMemLimitMB"`
 }
 
 // DefaultSettings match A.1 / B.4.
@@ -41,7 +46,7 @@ func DefaultSettings() Settings {
 		InterpMs: 100, InterpAuto: true, InterpK: 2,
 		LagComp: true, HistoryMs: 1000,
 		TickRate: 64, SendRate: 20, FPSCap: 60,
-		Transport: "wt", SpeedScale: 1,
+		Transport: "wt", SpeedScale: 1, Loop: "zeroalloc",
 	}
 }
 
@@ -76,6 +81,8 @@ func SupportedSettings() []SettingInfo {
 		{Key: "lagcomp", Kind: "bool", Built: true, Note: "server rewinds other players to the shooter's render time"},
 		{Key: "historyMs", Kind: "int", Min: 0, Max: 1000, Built: true, Note: "lag-comp rewind cap"},
 		{Key: "favorVictimRttMs", Kind: "int", Min: 0, Max: 300, Built: true, Note: "0 = off; no rewind for shooters above this RTT (P24)"},
+		{Key: "loop", Kind: "enum", Allowed: []string{"zeroalloc", "naive"}, Built: true, Note: "P19: allocating vs zero-alloc server loop, same bytes on the wire"},
+		{Key: "goMemLimitMB", Kind: "int", Min: 0, Max: 65536, Built: true, Note: "GOMEMLIMIT via runtime/debug.SetMemoryLimit; 0 = no limit"},
 		{Key: "speedScale", Kind: "float", Min: 0.25, Max: 2, Built: true, Note: "server-only movement modifier, not known to clients (rubber-band, P25)"},
 		{Key: "tickRate", Kind: "enum", Allowed: allowedTick, Built: true},
 		{Key: "sendRate", Kind: "enum", Allowed: allowedSend, Built: true, Note: "must be <= tickRate"},
@@ -92,6 +99,12 @@ func (s Settings) Validate() error {
 	}
 	if s.FavorVictimRttMs < 0 || s.FavorVictimRttMs > 300 {
 		return fmt.Errorf("favorVictimRttMs out of range")
+	}
+	if s.Loop != "zeroalloc" && s.Loop != "naive" {
+		return fmt.Errorf("loop %q (zeroalloc | naive)", s.Loop)
+	}
+	if s.GoMemLimitMB < 0 || s.GoMemLimitMB > 65536 {
+		return fmt.Errorf("goMemLimitMB out of range 0..65536")
 	}
 	if s.SpeedScale < 0.25 || s.SpeedScale > 2 {
 		return fmt.Errorf("speedScale out of range 0.25..2")

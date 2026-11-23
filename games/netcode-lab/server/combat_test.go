@@ -44,7 +44,7 @@ func TestLagCompRewindHitsWhatTheShooterSaw(t *testing.T) {
 	target := testClient(r, 2, 1, [3]sim.Fx{0, 0, f(-20)})
 	for tick := uint32(100); tick <= 108; tick++ {
 		target.state.Pos[0] = f(0.11 * float64(tick-100))
-		r.hist.record(tick, float64(tick)*15.625, r.clients)
+		r.hist.record(tick, float64(tick)*15.625, r.clients, false)
 	}
 	s := DefaultSettings()
 	// Shot at tick 108; the shooter was rendering tick 100 (100 ms + downlink ago).
@@ -100,7 +100,7 @@ func TestWallBlocksShot(t *testing.T) {
 	// Shooter south of the low wall (z 3), target hidden north of it (z -3); wall is 2 m tall.
 	shooter := testClient(r, 1, 0, [3]sim.Fx{0, 0, f(3)})
 	testClient(r, 2, 1, [3]sim.Fx{0, 0, f(-3)})
-	r.hist.record(10, 0, r.clients)
+	r.hist.record(10, 0, r.clients, false)
 	r.resolveFire(shooter, fire{cmd: sim.Cmd{Seq: 1, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 10}, state: shooter.state}, 10, 0, DefaultSettings())
 	sr := lastShot(t, shooter)
 	if sr.HitID != 0 || sr.WallDistCm < 250 || sr.WallDistCm > 270 {
@@ -113,7 +113,7 @@ func TestHeadshotKillsAndRespawns(t *testing.T) {
 	f := sim.FromFloat
 	shooter := testClient(r, 1, 0, [3]sim.Fx{0, 0, f(-10)})
 	target := testClient(r, 2, 1, [3]sim.Fx{0, 0, f(-20)})
-	r.hist.record(5, 0, r.clients)
+	r.hist.record(5, 0, r.clients, false)
 	// Aim at the head: eye 1.6 m, head centre ~1.62 m, 10 m away: pitch ~0.
 	r.resolveFire(shooter, fire{cmd: sim.Cmd{Seq: 1, In: sim.Input{Buttons: sim.BtnFire}, RenderTick: 5}, state: shooter.state}, 5, 0, DefaultSettings())
 	sr := lastShot(t, shooter)

@@ -58,6 +58,10 @@ type Room struct {
 
 	tick      atomic.Uint32
 	hist      *history
+	pool      bufPool
+	ents      []codec.Entity // zero-alloc loop scratch
+	dbg       codec.Debug
+	snap      codec.Snapshot
 	tickHist  hist // whole-window tick processing time
 	lateHist  hist // whole-window tick start lateness
 	round     roundState
@@ -70,6 +74,7 @@ type Room struct {
 	periodNs       atomic.Int64
 	tickRate       atomic.Int32
 	scheduleResets atomic.Uint64
+	naiveLoop      atomic.Bool
 }
 
 func NewRoom(log *slog.Logger, adminToken string) *Room {
@@ -226,7 +231,7 @@ func (r *Room) step(lateMs float64) {
 	}
 	// History holds the state after this tick's movement; shots fired this
 	// tick are resolved against it (and earlier ticks when rewinding).
-	r.hist.record(tick, r.tickNowMs, r.clients)
+	r.hist.record(tick, r.tickNowMs, r.clients, s.Loop == "naive")
 	for _, c := range r.clients {
 		for _, f := range c.fires {
 			if c.alive {
@@ -239,7 +244,7 @@ func (r *Room) step(lateMs float64) {
 	r.sendAcc += s.SendRate
 	if r.sendAcc >= s.TickRate {
 		r.sendAcc -= s.TickRate
-		r.sendSnapshots(tick, s)
+		r.sendSnapshots(tick, s, r.NowMs())
 	}
 	d := float64(time.Since(t0).Nanoseconds()) / 1e6
 	budget := float64(period) / 1e6
@@ -339,10 +344,20 @@ func (c *Client) simulate(dt sim.Fx, afterStall bool, set Settings) {
 	c.mu.Unlock()
 }
 
-func (r *Room) sendSnapshots(tick uint32, s Settings) {
-	now := r.NowMs()
-	ents := make([]codec.Entity, 0, len(r.clients))
-	var dbg codec.Debug
+func (r *Room) sendSnapshots(tick uint32, s Settings, now float64) {
+	naive := s.Loop == "naive"
+	// P19: the zero-alloc loop reuses room-owned slices and pooled buffers;
+	// the naive loop allocates per tick, per client and per entity. Both put
+	// the same bytes on the wire (TestLoopModesSameBytes).
+	var ents []codec.Entity
+	var dbg *codec.Debug
+	if naive {
+		dbg = &codec.Debug{}
+	} else {
+		ents = r.ents[:0]
+		dbg = &r.dbg
+		dbg.Players = dbg.Players[:0]
+	}
 	for _, c := range r.clients {
 		if c.spectator {
 			continue
@@ -357,46 +372,74 @@ func (r *Room) sendSnapshots(tick uint32, s Settings) {
 		if c.state.Vel[0] != 0 || c.state.Vel[2] != 0 {
 			e.Anim |= codec.AnimMoving
 		}
-		ents = append(ents, e)
+		if naive {
+			ep := new(codec.Entity) // one heap object per entity per tick
+			*ep = e
+			ents = append(ents, *ep)
+		} else {
+			ents = append(ents, e)
+		}
 		dbg.Players = append(dbg.Players, codec.DebugPos{ID: c.id, Pos: c.state.Pos})
 	}
+	// Stable order (by id) so the bytes do not depend on map iteration;
+	// delta encoding (P27) relies on it too.
+	slices.SortFunc(ents, func(a, b codec.Entity) int { return int(a.ID) - int(b.ID) })
+	slices.SortFunc(dbg.Players, func(a, b codec.DebugPos) int { return int(a.ID) - int(b.ID) })
+	if !naive {
+		r.ents = ents
+	}
 	dbg.ServerTick = tick
-	var snap codec.Snapshot
 	for _, c := range r.clients {
-		c.mu.Lock()
-		starved, lead, acked := c.starved, c.inputLead, c.ackedTick
-		c.mu.Unlock()
-		snap = codec.Snapshot{
-			ServerTick: tick, ServerTimeMs: now, LastProcessedInputSeq: c.snapLast,
-			Own: codec.OwnState{State: c.state, Health: c.health, InputBuffer: c.snapBuf, Starved: uint16(starved), InputLead: lead,
-				Dead: !c.alive && !c.spectator, Life: c.life},
+		var snap *codec.Snapshot
+		if naive {
+			snap = &codec.Snapshot{}
+		} else {
+			snap = &r.snap
+			snap.Entities, snap.Events = snap.Entities[:0], snap.Events[:0]
 		}
-		// Events ride every snapshot until the client acks one that carried them.
-		keep := c.events[:0]
-		for _, pe := range c.events {
-			if (pe.firstTick != 0 && acked >= pe.firstTick) || now-pe.addedMs > eventMaxAgeMs {
-				continue
-			}
-			if pe.firstTick == 0 {
-				pe.firstTick = tick
-			}
-			keep = append(keep, pe)
-			snap.Events = append(snap.Events, pe.ev)
+		r.fillSnapshot(c, snap, tick, now, ents)
+		var w codec.Writer
+		if !naive {
+			w.B = r.pool.get()
 		}
-		c.events = keep
-		snap.Entities = snap.Entities[:0]
-		for _, e := range ents {
-			if e.ID != c.id {
-				snap.Entities = append(snap.Entities, e)
-			}
-		}
-		r.wbuf.B = r.wbuf.B[:0]
-		codec.AppendSnapshot(&r.wbuf, c.ep.NextHeader(codec.TSnapshot, now), &snap)
-		c.down.Push(slices.Clone(r.wbuf.B))
+		codec.AppendSnapshot(&w, c.ep.NextHeader(codec.TSnapshot, now), snap)
+		c.down.Push(w.B)
 		if s.TruthGhost {
-			r.wbuf.B = r.wbuf.B[:0]
-			codec.AppendDebug(&r.wbuf, c.ep.NextHeader(codec.TDebug, now), &dbg)
-			c.down.Push(slices.Clone(r.wbuf.B))
+			var dw codec.Writer
+			if !naive {
+				dw.B = r.pool.get()
+			}
+			codec.AppendDebug(&dw, c.ep.NextHeader(codec.TDebug, now), dbg)
+			c.down.Push(dw.B)
+		}
+	}
+}
+
+// fillSnapshot sets everything in snap for client c except the header.
+func (r *Room) fillSnapshot(c *Client, snap *codec.Snapshot, tick uint32, now float64, ents []codec.Entity) {
+	c.mu.Lock()
+	starved, lead, acked := c.starved, c.inputLead, c.ackedTick
+	c.mu.Unlock()
+	snap.ServerTick, snap.ServerTimeMs, snap.LastProcessedInputSeq = tick, now, c.snapLast
+	snap.Own = codec.OwnState{State: c.state, Health: c.health, InputBuffer: c.snapBuf, Starved: uint16(starved), InputLead: lead,
+		Dead: !c.alive && !c.spectator, Life: c.life}
+	snap.BaselineID = 0
+	// Events ride every snapshot until the client acks one that carried them.
+	keep := c.events[:0]
+	for _, pe := range c.events {
+		if (pe.firstTick != 0 && acked >= pe.firstTick) || now-pe.addedMs > eventMaxAgeMs {
+			continue
+		}
+		if pe.firstTick == 0 {
+			pe.firstTick = tick
+		}
+		keep = append(keep, pe)
+		snap.Events = append(snap.Events, pe.ev)
+	}
+	c.events = keep
+	for _, e := range ents {
+		if e.ID != c.id {
+			snap.Entities = append(snap.Entities, e)
 		}
 	}
 }
@@ -466,6 +509,9 @@ func (c *Client) onDatagram(b []byte) {
 		frac := min(max(since*65536/period, 0), 65535)
 		send := r.NowMs()
 		var w codec.Writer
+		if !r.naiveLoop.Load() {
+			w.B = r.pool.get()
+		}
 		codec.AppendPong(&w, c.ep.NextHeader(codec.TPong, send), &codec.Pong{
 			ClientSendMs: p.ClientSendMs, ServerRecvMs: now, ServerSendMs: send,
 			ServerTick: tick, TickFrac: uint16(frac), TickRate: uint16(r.tickRate.Load()),
@@ -654,7 +700,7 @@ func (r *Room) addClient(conn transport.Conn, name string, spectate bool) (*Clie
 	ordered := conn.Kind() == transport.KindWS
 	seed := uint64(time.Now().UnixNano()) ^ uint64(id)<<32
 	c.up = cond.NewLink(r.defCond.Up, ordered, seed, c.onDatagram)
-	c.down = cond.NewLink(r.defCond.Down, ordered, seed+1, func(b []byte) {
+	deliver := func(b []byte) {
 		c.bytes.downDatagram.Add(uint64(len(b)))
 		if len(b) > 0 && b[0] == codec.TSnapshot {
 			c.bytes.snapshots.Add(1)
@@ -662,7 +708,9 @@ func (r *Room) addClient(conn transport.Conn, name string, spectate bool) (*Clie
 		if err := conn.SendDatagram(b); err != nil {
 			r.log.Debug("datagram send", "id", id, "err", err)
 		}
-	})
+	}
+	c.down = cond.NewLink(r.defCond.Down, ordered, seed+1, deliver)
+	c.down.Release = r.pool.put
 	c.syncRTT()
 	r.clients[id] = c
 	return c, nil
@@ -748,6 +796,8 @@ func (r *Room) applySettings(s Settings, preset string) {
 	r.settings, r.presetID = s, preset
 	r.sendAcc = 0
 	r.params.SpeedScale = sim.FromFloat(s.SpeedScale)
+	r.naiveLoop.Store(s.Loop == "naive")
+	applyMemLimit(s.GoMemLimitMB)
 	if rateChanged {
 		r.setRate(s.TickRate)
 		r.durs = r.durs[:0]

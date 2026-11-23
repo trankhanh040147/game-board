@@ -2,6 +2,7 @@ package server
 
 import (
 	"math"
+	"runtime/debug"
 	"runtime/metrics"
 	"sync"
 )
@@ -159,4 +160,17 @@ func readGC() GCStats {
 		}
 	}
 	return g
+}
+
+// startMemLimit is the limit at process start (the GOMEMLIMIT env var, or none).
+var startMemLimit = debug.SetMemoryLimit(-1)
+
+// applyMemLimit sets the soft memory limit from the Lab; 0 restores the
+// process's starting limit.
+func applyMemLimit(mb int) {
+	if mb <= 0 {
+		debug.SetMemoryLimit(startMemLimit)
+		return
+	}
+	debug.SetMemoryLimit(int64(mb) << 20)
 }

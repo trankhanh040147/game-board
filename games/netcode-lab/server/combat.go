@@ -47,10 +47,14 @@ type history struct {
 
 func newHistory() *history { return &history{ring: make([]histEntry, 512)} }
 
-func (h *history) record(tick uint32, timeMs float64, clients map[uint8]*Client) {
+func (h *history) record(tick uint32, timeMs float64, clients map[uint8]*Client, naive bool) {
 	e := &h.ring[tick%uint32(len(h.ring))]
 	e.tick, e.timeMs = tick, timeMs
-	e.players = e.players[:0]
+	if naive {
+		e.players = make([]histPlayer, 0, len(clients)) // the allocating loop: a new slice every tick
+	} else {
+		e.players = e.players[:0]
+	}
 	for _, c := range clients {
 		if c.spectator {
 			continue
