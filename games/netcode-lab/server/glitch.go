@@ -73,6 +73,9 @@ func (r *Room) handleGlitch(c *Client, in ctrlIn) {
 
 // restoreLoss puts the loss back unless someone changed the link meanwhile.
 func restoreLoss(l *cond.Link, prev cond.Params) {
+	if l.Closed() { // the player left during the burst (review V17)
+		return
+	}
 	cur := l.Params()
 	if cur.LossPct == 100 {
 		cur.LossPct = prev.LossPct

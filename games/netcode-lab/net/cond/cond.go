@@ -169,6 +169,13 @@ func (l *Link) Stats() Stats {
 	return l.stats
 }
 
+// Closed reports whether Close was called.
+func (l *Link) Closed() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.closed
+}
+
 func (l *Link) Close() {
 	l.mu.Lock()
 	l.closed = true
