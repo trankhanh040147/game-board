@@ -17,7 +17,7 @@ Status from the results recorded below only. "not run" = no result in this file 
 | 4 | Shot budget vs 190 ms est. / 71 ms | **partial** | Default within ±15%: bots 211.5 ± 9.7 ms, browser 214.4 / 206.6 / 211.0 ms (loaded host). 128 Hz + 144 FPS: 90.4 ms vs ≈ 71 (not met), frame segments modelled at 144 FPS (display cannot do 144); named gap: playout buffer from the pacer lead (bots then on the old pacer). Quiet-window repeat owed | [bots](#check-4--p11--p15--measured-shot-budget-vs-a11-2026-11-23-20192023-bots), [browser](#check-4-in-the-browser--first-in-browser-shot-budget-forwarded-from-duel-d3-d8ffe39) |
 | 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | **not met / inconclusive** | 40 bots, current loop (load ~15): tick p99 1.52 ms, 99.81% within budget. P19 with 50 bots at load 36–64: zero-alloc p99 22.1 ms, naive 8.4 ms, neither ≥ 99%; host-dominated. Zero-alloc allocates 37% less (1117 vs 1780 MB) but not zero | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots), [P19](#check-5--p19--zero-alloc-vs-allocating-loop-50-bots-at-128-hz-2026-11-23-20152019-bots-inconclusive-on-timing) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | **partial (loaded host)** | Lead ruling: gaps > 150 ms classified by snapshot ids, judged on stalls. Stalls in 6 bot-minutes: WS 379 (0 loss gaps), WT 11 (10 overlap host stalls, 1 does not) + 10 loss gaps. Quiet-window run decides | [classified](#check-6--p29-classified-stalls-vs-loss-gaps-lead-ruling-decisions-b9-check-6-counts-stalls-2026-11-23-20462051-bots-loaded-host) |
-| 7 | Client smoke (Playwright) | **pass** | 44/0/0 three runs in a row at `25c6b27` (client), adding the P25 glitch legs, P26–P28 and region join; P08 flake fixed in `baf0cc5`. Earlier: 39/0/0 ×4 at `c3361b2`, 36/0/0 ×2, 35/0/1 (V12), 36/1/1 (V16, since fixed) | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review-pass) |
+| 7 | Client smoke (Playwright) | **pass** | 52/0/0 ×5 then 55/0/0 ×2 at `8c4c1e1` (22 presets, fill-bot buttons, page presets, P25 burst 436–810 ms). Earlier: 44/0/0 ×3 at `25c6b27`, 39/0/0 ×4, 36/0/0 ×2, 35/0/1 (V12), 36/1/1 (V16, since fixed) | [v3](#check-7--client-smoke-on-protocol-v3-forwarded-by-lead-from-client-and-review-pass) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
 
 ## Check 1 — Determinism: native vs WASM (B.9 #1)
@@ -717,6 +717,7 @@ Where the difference comes from:
 | `9e1923d` | review's own server (:18330, PID recorded, alive the whole run) | **36 passed, 1 failed, 1 skipped**; the failure is a `#forged-claim` click timeout (mechanical, client is fixing it); a real P24 headshot kill and death replay passed | review V16 |
 | `c3361b2` | built from `2bba01d` | **39 passed, 0 failed, 0 skipped**, four runs in a row | client |
 | `25c6b27` | client's own server | **44 passed, 0 failed, 0 skipped**, three runs in a row | client |
+| `8c4c1e1` | built from `539aee6`, 22 presets enabled | **52 passed, 0 failed, 0 skipped** five times, then **55/0/0** twice | client |
 
 The client run applied 16 enabled presets. It included a real P09 hit confirm, the P08 miss reason, and a P27 delta
 check (28 delta snapshots with `compDelta` on). Client `npm test`: 18/18. The smoke checks that presets P12, P13,
@@ -733,6 +734,12 @@ The `c3361b2` runs cover:
 
 The `25c6b27` runs cover everything above, plus the P25 glitch legs, P26–P28 and joining a region room. A P08
 flake was fixed in `baf0cc5` with a stricter assertion: 5 of 5 runs, then 11 more passing runs.
+
+The `8c4c1e1` runs add:
+- The fill-bot Lab buttons: 4 bots start and are removed.
+- Page presets.
+- The P25 burst gap: 436–810 ms over 7 runs with `b66f098`.
+- The P24 leg now waits for the kill message; the assertion is unchanged.
 
 Status: **pass**. Verbatim output is with the client member.
 
@@ -928,3 +935,12 @@ Reclassifying the earlier P29 runs: they kept no snapshot ids, so their gaps can
   therefore a stall (106–143 per bot).
 - **WebTransport runs:** they lost about 5% of snapshots, and their gaps cannot be split into stalls and loss gaps
   after the fact. They are superseded by this run.
+
+## B.11 clean-clone (forwarded from duel, at `25c6b27`)
+
+From a fresh clone of `feat/netcode-lab` at `25c6b27`:
+- `make`, the Go tests and the determinism check passed.
+- `docker compose up` came up, and `docker compose down` took it down.
+- A full round from the LAN IP over WebTransport with 5 fill bots: 121 s, 81 kills, no console errors.
+
+Verbatim output is with the duel member.
