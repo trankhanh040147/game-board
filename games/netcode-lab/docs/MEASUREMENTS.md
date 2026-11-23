@@ -5,6 +5,21 @@ Machine for all runs below: Apple Silicon Mac (darwin/arm64), Go 1.26.4, Node v2
 2026-11-23. Server and clients on the same host (localhost); the network is the in-process
 conditioner at its default, 20 ms each way.
 
+## B.9 checks
+
+Status from the results recorded below only. "not run" = no result in this file yet.
+
+| # | Check (HANDOFF B.9) | Status | Recorded result | Section |
+|---|---|---|---|---|
+| 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** | Identical state hashes on every tick at 20/30/64/128 Hz | [section](#check-1--determinism-native-vs-wasm-b9-1) |
+| 2 | Reconciliation, 0 corrections over 5 min | **fail** | Latest runs: 15 corrections (WebTransport), 45 (WebSocket); corrections track server starvations on a loaded host. "With modifier" half cannot run (no speed modifier yet) | [core runs](#check-2--reconciliation-0-corrections-over-5-minutes-b9-2-not-yet-met-on-a-shared-loaded-host), [bots runs](#check-2--runs-by-bots-2026-11-23-one-bot-per-server-5-minutes-each) |
+| 3 | Lag compensation (unit + integration) | not run | — | — |
+| 4 | Shot budget vs 190 ms est. / 71 ms | not run | — | — |
+| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | not run (preliminary only) | 40 bots, current loop only: 99.92% (64 Hz) / 99.93% (128 Hz) of ticks within budget; per-second p99 max 67.7 / 33.1 ms; no zero-alloc toggle, no human players | [section](#check-5-preliminary--tick-health-with-40-bots-b9-5-p19-p28) |
+| 6 | Transport stalls at 5% loss, WS vs datagrams | not run | — | — |
+| 7 | Client smoke (Playwright) | not run | No result recorded in this file | — |
+| 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
+
 ## Check 1 — Determinism: native vs WASM (B.9 #1)
 
 Command: `make determinism` (from `games/netcode-lab`).
