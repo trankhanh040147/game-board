@@ -163,3 +163,33 @@ func settle(t *testing.T, l *Link, pushed uint64) Stats {
 		time.Sleep(time.Millisecond)
 	}
 }
+
+// A 400 ms outage on a TCP-modelled link: retransmissions sent during the
+// outage are lost too (RTO backoff), so nothing gets through until it ends.
+func TestOrderedOutageBacksOff(t *testing.T) {
+	var s sink
+	l := NewLink(Params{DelayMs: 20}, true, 6, s.deliver)
+	l.SetReverseDelay(20)
+	defer l.Close()
+	l.SetParams(Params{DelayMs: 20, LossPct: 100})
+	start := time.Now()
+	for i := 0; i < 8; i++ { // a 20/s stream during the outage
+		l.Push(pkt(i))
+		time.Sleep(50 * time.Millisecond)
+	}
+	l.SetParams(Params{DelayMs: 20}) // outage over at ~400 ms
+	settle(t, l, 8)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if d := s.at[0].Sub(start); d < 400*time.Millisecond {
+		t.Fatalf("first packet got through after %v, during the 400 ms outage", d)
+	}
+	for i, v := range s.got {
+		if v != i {
+			t.Fatalf("order %v", s.got)
+		}
+	}
+	if st := l.Stats(); st.Backoffs == 0 {
+		t.Fatalf("no backoff recorded: %+v", st)
+	}
+}

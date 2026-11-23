@@ -423,3 +423,9 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
    alternates 46.9 and 62.5 ms gaps, so two consecutive datagram losses already exceed 150 ms. Without the
    classification, loss gaps would be counted as stalls.
    Code: `snapIDsMissing` in cmd/bot/main.go (test cmd/bot/gap_test.go); `scripts/p29-transport.sh` prints both counts.
+56. **TCP model: a lost retransmission backs off** (amends 41; found verifying P25). Each retransmission crosses
+    the same simulated path, so it is lost again with the current loss rate, and the RTO then doubles (capped at
+    2 s; counted as `backoffs`). Reason: with "the retransmission always arrives", a 400 ms 100 %-loss burst on a
+    WebSocket client let snapshots through after about one RTO. Review measured a 199 ms gap where a real TCP
+    stream stalls for the whole outage and then for the backoff. Datagram (WebTransport) links are unchanged:
+    a burst simply drops everything. Test: `TestOrderedOutageBacksOff`.

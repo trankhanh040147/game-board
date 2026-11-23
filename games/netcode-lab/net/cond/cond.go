@@ -35,16 +35,19 @@ type Stats struct {
 	FastRetransmits uint64  `json:"fastRetransmits"` // of which recovered by 3 duplicate ACKs
 	RTOs            uint64  `json:"rtos"`            // of which recovered by the retransmission timeout
 	MaxStallMs      float64 `json:"maxStallMs"`      // longest extra delay a retransmit added
+	Backoffs        uint64  `json:"backoffs"`        // retransmissions lost again (RTO doubled)
 }
 
 type item struct {
-	at      time.Time
-	n       uint64
-	data    []byte
-	lostAt  time.Time // ordered mode: when the lost segment was sent (zero = not lost)
-	later   int       // ordered mode: segments sent after the lost one (duplicate ACKs)
-	fastSet bool
-	release bool // call Release after delivering this copy
+	at        time.Time
+	n         uint64
+	data      []byte
+	lostAt    time.Time // ordered mode: when the lost segment was sent (zero = not lost)
+	later     int       // ordered mode: segments sent after the lost one (duplicate ACKs)
+	fastSet   bool
+	release   bool    // call Release after delivering this copy
+	rtoMs     float64 // ordered mode: current retransmission timeout (doubles per lost retransmission)
+	backedOff bool    // a retransmission was lost: recovered by RTO backoff, not fast retransmit
 }
 
 // itemHeap is a min-heap by (at, n) without container/heap, so pushing
@@ -267,6 +270,7 @@ func (l *Link) pushOrdered(now, at time.Time, lost bool, data []byte) {
 	if lost {
 		rto := rtt + max(4*p.JitterMs, 200)
 		it.lostAt = now
+		it.rtoMs = rto
 		it.at = now.Add(ms(rto + p.DelayMs))
 		l.stats.Retransmitted++
 	}
@@ -305,8 +309,20 @@ func (l *Link) run() {
 			// FIFO: the head blocks everything behind it.
 			for len(l.fifo) > 0 && !l.fifo[0].at.After(now) {
 				it := l.fifo[0]
+				// The retransmission itself crosses the same path: it is lost
+				// with the current loss rate (an outage loses every one), and
+				// TCP then doubles the RTO (backoff, capped at 2 s).
+				if !it.lostAt.IsZero() && l.p.LossPct > 0 && l.rng.Float64()*100 < l.p.LossPct {
+					l.fifo[0].rtoMs = min(2000, it.rtoMs*2)
+					l.fifo[0].at = now.Add(ms(l.fifo[0].rtoMs + l.p.DelayMs))
+					l.fifo[0].fastSet = true // later dup ACKs do not trigger another fast retransmit
+					l.fifo[0].backedOff = true
+					l.stats.Retransmitted++
+					l.stats.Backoffs++
+					break
+				}
 				if !it.lostAt.IsZero() {
-					if it.fastSet {
+					if it.fastSet && !it.backedOff {
 						l.stats.FastRetransmits++
 					} else {
 						l.stats.RTOs++
