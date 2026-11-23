@@ -193,7 +193,7 @@ Client → server:
 | `report` | `rttMs, jitterMs, lossPct, fps` (1 Hz, client-measured) | – (scoreboard ping/loss/FPS, favour-victim RTT) |
 | `history` | – | – → reply `history` |
 | `statsReset` | `token` | admin token (resets the whole-window histograms) |
-| `debugpos` | any JSON (own predicted pos, interpolated others, tick) | relayed to spectators while `truthGhost` is on |
+| `debugpos` | `{t:"debugpos", tick, serverMs, own:{x,y,z}, others:[{id,x,y,z}]}`: the client's predicted self and interpolated others (Q16.16), sent at the top level of the message | relayed to spectators while `truthGhost` is on, wrapped as `{t:"debugpos", from, data:<the whole message>}` |
 | `shotSeen` | `shooterId, shotSeq, recvServerMs, interpMs, frameServerMs` (P11 target half, server-clock ms) | – → relayed to the shooter as `shotTrace` |
 
 Server → client:

@@ -19,6 +19,10 @@ type Pacer struct {
 	calmSince   float64
 	raisedAt    float64
 	raisedOnce  bool
+	drainedAt   float64 // last time the margin was lowered
+	drainedTo   float64
+	floor       float64 // lowest margin allowed until floorUntil
+	floorUntil  float64
 	Adjustments int // times the margin was raised
 }
 
@@ -53,6 +57,13 @@ func (p *Pacer) OnServerFeedback(starved uint16, nowMs float64) {
 	}
 	if starved != p.lastStarved {
 		p.lastStarved = starved
+		// Starving soon after draining to a level means that level is too
+		// low for this host right now: do not probe it again for 30 s.
+		// Without this the margin oscillates (drain to 1, starve, raise,
+		// drain...) and each cycle is a correction.
+		if p.drainedAt > 0 && nowMs-p.drainedAt < 4000 {
+			p.floor, p.floorUntil = p.drainedTo+1, nowMs+30000
+		}
 		// One raise per burst: starvations within 1 s of a raise belong to
 		// the same stall and do not raise again.
 		if !p.raisedOnce || nowMs-p.raisedAt > 1000 {
@@ -66,8 +77,13 @@ func (p *Pacer) OnServerFeedback(starved uint16, nowMs float64) {
 	}
 	// Calm for 2 s: give back one tick per second, so a stall's raise
 	// drains within seconds on a calm host (6 -> 1 in about 7 s).
-	if nowMs-p.calmSince > 2000 && p.Margin > p.MinMargin {
-		p.Margin = max(p.MinMargin, p.Margin-1)
+	low := p.MinMargin
+	if nowMs < p.floorUntil {
+		low = max(low, p.floor)
+	}
+	if nowMs-p.calmSince > 2000 && p.Margin > low {
+		p.Margin = max(low, p.Margin-1)
 		p.calmSince = nowMs - 1000
+		p.drainedAt, p.drainedTo = nowMs, p.Margin
 	}
 }

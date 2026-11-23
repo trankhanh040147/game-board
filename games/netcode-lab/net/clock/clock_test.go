@@ -63,3 +63,27 @@ func TestPacerMarginRaisesAndDrains(t *testing.T) {
 		t.Fatalf("margin %v after %.0f ms; want 1 within 8 s", p.Margin, took)
 	}
 }
+
+// A host that needs 2 ticks: the server starves whenever the margin is below
+// 2. The pacer must settle at 2 instead of draining to 1 and re-starving
+// every few seconds (bots' check 2 observation, 2026-11-23).
+func TestPacerDoesNotOscillate(t *testing.T) {
+	p := NewPacer()
+	starved := uint16(0)
+	p.OnServerFeedback(starved, 0)
+	raisesAfter10s := 0
+	for now := 50.0; now < 120000; now += 50 {
+		if p.Margin < 2 && int(now)%500 == 0 {
+			starved++
+		}
+		before := p.Adjustments
+		p.OnServerFeedback(starved, now)
+		if now > 10000 && p.Adjustments > before {
+			raisesAfter10s++
+		}
+	}
+	if raisesAfter10s > 4 || p.Margin < 2 {
+		t.Fatalf("margin %v, %d raises after 10 s (oscillating)", p.Margin, raisesAfter10s)
+	}
+	t.Logf("margin %v, %d raises after the first 10 s of 120 s", p.Margin, raisesAfter10s)
+}

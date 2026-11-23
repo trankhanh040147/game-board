@@ -321,3 +321,9 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
    players) and below sg's p95 during the simulated cut.
 7. **`cmd/infra` runs next to the game server** (ports 18720/18721) until core mounts `regions.Manager.Mount`,
    `matchmaker.MM.Mount`, `promx.Handler` and `duelrelay` in `server/http.go`. docker compose runs both processes.
+50. **Pacer probe floor** (amends 40). If a starvation comes within 4 s of the margin being lowered to L, the
+    pacer does not lower it to L again for 30 s. Reason: bots measured a WebTransport bot correcting every
+    ~3.1 s after a stall burst (MEASUREMENTS "Check 2 at HEAD"): drain to 1, starve, raise, drain. On a host that
+    needs 2 ticks this oscillates forever, and each cycle is a correction. `TestPacerDoesNotOscillate`: the old
+    rule gave 44 raises in 110 s, the new one 3. A single stall on a calm host still drains to 1 tick within
+    8 s (`TestPacerMarginRaisesAndDrains`).
