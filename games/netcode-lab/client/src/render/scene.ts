@@ -5,7 +5,7 @@ export const TEAM_COLOR = { blue: 0x2563eb, orange: 0xea580c } as const;
 export type Team = keyof typeof TEAM_COLOR;
 
 // Player hitbox sizes come from core's sim constants once the WASM API is published.
-export interface PlayerDims { width: number; height: number; headSize: number; eyeHeight: number }
+export interface PlayerDims { width: number; height: number; headSize: number; headBottom: number; eyeHeight: number }
 
 export class World {
   readonly renderer: THREE.WebGLRenderer;
@@ -106,7 +106,7 @@ function playerMesh(color: number, d: PlayerDims, ghost: boolean): THREE.Group {
   const mat = ghost
     ? new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.7, depthTest: false })
     : new THREE.MeshLambertMaterial({ color });
-  const bodyH = d.height - d.headSize;
+  const bodyH = d.headBottom;
   const g = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(d.width, bodyH, d.width), mat);
   body.position.y = bodyH / 2;
@@ -150,8 +150,8 @@ export class Rifle {
     this.flash.position.set(0, 0.015, -0.66);
     this.flash.visible = false;
     this.root.add(this.flash);
-    this.root.position.set(0.2, -0.19, -0.45);
-    this.root.scale.setScalar(0.6);
+    this.root.position.set(0.2, -0.17, -0.42);
+    this.root.scale.setScalar(0.45);
     this.root.traverse((o) => { o.renderOrder = 20; });
     camera.add(this.root);
   }
@@ -164,7 +164,7 @@ export class Rifle {
 
   update(now: number, dtMs: number) {
     this.kick = Math.max(0, this.kick - dtMs / 90);
-    this.root.position.z = -0.45 + this.kick * 0.06;
+    this.root.position.z = -0.42 + this.kick * 0.04;
     this.root.rotation.x = this.kick * 0.08;
     this.flash.visible = now < this.flashUntil;
   }

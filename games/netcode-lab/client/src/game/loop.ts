@@ -55,9 +55,15 @@ export class FixedLoop {
 
   private frame(now: number) {
     if (!this.running) return;
+    try { this.runFrame(now); }
+    catch (e) { reportError(e); } // surfaces in the console, but one bad frame must not stop the game
+    finally { this.schedule(); }
+  }
+
+  private runFrame(now: number) {
     const minGap = this.fpsCap === 0 ? 0 : 1000 / this.fpsCap;
     // 1 ms slack so a 60 cap on a 60 Hz display does not skip every other vsync.
-    if (this.lastFrame >= 0 && now - this.lastFrame < minGap - 1) { this.schedule(); return; }
+    if (this.lastFrame >= 0 && now - this.lastFrame < minGap - 1) return;
     const frameMs = this.lastFrame < 0 ? 0 : now - this.lastFrame;
     this.lastFrame = now;
     if (this.last < 0) this.last = now;
@@ -77,7 +83,6 @@ export class FixedLoop {
       steps++;
     }
     this.hooks.onRender(this.acc / this.tickMs, frameMs);
-    this.schedule();
   }
 }
 

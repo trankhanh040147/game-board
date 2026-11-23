@@ -1,0 +1,253 @@
+import type { NetcodeSim, SimState, Snapshot, Debug, Pong } from "./wasm";
+import type { Transport } from "./transport";
+import type { InputIntent } from "../game/input";
+import { InterpBuffer, type EntitySample } from "../game/interp";
+import type { LabBackend } from "../hud/lab";
+
+export interface SupportedSetting { key: string; kind: string; allowed?: unknown[]; min?: number; max?: number; built: boolean; note?: string }
+export interface PresetDesc { id: string; title: string; section: string; banner?: string; built: boolean }
+export interface CondDir { delayMs: number; jitterMs: number; lossPct: number; dupPct: number; reorderPct: number }
+
+const PING_MS = 250;
+const CORRECTION_TAU_MS = 80;
+
+/** One connected game session: clock sync, paced inputs, prediction/reconciliation via WASM, snapshot buffer. */
+export class Session implements LabBackend {
+  connected = true;
+  closedReason = "";
+  id = -1;
+  team: "blue" | "orange" = "blue";
+  name = "";
+  settings: Record<string, any> | null = null;
+  supported: SupportedSetting[] = [];
+  presets: PresetDesc[] = [];
+  builtPresets = new Set<string>();
+  activePreset: string | null = null;
+  banner = "";
+  cond: { up: CondDir; down: CondDir } | null = null;
+  players = new Map<number, { name: string; team: string }>();
+  serverStats: any = null;
+  lastError = "";
+  onChange: () => void = () => {};
+  /** The server placed us (join; respawn in M4): the view takes the server's yaw/pitch. */
+  onSpawn: (yaw: number, pitch: number) => void = () => {};
+
+  readonly interp = new InterpBuffer();
+  ghost: Debug | null = null;
+  ownServer: SimState | null = null;
+  ownInfo: Snapshot["own"] | null = null;
+  lastSnapshotTick = 0;
+
+  private conn: number;
+  private clock: number;
+  private pacer: number;
+  private pred = 0;
+  private seq = 0;
+  private prevPred: SimState | null = null;
+  private curPred: SimState | null = null;
+  private lastTickAt = 0;
+  private offset = [0, 0, 0];
+  private lastPing = -Infinity;
+  lastReplayed = 0;
+
+  // 1 s measurement window
+  private win = { at: 0, snaps: 0, up: 0, down: 0, sent: 0, lost: 0, recv: 0, gaps: 0 };
+  meas = { snapsPerSec: null as number | null, kbpsUp: null as number | null, kbpsDown: null as number | null, upLossPct: null as number | null, downLossPct: null as number | null, maxSnapGapMs: 0 };
+  private snapGapMax = 0;
+  private lastSnapAt = 0;
+
+  constructor(readonly sim: NetcodeSim, readonly t: Transport, name: string) {
+    this.conn = sim.newConn();
+    this.clock = sim.newClock();
+    this.pacer = sim.newPacer();
+    t.onControl = (m) => this.onControl(m);
+    t.onBinary = (b) => this.onBinary(b);
+    t.onClose = (r) => { this.connected = false; this.closedReason = r; this.onChange(); };
+    t.sendControl({ t: "join", name });
+    this.win.at = performance.now();
+  }
+
+  get tickRate(): number { return this.settings?.tickRate ?? 64; }
+  get tickMs(): number { return 1000 / this.tickRate; }
+  get ready(): boolean { return this.pred !== 0; }
+  setting<T>(k: string, fallback: T): T { return (this.settings?.[k] as T) ?? fallback; }
+  isBuilt(key: string): boolean { return this.supported.find((s) => s.key === key)?.built ?? false; }
+
+  /** Interpolation buffer in ms from the current settings (interpAuto = k × send interval). */
+  get bufferMs(): number {
+    const s = this.settings;
+    if (!s) return 0;
+    return s.interpAuto ? s.interpK * (1000 / s.sendRate) : s.interpMs;
+  }
+
+  private onControl(m: any) {
+    switch (m.t) {
+      case "welcome":
+        this.id = m.id; this.name = m.name; this.team = m.team;
+        this.applySettings(m.settings, m.presetId, m.banner);
+        this.supported = m.supportedSettings ?? [];
+        this.presets = m.presets ?? [];
+        this.builtPresets = new Set(this.presets.filter((p) => p.built).map((p) => p.id));
+        this.cond = m.cond ?? null;
+        this.pred = this.sim.newPredictor(m.spawn);
+        this.curPred = this.prevPred = m.spawn;
+        this.onSpawn(this.sim.angleToRadians(m.spawn.yaw), this.sim.angleToRadians(m.spawn.pitch));
+        break;
+      case "players":
+        this.players = new Map((m.players ?? []).map((p: any) => [p.id, { name: p.name, team: p.team }]));
+        break;
+      case "settings":
+        this.applySettings(m.settings, m.presetId, m.banner);
+        break;
+      case "cond": this.cond = m.cond; break;
+      case "stats": this.serverStats = m; break;
+      case "error": this.lastError = m.msg; break;
+    }
+    this.onChange();
+  }
+
+  /** Predictor corrections at the last settings change: the HUD counts from there, so each preset starts at 0. */
+  correctionsBase = 0;
+  settingsEpoch = 0;
+
+  private applySettings(s: Record<string, any>, presetId: string | null | undefined, banner: string | undefined) {
+    const prevTick = this.settings?.tickRate;
+    if (this.pred) this.correctionsBase = this.sim.predictorInfo(this.pred).corrections;
+    this.settingsEpoch++;
+    this.settings = s;
+    this.activePreset = presetId || null;
+    this.banner = banner ?? "";
+    if (!s.truthGhost) this.ghost = null;
+    if (prevTick && prevTick !== s.tickRate) this.interp.clear();
+  }
+
+  private onBinary(b: Uint8Array) {
+    const now = performance.now();
+    const msg = this.sim.decode(this.conn, b, now);
+    if (msg.dup) return;
+    if (msg.type === "pong") this.sim.clockPong(this.clock, msg as Pong, now);
+    else if (msg.type === "snapshot") this.onSnapshot(msg, now);
+    else if (msg.type === "debug") this.ghost = msg;
+    else if (msg.type === "invalid") this.lastError = `bad packet: ${msg.error}`;
+  }
+
+  private onSnapshot(s: Snapshot, now: number) {
+    if (this.lastSnapAt) this.snapGapMax = Math.max(this.snapGapMax, now - this.lastSnapAt);
+    this.lastSnapAt = now;
+    this.win.snaps++;
+    this.lastSnapshotTick = s.serverTick;
+    this.ownServer = s.own.state;
+    this.ownInfo = s.own;
+    this.sim.pacerFeedback(this.pacer, s.own.starved, now);
+    if (this.pred && s.lastProcessedInputSeq > 0) {
+      const replay = this.setting("reconcile", true);
+      const r = this.sim.reconcile(this.pred, s.own.state, s.lastProcessedInputSeq, this.sim.dtForRate(this.tickRate), replay);
+      this.lastReplayed = r.replayed;
+      if (replay) {
+        // Same rules give delta 0; a real correction is blended out over a few frames (A.7) instead of a hard jump.
+        if (r.corrected) for (let i = 0; i < 3; i++) this.offset[i] += r.delta[i] / this.sim.FX;
+        if (this.prevPred) this.prevPred = { ...this.prevPred, x: this.prevPred.x - r.delta[0], y: this.prevPred.y - r.delta[1], z: this.prevPred.z - r.delta[2] };
+      } else {
+        this.offset = [0, 0, 0];
+        this.prevPred = r.state; // hard snap: the P04 view
+      }
+      this.curPred = r.state;
+    }
+    const ents = new Map<number, EntitySample & { team: number }>();
+    const F = this.sim.FX;
+    for (const e of s.entities) {
+      ents.set(e.id, { x: e.x / F, y: e.y / F, z: e.z / F, yaw: this.sim.angleToRadians(e.yaw), alive: (e.anim & this.sim.ANIM.dead) === 0, team: e.team });
+    }
+    this.interp.push(s.serverTimeMs, now, ents);
+    this.t.sendBinary(this.sim.encodeSnapshotAck(this.conn, s.baselineId, s.serverTick, now));
+  }
+
+  /** Called every render frame. Runs the fixed ticks the pacer says are due; never passes frame dt to the sim. */
+  frame(now: number, sample: () => InputIntent, onFire: () => void) {
+    if (now - this.lastPing >= PING_MS) {
+      this.lastPing = now;
+      this.t.sendBinary(this.sim.encodePing(this.conn, now));
+    }
+    this.measure(now);
+    if (!this.pred || !this.settings) return;
+    const dt = this.sim.dtForRate(this.tickRate);
+    for (const clientTick of this.sim.pacerDue(this.pacer, this.clock, now)) {
+      const i = sample();
+      const B = this.sim.BTN;
+      const buttons = (i.forward ? B.forward : 0) | (i.back ? B.back : 0) | (i.left ? B.left : 0) | (i.right ? B.right : 0) | (i.jump ? B.jump : 0) | (i.fire ? B.fire : 0);
+      const cmd: any = { seq: ++this.seq, clientTick, buttons, yaw: this.sim.angleFromRadians(i.yaw), pitch: this.sim.angleFromRadians(i.pitch) };
+      if (i.fire) {
+        const rt = this.renderServerTick(now);
+        if (rt !== null) { cmd.renderTick = Math.floor(rt); cmd.renderFrac = Math.floor((rt % 1) * 65536); }
+        cmd.subtickFrac = 0;
+        onFire();
+      }
+      this.prevPred = this.curPred;
+      this.curPred = this.sim.predict(this.pred, cmd, dt);
+      this.lastTickAt = now;
+      this.t.sendBinary(this.sim.encodeInputFromPredictor(this.conn, this.pred, now));
+    }
+    const decay = Math.exp(-(now - (this.lastFrame || now)) / CORRECTION_TAU_MS);
+    for (let k = 0; k < 3; k++) this.offset[k] *= decay;
+    this.lastFrame = now;
+  }
+  private lastFrame = 0;
+
+  /** Own eye position in metres for this frame: predicted (and blended) or, with prediction off, the raw server state. */
+  ownView(now: number): { x: number; y: number; z: number } | null {
+    const F = this.sim.FX;
+    if (!this.setting("predict", true)) {
+      const s = this.ownServer;
+      return s ? { x: s.x / F, y: s.y / F, z: s.z / F } : null;
+    }
+    if (!this.curPred || !this.prevPred) return null;
+    const a = Math.min(1, (now - this.lastTickAt) / this.tickMs);
+    const p = this.prevPred, c = this.curPred;
+    return {
+      x: (p.x + (c.x - p.x) * a) / F + this.offset[0],
+      y: (p.y + (c.y - p.y) * a) / F + this.offset[1],
+      z: (p.z + (c.z - p.z) * a) / F + this.offset[2],
+    };
+  }
+
+  clockEstimate(now: number) { return this.sim.clockEstimate(this.clock, now); }
+
+  /** Server time (ms) at which other players are drawn now. Null until a snapshot arrived. */
+  renderServerMs(now: number): number | null {
+    const arrival = this.interp.arrivalServerMs(now);
+    if (arrival === null) return null;
+    return this.setting("interp", true) ? arrival - this.bufferMs : arrival;
+  }
+
+  private renderServerTick(now: number): number | null {
+    const r = this.renderServerMs(now);
+    const e = this.sim.clockEstimate(this.clock, now);
+    if (r === null || !e.ready) return null;
+    return e.serverTick - (e.serverTimeMs - r) / this.tickMs;
+  }
+
+  predictorInfo() { return this.pred ? this.sim.predictorInfo(this.pred) : null; }
+  pacerInfo() { return this.sim.pacerInfo(this.pacer); }
+
+  private measure(now: number) {
+    const dtMs = now - this.win.at;
+    if (dtMs < 1000) return;
+    const cs = this.sim.connStats(this.conn);
+    const dSent = cs.sent - this.win.sent, dLost = cs.lost - this.win.lost, dRecv = cs.received - this.win.recv, dGaps = cs.remoteGaps - this.win.gaps;
+    this.meas = {
+      snapsPerSec: (this.win.snaps * 1000) / dtMs,
+      kbpsUp: ((this.t.bytesUp - this.win.up) * 8) / dtMs,
+      kbpsDown: ((this.t.bytesDown - this.win.down) * 8) / dtMs,
+      upLossPct: dSent > 0 ? (100 * dLost) / dSent : null,
+      downLossPct: dRecv + dGaps > 0 ? (100 * Math.max(0, dGaps)) / (dRecv + Math.max(0, dGaps)) : null,
+      maxSnapGapMs: this.snapGapMax,
+    };
+    this.snapGapMax = 0;
+    this.win = { at: now, snaps: 0, up: this.t.bytesUp, down: this.t.bytesDown, sent: cs.sent, lost: cs.lost, recv: cs.received, gaps: cs.remoteGaps };
+  }
+
+  applyPreset(id: string, token: string) { this.t.sendControl({ t: "preset", token, id }); }
+  setSetting(key: string, value: unknown, token: string) { this.t.sendControl({ t: "lab", token, settings: { [key]: value } }); }
+  setCond(up: Partial<CondDir>, down: Partial<CondDir>) { this.t.sendControl({ t: "cond", up, down }); }
+  close() { this.t.close(); }
+}

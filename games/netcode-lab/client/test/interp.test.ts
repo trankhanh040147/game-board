@@ -42,3 +42,13 @@ test("yaw takes the short way round", () => {
   const v = lerpAngle(3.0, -3.0, 0.5);
   assert.ok(Math.abs(Math.abs(v) - Math.PI) < 0.01, String(v));
 });
+
+test("render time before the oldest snapshot holds at the oldest (single snapshot buffered)", () => {
+  const b = new InterpBuffer();
+  b.push(100, 1000, e(7));
+  const s = b.sample(0)!;
+  assert.equal(s.held, true);
+  assert.equal(s.entities.get(1)!.x, 7);
+  b.push(150, 1050, e(9));
+  assert.equal(b.sample(50)!.entities.get(1)!.x, 7);
+});

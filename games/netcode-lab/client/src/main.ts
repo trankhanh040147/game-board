@@ -1,90 +1,130 @@
 import "./hud/hud.css";
 import { courtyard } from "./render/map";
-import { World } from "./render/scene";
+import { World, type PlayerDims, type Team } from "./render/scene";
 import { FixedLoop, FpsMeter, type FpsCap } from "./game/loop";
 import { InputCapture } from "./game/input";
 import { NetGraph, type Row } from "./hud/netgraph";
 import { Scorecard, Banner, el } from "./hud/widgets";
 import { LabPanel, type LabBackend } from "./hud/lab";
+import type { ModeState } from "./hud/scorecard";
+import { loadSim, type NetcodeSim } from "./net/wasm";
+import { fetchInfo, WsTransport, WtTransport, webTransportPossible, type Transport } from "./net/transport";
+import { Session } from "./net/session";
 
-const DEFAULT_TICK_RATE = 64; // B.4 default; the server's broadcast value replaces it once connected
 const hud = document.body;
+const offlineBackend: LabBackend = { connected: false, builtPresets: new Set(), settings: null, activePreset: null, applyPreset() {}, setSetting() {} };
 
-interface Probe { map: boolean; wasm: boolean; server: boolean; webTransportCapable: boolean }
+interface Link { sim: NetcodeSim | null; session: Session | null; transportNote: string; problems: string[] }
 
-async function probeFile(url: string): Promise<boolean> {
-  try {
-    const r = await fetch(url, { method: "HEAD" });
-    // Vite dev serves index.html for unknown paths, so check the type too.
-    return r.ok && !(r.headers.get("content-type") ?? "").includes("text/html");
-  } catch { return false; }
+async function connect(): Promise<Link> {
+  const link: Link = { sim: null, session: null, transportNote: "", problems: [] };
+  try { link.sim = await loadSim(); } catch (e) { link.problems.push(`Shared sim (WASM): ${(e as Error).message}`); }
+  let info;
+  try { info = await fetchInfo(); } catch (e) { link.problems.push(`Game server: ${(e as Error).message}`); }
+  if (!link.sim || !info) return link;
+  if (info.protocolVersion !== link.sim.protocolVersion) {
+    link.problems.push(`protocol mismatch: server ${info.protocolVersion}, sim.wasm ${link.sim.protocolVersion}`);
+    return link;
+  }
+  let t: Transport | null = null;
+  const forceWs = new URLSearchParams(location.search).get("transport") === "ws";
+  if (forceWs) link.transportNote = "forced by ?transport=ws";
+  else if (webTransportPossible() && info.wt) {
+    try { t = await WtTransport.connect(info); }
+    catch (e) { link.transportNote = `WebTransport failed (${(e as Error).message})`; }
+  } else {
+    link.transportNote = !window.isSecureContext ? "page is plain HTTP, not a secure context" : !info.wt ? "server offers no WebTransport" : "this browser has no WebTransport";
+  }
+  if (!t) {
+    try { t = await WsTransport.connect(info.ws); }
+    catch (e) { link.problems.push(`Game server: ${(e as Error).message}`); return link; }
+  }
+  const name = new URLSearchParams(location.search).get("name") ?? `player-${Math.floor(Math.random() * 900 + 100)}`;
+  link.session = new Session(link.sim, t, name);
+  return link;
 }
 
-function probeWs(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    let ws: WebSocket;
-    try { ws = new WebSocket(`${proto}://${location.host}/ws`); } catch { resolve(false); return; }
-    const t = setTimeout(() => { ws.close(); resolve(false); }, 3000);
-    ws.onopen = () => { clearTimeout(t); ws.close(); resolve(true); };
-    ws.onerror = () => { clearTimeout(t); resolve(false); };
-  });
+/** Measures key press → first frame where your own view moves (P02). Real timestamps only. */
+class MotionProbe {
+  private armedAt = -1;
+  private from: { x: number; y: number; z: number } | null = null;
+  results: number[] = [];
+  private seenPress = -1;
+  update(now: number, pressAt: number, pos: { x: number; y: number; z: number }, prev: { x: number; y: number; z: number } | null) {
+    const still = prev && Math.hypot(pos.x - prev.x, pos.z - prev.z) < 1e-4;
+    if (pressAt !== this.seenPress) {
+      this.seenPress = pressAt;
+      if (still && this.armedAt < 0) { this.armedAt = pressAt; this.from = { ...pos }; }
+    }
+    if (this.armedAt >= 0 && this.from) {
+      if (Math.hypot(pos.x - this.from.x, pos.z - this.from.z) > 0.005) {
+        this.results.push(now - this.armedAt);
+        if (this.results.length > 10) this.results.shift();
+        this.armedAt = -1;
+      } else if (now - this.armedAt > 2000) this.armedAt = -1;
+    }
+  }
+  get median(): number | null {
+    if (!this.results.length) return null;
+    const s = [...this.results].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  }
 }
 
 async function boot() {
-  const probe: Probe = {
-    map: courtyard !== null,
-    wasm: await probeFile("./sim.wasm"),
-    server: await probeWs(),
-    webTransportCapable: window.isSecureContext && typeof (window as any).WebTransport === "function",
-  };
-
   const canvas = el("canvas", { id: "view" });
   hud.appendChild(canvas);
   const banner = new Banner(hud);
   const scorecard = new Scorecard(hud);
   const graph = new NetGraph(hud);
+  const modeHud = el("div", { id: "modehud", class: "hud box" });
+  modeHud.style.display = "none";
+  hud.appendChild(modeHud);
   hud.appendChild(el("div", { id: "crosshair", class: "hud" }));
 
-  // Not wired yet: the WASM sim and wire protocol are being built by core. Until then the client is honest about it.
-  const backend: LabBackend = {
-    connected: false, builtPresets: new Set(), settings: null, activePreset: null,
-    applyPreset() {}, setSetting() {},
-  };
-  const lab = new LabPanel(hud, backend);
-
-  const bannerLines: string[] = [];
-  if (!probe.webTransportCapable) bannerLines.push(`<span class="warn">WebSocket fallback</span> — ${window.isSecureContext ? "this browser has no WebTransport" : "page is not a secure context (plain HTTP), so WebTransport is unavailable"}; game packets go over TCP.`);
-  bannerLines.push("Offline: not connected to a game server. Spectator camera only (not the game's movement rules).");
-  banner.set(bannerLines);
-
   const start = el("div", { id: "start" });
-  const card = el("div", { class: "card box" });
-  const row = (ok: boolean, name: string, note: string) => `<div class="row"><span class="${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"}</span> ${name} <span class="dim">${note}</span></div>`;
-  card.innerHTML = `<h1>Netcode Lab</h1>
-    ${row(probe.map, "Courtyard map", probe.map ? "shared/map.json" : "shared/map.json missing")}
-    ${row(probe.wasm, "Shared sim (WASM)", probe.wasm ? "sim.wasm found" : "sim.wasm not built yet")}
-    ${row(probe.server, "Game server", probe.server ? "/ws reachable; protocol not wired in this client build yet" : "/ws not reachable")}
-    <p class="dim">Click to look around (pointer lock, raw mouse). WASD to fly, Space up, Shift down. F1 opens the Lab panel. Esc releases the mouse.</p>`;
-  const go = el("button", {}, probe.map ? "Enter spectator view" : "Map missing");
-  (go as HTMLButtonElement).disabled = !probe.map;
-  card.appendChild(go);
+  const card = el("div", { class: "card box" }, "<h1>Netcode Lab</h1><p class='dim'>Connecting…</p>");
   start.appendChild(card);
   hud.appendChild(start);
+
+  const link = await connect();
+  const s = link.session;
+  const lab = new LabPanel(hud, s ?? offlineBackend);
+  if (s) s.onChange = () => lab.refresh();
+
+  const row = (ok: boolean, name: string, note: string) => `<div class="row"><span class="${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"}</span> ${name} <span class="dim">${note}</span></div>`;
+  card.innerHTML = `<h1>Netcode Lab</h1>
+    ${row(courtyard !== null, "Courtyard map", courtyard ? "shared/map.json" : "shared/map.json missing")}
+    ${row(link.sim !== null, "Shared sim (WASM)", link.sim ? `api v${link.sim.apiVersion}` : "")}
+    ${row(s !== null, "Game server", s ? `connected over ${s.t.kind === "wt" ? "WebTransport" : "WebSocket"}` : "")}
+    ${link.problems.map((p) => `<div class="bad">${p}</div>`).join("")}
+    <p class="dim">${s ? "Click to play: mouse look, WASD, Space jump, left click fire." : "Offline: spectator camera only (WASD fly, Space up, Shift down); not the game's movement rules."} F1 opens the Lab panel. Esc releases the mouse.</p>`;
+  const go = el("button", {}, s ? "Play" : "Enter spectator view");
+  (go as HTMLButtonElement).disabled = !courtyard;
+  card.appendChild(go);
   if (!courtyard) return;
 
   const world = new World(canvas, courtyard);
   const input = new InputCapture(canvas);
   const fps = new FpsMeter();
+  const probe = new MotionProbe();
   let lastFrameMs = 0;
-  // Spectator camera state: starts above the Blue spawn looking at the gap.
+  let prevView: { x: number; y: number; z: number } | null = null;
   const cam = { x: 0, y: 6, z: 30 };
   input.pitch = -0.2;
+  if (s) {
+    s.onSpawn = (yaw, pitch) => { input.yaw = yaw; input.pitch = pitch; };
+    const sp = s.ownServer ?? (s.predictorInfo()?.state ?? null);
+    if (sp && link.sim) { input.yaw = link.sim.angleToRadians(sp.yaw); input.pitch = link.sim.angleToRadians(sp.pitch); }
+  }
+  const dims: PlayerDims | null = link.sim
+    ? { width: link.sim.PLAYER.halfWidth * 2, height: link.sim.PLAYER.height, headSize: link.sim.PLAYER.head.half * 2, headBottom: link.sim.PLAYER.head.bottom, eyeHeight: link.sim.PLAYER.eyeHeight }
+    : null;
 
   go.addEventListener("click", () => input.lock());
-  canvas.addEventListener("click", () => { if (!input.locked) input.lock(); });
+  canvas.addEventListener("click", () => { if (!input.locked && !lab.open) input.lock(); });
   input.onLockChange = (locked) => { start.style.display = locked || lab.open ? "none" : "flex"; };
-  input.onFirePress = () => world.rifle.fire(performance.now());
+  if (!s) input.onFirePress = () => world.rifle.fire(performance.now());
   lab.onToggle = (open) => {
     if (open && input.locked) document.exitPointerLock();
     start.style.display = open || input.locked ? "none" : "flex";
@@ -93,10 +133,11 @@ async function boot() {
   addEventListener("keydown", (e) => { if (input.locked) keys.add(e.code); });
   addEventListener("keyup", (e) => keys.delete(e.code));
 
-  const loop = new FixedLoop(DEFAULT_TICK_RATE, {
+  const loop = new FixedLoop(64, {
     onTick() {
+      if (s) return; // connected: ticks come from the WASM pacer, see onRender
       const i = input.sample();
-      const step = 12 / DEFAULT_TICK_RATE;
+      const step = 12 / 64;
       const fx = -Math.sin(i.yaw), fz = -Math.cos(i.yaw);
       const mx = (i.forward ? 1 : 0) - (i.back ? 1 : 0), sx = (i.right ? 1 : 0) - (i.left ? 1 : 0);
       cam.x += (fx * mx - fz * sx) * step;
@@ -107,35 +148,115 @@ async function boot() {
       const now = performance.now();
       fps.push(now);
       lastFrameMs = frameMs;
-      world.setView(cam.x, cam.y, cam.z, input.yaw, input.pitch);
+      if (s && s.connected) {
+        s.frame(now, () => input.sample(), () => world.rifle.fire(now));
+        const v = s.ownView(now);
+        if (v && dims) {
+          probe.update(now, input.lastMoveKeyAt, v, prevView);
+          prevView = v;
+          world.setView(v.x, v.y + dims.eyeHeight, v.z, input.yaw, input.pitch);
+        }
+        drawOthers(now);
+      } else {
+        world.setView(cam.x, cam.y, cam.z, input.yaw, input.pitch);
+      }
       world.rifle.update(now, frameMs);
       world.render();
     },
   });
+
+  function drawOthers(now: number) {
+    if (!s || !dims) return;
+    const alive = new Set<number>();
+    const r = s.renderServerMs(now);
+    const sample = r === null ? null : s.setting("interp", true) ? s.interp.sample(r) : (() => { const l = s.interp.latest(); return l ? { entities: l.entities, held: true } : null; })();
+    if (sample) {
+      for (const [id, e] of sample.entities) {
+        alive.add(id);
+        const team: Team = (e as any).team === 1 ? "orange" : "blue";
+        world.upsertPlayer(id, team, e.x, e.y, e.z, e.yaw, dims, e.alive);
+      }
+    }
+    if (s.ghost && s.setting("truthGhost", false)) {
+      const F = s.sim.FX;
+      for (const p of s.ghost.players) if (p.id !== s.id && alive.has(p.id)) world.upsertGhost(p.id, p.x / F, p.y / F, p.z / F, 0, dims);
+    } else world.hideGhosts();
+    world.removeMissing(alive);
+  }
+
+  // Handle for automated browser checks (Playwright cannot grant pointer lock headless).
+  (window as any).__netlab = { input, session: s, probe };
   lab.local = {
     get fpsCap() { return loop.fpsCap; },
     setFpsCap(v: number) { loop.fpsCap = v as FpsCap; },
   };
   loop.start();
 
-  const tickHz = (DEFAULT_TICK_RATE).toString();
+  let probeEpoch = -1;
+  const f = (v: number | null | undefined, d = 0) => (v === null || v === undefined || Number.isNaN(v) ? null : Number(v.toFixed(d)));
   setInterval(() => {
+    const now = performance.now();
+    if (!s) {
+      graph.render([
+        { key: "fps", label: "FPS", value: `${fps.fps} (${lastFrameMs.toFixed(1)} ms)`, source: "measured" },
+        { key: "net", label: "network", value: "offline", source: "measured" },
+      ]);
+      banner.set([`${webTransportPossible() ? "" : '<span class="warn">WebSocket fallback</span> — page is not a secure context. '}Offline: not connected to a game server.`]);
+      return;
+    }
+    const st = s.settings;
+    if (st && loop.fpsCap !== st.fpsCap) loop.fpsCap = st.fpsCap as FpsCap;
+    const est = s.clockEstimate(now);
+    const pi = s.predictorInfo();
+    const sv = s.serverStats;
+    const m = s.meas;
     const rows: Row[] = [
-      { key: "rtt", label: "RTT", value: null, unit: "ms", source: "measured" },
-      { key: "jitter", label: "jitter", value: null, unit: "ms", source: "measured" },
-      { key: "loss", label: "loss", value: null, unit: "%", source: "measured" },
-      { key: "tick", label: "client tick", value: `${loop.currentTick} @ ${tickHz} Hz`, source: "measured" },
-      { key: "snap", label: "snapshots", value: null, unit: "/s", source: "measured" },
-      { key: "interp", label: "interp buffer", value: null, unit: "ms", source: "setting" },
-      { key: "pending", label: "pending inputs", value: null, source: "measured" },
-      { key: "corr", label: "corrections", value: null, source: "measured" },
-      { key: "svtick", label: "server tick", value: null, unit: "ms", source: "server" },
+      { key: "rtt", label: "RTT", value: est.ready ? f(est.rttMs, 1) : null, unit: "ms", source: "measured" },
+      { key: "jitter", label: "jitter", value: est.ready ? f(est.jitterMs, 1) : null, unit: "ms", source: "measured" },
+      { key: "loss", label: "loss up/down", value: m.upLossPct === null && m.downLossPct === null ? null : `${m.upLossPct?.toFixed(1) ?? "—"} / ${m.downLossPct?.toFixed(1) ?? "—"} %`, source: "measured" },
+      { key: "tick", label: "server tick", value: s.lastSnapshotTick ? `${s.lastSnapshotTick} @ ${s.tickRate} Hz` : null, source: "server" },
+      { key: "snap", label: "snapshots", value: m.snapsPerSec === null ? null : `${m.snapsPerSec.toFixed(1)}/s (set ${st?.sendRate ?? "—"})`, source: "measured" },
+      { key: "gap", label: "max snapshot gap", value: m.snapsPerSec === null ? null : f(m.maxSnapGapMs, 0), unit: "ms", source: "measured" },
+      { key: "interp", label: "interp buffer", value: st ? (st.interp ? `${s.bufferMs.toFixed(0)} ms${st.interpAuto ? ` (${st.interpK}× interval)` : ""}` : "off (raw)") : null, source: "setting" },
+      { key: "pending", label: "pending inputs", value: pi ? pi.pending.length : null, source: "measured" },
+      { key: "corr", label: "corrections", value: pi ? pi.corrections - s.correctionsBase : null, source: "measured" },
+      { key: "svtick", label: "server tick time", value: sv?.tick ? `p99 ${sv.tick.p99Ms.toFixed(2)} ms · ${sv.tick.withinBudgetPct.toFixed(1)}% ok` : null, source: "server" },
+      { key: "inbuf", label: "server input buffer", value: s.ownInfo ? `${s.ownInfo.inputBuffer} (starved ${s.ownInfo.starved})` : null, source: "server" },
       { key: "fps", label: "FPS", value: `${fps.fps} (${lastFrameMs.toFixed(1)} ms)`, source: "measured" },
-      { key: "kbps", label: "kbps up/down", value: null, source: "measured" },
+      { key: "kbps", label: "kbps up/down", value: m.kbpsUp === null ? null : `${m.kbpsUp.toFixed(1)} / ${m.kbpsDown!.toFixed(1)}`, source: "measured" },
     ];
     graph.render(rows);
-    scorecard.render(null);
-  }, 250);
+
+    const mode: ModeState | null = st ? {
+      mode: st.authority === "trust" ? "trust" : !st.predict ? "dumb" : "auth",
+      predict: !!st.predict, reconcile: !!st.reconcile, interp: !!st.interp,
+      lagcomp: !!st.lagcomp && s.isBuilt("lagcomp"),
+    } : null;
+    scorecard.render(mode, st && !s.isBuilt("lagcomp") ? { fair: "lag compensation not built yet (server: M3)" } : {});
+
+    if (s.settingsEpoch !== probeEpoch) { probeEpoch = s.settingsEpoch; probe.results = []; }
+    const lines: string[] = [];
+    if (s.t.kind === "ws") lines.push(`<span class="warn">WebSocket fallback</span> — ${link.transportNote}; game packets go over TCP.`);
+    if (!s.connected) lines.push(`<span class="warn">Disconnected</span>: ${s.closedReason}. Reload to rejoin.`);
+    if (s.activePreset === "custom") lines.push("Custom Lab settings (no preset)");
+    else if (s.activePreset || s.banner) lines.push(`${s.activePreset ? `<b>${s.activePreset}</b> ` : ""}${s.banner}`);
+    banner.set(lines);
+
+    const hl: string[] = [];
+    if (st) {
+      const med = probe.median;
+      hl.push(`input → motion: ${med === null ? "press W from standing still" : `${med.toFixed(0)} ms`} <span class="dim">(measured, median of ${probe.results.length})</span>`);
+      if (st.predict && pi) {
+        const shown = pi.pending.slice(-6).map((n: number) => "#" + n).join(" ");
+        hl.push(`pending: ${shown || "none"}${pi.pending.length > 6 ? " …" : ""} · replayed: ${s.lastReplayed} · corrections: ${pi.corrections - s.correctionsBase} <span class="dim">(since last Lab change)</span>${st.reconcile ? "" : " · reconcile OFF (hard snap)"}`);
+      } else hl.push("prediction off: you see only the server's state of yourself");
+      const r = s.renderServerMs(now);
+      hl.push(st.interp ? `others: interpolated ${s.bufferMs.toFixed(0)} ms in the past` : "others: raw latest snapshot (no interpolation)");
+      if (st.truthGhost && r !== null && est.ready) hl.push(`truth ghost leads what you see by ${(est.serverTimeMs - r).toFixed(0)} ms <span class="dim">(measured: synced server clock − render time)</span>`);
+    }
+    modeHud.innerHTML = hl.join("<br>");
+    modeHud.style.display = hl.length ? "" : "none";
+  }, 200);
 }
 
 boot();

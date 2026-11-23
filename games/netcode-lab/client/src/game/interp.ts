@@ -40,6 +40,7 @@ export class InterpBuffer {
     const n = this.snaps.length;
     if (!n) return null;
     if (renderServerMs >= this.snaps[n - 1].serverMs) return { entities: this.snaps[n - 1].entities, held: renderServerMs > this.snaps[n - 1].serverMs };
+    if (renderServerMs <= this.snaps[0].serverMs) return { entities: this.snaps[0].entities, held: true };
     let i = n - 2;
     while (i > 0 && this.snaps[i].serverMs > renderServerMs) i--;
     const a = this.snaps[i], b = this.snaps[i + 1];

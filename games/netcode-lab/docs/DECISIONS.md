@@ -79,3 +79,17 @@
     server authority. The server does the same work in every authoritative mode; only the client draws differently.
 21. **Generated WASM files are not committed.** `make wasm` writes `client/public/sim.wasm` and `wasm_exec.js`
     (3.5 MB). `make dev` and `make client` build them first.
+
+## 2026-11-23 — client: networking wiring (M0–M2)
+
+1. **Inputs are sampled once per pacer tick inside the render frame.** Each frame asks the WASM pacer which ticks are
+   due and samples input for each one. The sim still steps only in fixed ticks; the input is sampled at the next client
+   frame, which is the "frame wait" segment of A.11.
+2. **Dumb mode (predict off) keeps mouse look local.** Position comes only from the server (A.4), but the camera turns
+   at once. A server-driven camera makes aiming unusable, and P02 measures movement ("input → motion"), not looking.
+3. **HUD corrections and the input → motion median restart at every Lab change.** The predictor's counter is cumulative.
+   P04's hard snaps would otherwise stay on screen when P05 should show 0.
+4. **`?transport=ws` forces WebSocket** with the visible fallback banner, so the TCP path (P29) and the fallback can be
+   shown and tested on a WebTransport-capable page.
+5. **Scorecard Fair reads lagcomp together with its `built` flag.** The setting defaults to true but the server has no
+   lag compensation yet, so Fair shows ✗ with "not built yet".

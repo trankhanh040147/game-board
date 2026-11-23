@@ -14,10 +14,10 @@ export class Scorecard {
     parent.appendChild(this.root);
     this.render(null);
   }
-  render(m: ModeState | null) {
+  render(m: ModeState | null, notes: Partial<Record<"instant" | "smooth" | "fair" | "cheatProof", string>> = {}) {
     const label: Record<Cell | "unknown", string> = { yes: "✓", partial: "~", no: "✗", unknown: "?" };
     const cells: [string, Cell | "unknown", string][] = m
-      ? (() => { const s = score(m); return [["Instant", s.instant, s.why.instant], ["Smooth", s.smooth, s.why.smooth], ["Fair", s.fair, s.why.fair], ["Cheat-proof", s.cheatProof, s.why.cheatProof]]; })()
+      ? (() => { const s = score(m); Object.assign(s.why, notes); return [["Instant", s.instant, s.why.instant], ["Smooth", s.smooth, s.why.smooth], ["Fair", s.fair, s.why.fair], ["Cheat-proof", s.cheatProof, s.why.cheatProof]]; })()
       : [["Instant", "unknown", "no server modes yet"], ["Smooth", "unknown", ""], ["Fair", "unknown", ""], ["Cheat-proof", "unknown", ""]];
     this.root.innerHTML = `<div class="title">Scorecard (A.2) · from active modes</div>` +
       cells.map(([n, c, w]) => `<div class="cell ${c}">${label[c]} ${n}<small>${w}</small></div>`).join("");
