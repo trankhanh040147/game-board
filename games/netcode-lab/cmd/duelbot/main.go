@@ -56,6 +56,7 @@ type result struct {
 	RemoteChangesPS  float64 `json:"opponentInputChangesPerSec"`
 	ChecksCompared   uint64  `json:"checksCompared"`
 	Desync           string  `json:"desync"`
+	Seed             string  `json:"seed"`
 }
 
 func modeName(m int) string {
@@ -157,17 +158,25 @@ func peer(o opts, name string, initiator bool, seed uint64, stopAfter time.Durat
 				}
 				s = nil
 			case "start":
-				epoch := int(v["epoch"].(float64))
-				mode, delay := int(v["mode"].(float64)), int(v["delay"].(float64))
+				var st struct {
+					Side, Epoch, Mode, Delay int
+					Seed                     string // decimal: never a JSON float
+				}
+				json.Unmarshal(m.Data, &st)
+				seed, err := strconv.ParseUint(st.Seed, 10, 64)
+				if err != nil {
+					return fmt.Errorf("%s: bad seed %q", name, st.Seed)
+				}
+				epoch, mode, delay := st.Epoch, st.Mode, st.Delay
 				if o.pair && initiator && (mode != o.mode || delay != o.delay) {
 					ctl(map[string]any{"t": "restart", "mode": o.mode, "delay": o.delay})
 				}
 				epochCfg = !o.pair || (mode == o.mode && delay == o.delay)
-				s = duel.NewSession(duel.Config{Side: int(v["side"].(float64)), Delay: delay, Mode: duel.Mode(mode),
-					Epoch: uint16(epoch), Seed: uint64(v["seed"].(float64)) + uint64(v["side"].(float64))})
+				s = duel.NewSession(duel.Config{Side: st.Side, Delay: delay, Mode: duel.Mode(mode),
+					Epoch: uint16(epoch), Seed: seed + uint64(st.Side)})
 				startAt, begunAt = time.Now(), time.Time{}
 				slots = int(time.Since(t0) / (time.Second / duel.Hz))
-				log.Printf("%s: start epoch %d side %v mode %s delay %d", name, epoch, v["side"], modeName(mode), delay)
+				log.Printf("%s: start epoch %d side %d mode %s delay %d seed %d", name, epoch, st.Side, modeName(mode), delay, seed+uint64(st.Side))
 			}
 		case <-tick.C:
 			if s == nil {
@@ -192,7 +201,7 @@ func peer(o opts, name string, initiator bool, seed uint64, stopAfter time.Durat
 					FramesRolledBack: st.FramesRolledBack, RolledBackPerSec: float64(st.FramesRolledBack) / secs,
 					MaxDepth: st.MaxDepth, StallFrames: st.StallFrames, StallMs: st.StallMs, StallFramesPerS: float64(st.StallFrames) / secs,
 					SyncWaits: st.SyncWaits, RTTMs: st.RTTMs, JitterMs: st.JitterMs, RemoteChangesPS: float64(st.RemoteChanges) / secs,
-					ChecksCompared: st.ChecksCompared, Desync: "none"}
+					ChecksCompared: st.ChecksCompared, Desync: "none", Seed: strconv.FormatUint(st.Seed, 10)}
 				if st.Rollbacks > 0 {
 					r.AvgDepth = float64(st.FramesRolledBack) / float64(st.Rollbacks)
 				}

@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -46,9 +47,10 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	httpsPort := ""
+	httpsPort := 0
 	if *httpsAddr != "" {
-		_, httpsPort, _ = net.SplitHostPort(*httpsAddr)
+		_, p, _ := net.SplitHostPort(*httpsAddr)
+		httpsPort, _ = strconv.Atoi(p)
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/duel/ws", transport.WSHandler(rel.HandleConn))

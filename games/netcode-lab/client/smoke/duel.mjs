@@ -70,6 +70,7 @@ console.log(`inject at ${sa.injectedAt} bit ${sa.injectedBit}: A desync ${JSON.s
 check(sa.desync?.frame === sa.injectedAt && sb.desync?.frame === sa.injectedAt, "P25: both peers name the injected frame as the first desync");
 const shown = await a.textContent("#desync");
 check(/DESYNC at frame/.test(shown), "P25: desync named on screen");
+check(new RegExp(`seed ${sa.seed}\\b`).test(shown), `P25: banner shows the seed (${sa.seed}) so the flip is reproducible`);
 await a.close(); await b.close();
 
 // 4. Browser (WASM) vs bin/duelbot (native) in rollback D=0.

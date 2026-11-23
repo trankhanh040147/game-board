@@ -27,6 +27,11 @@ const (
 	maxSendIn   = 128
 	maxSendCk   = 32
 	pktType     = 0xD1
+	pktMin      = 51 // 41-byte header + empty input block (5) + empty checksum block (5)
+	// MaxDelay caps D. Local inputs sit at most D+1 frames ahead of the current
+	// frame, so any D below RingN-MaxRollback keeps the input ring from
+	// overwriting a frame that may still be re-simulated, however long a stall lasts.
+	MaxDelay = 60
 )
 
 // AutoDelay is A.13's input delay by ping: 0 below 100 ms, 1 for 100–199, 2 from 200.
@@ -88,7 +93,8 @@ type Stats struct {
 	RolledBackPerSec  float64
 	StallFramesPerSec float64
 	StallMsPerSec     float64
-	InjectedAt        int32 // -1 when nothing injected
+	Seed              uint64 // this peer's Config.Seed: with it the P25 flip (frame offset, bit, fighter) is reproducible
+	InjectedAt        int32  // -1 when nothing injected
 	InjectedBit       uint8
 	InjectedFighter   uint8
 }
@@ -170,6 +176,7 @@ func (s *Session) Begin() {
 			s.cfg.Delay = AutoDelay(s.rttMedian())
 		}
 	}
+	s.cfg.Delay = min(s.cfg.Delay, MaxDelay)
 	s.stats.Delay, s.stats.DelayAuto = s.cfg.Delay, auto
 	s.localN = int32(s.cfg.Delay) // frames 0..D-1 have no input: neutral
 	s.started = true
@@ -342,7 +349,7 @@ var ErrEpoch = errors.New("duel: other epoch")
 
 // Receive applies one datagram from the peer.
 func (s *Session) Receive(b []byte, nowMs float64) error {
-	if len(b) < 50 || b[0] != pktType {
+	if len(b) < pktMin || b[0] != pktType {
 		return ErrPacket
 	}
 	le := binary.LittleEndian
@@ -372,7 +379,9 @@ func (s *Session) Receive(b []byte, nowMs float64) error {
 	}
 	for k := int32(0); k < n; k++ {
 		g, v := first+k, b[o+int(k)]
-		if g != s.remoteN {
+		// Contiguous only, and never more than half the ring ahead of our frame,
+		// so a long stall (or a bad peer) cannot overwrite inputs still in use.
+		if g != s.remoteN || g >= s.cur+RingN/2 {
 			continue
 		}
 		i := g % RingN
@@ -445,6 +454,7 @@ func (s *Session) rates(now float64) {
 func (s *Session) Stats() Stats {
 	st := s.stats
 	st.Frame = s.cur
+	st.Seed = s.cfg.Seed
 	st.Predicted = 0
 	if s.cfg.Mode == ModeRollback && s.cur > s.remoteN {
 		st.Predicted = s.cur - s.remoteN

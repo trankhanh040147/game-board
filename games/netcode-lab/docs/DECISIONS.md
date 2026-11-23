@@ -202,3 +202,55 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
 33. **Presets apply the conditioner too.** P24 sets 50 ms each way (RTT 100 ms, labelled simulated in its banner)
     so "died behind the wall" is visible. Every other preset restores 20 ms each way.
 34. **`speedScale` is a server-only Lab setting** (0.25–2). It serves the second half of B.9 check 2 and P25.
+
+## 2026-11-23 — core: M3 rulings (lead rulings a–e) and pacer drain
+
+35. **(a) Rewind target** = the client-sent `renderTick + renderFrac/65536`, clamped to
+    `[resolveTick − historyMs·rate/1000, resolveTick]`. A clamped shot is resolved and flagged, never rejected.
+    `renderTick = 0` means "not sent" and resolves at the current tick. (HANDOFF B.4 rule 5.)
+36. **(b) Favour the victim**: setting `favorVictimRttMs`, 0 = off (default). When it is > 0 and the shooter's
+    RTT is above it, that shot is not rewound (flag `favoured`). The RTT is the shooter's own clock-sync RTT from
+    `{t:"report"}`, or the server's ack RTT if none was reported. Reason: A.10 names this mitigation but gives no
+    number. An off-by-default threshold the presenter can raise in P24 shows the trade-off without changing the
+    other presets.
+37. **(d) Hitbox priority and self-exclusion.** The ray takes the **nearest** box hit, head or body, and stops
+    at the first map box. Head wins only when its entry point is nearer, as when a shot comes from above. The
+    shooter's own boxes and teammates are never tested. Reason: nearest-first is what a ray does. "Head over body"
+    would let a shot through the chest count as a headshot.
+38. **(e) P08 "target moved N cm"** = the distance between the target's position at the shooter's render time and
+    its position at the time the server used: the resolve tick when lagcomp is off, the render time when it is on.
+    It is computed for the player the ray hits at render time (`seenId`). Both positions come from the server's own
+    history; the client's numbers are not used. Reason: it is exactly the "two moments" of A.10, and both are
+    server-measured.
+39. **(c) B.9 check 3 integration tolerance, fixed before the run.** Two bots, default conditioner (RTT 40 ms
+    simulated), 64 Hz, 20/s, interp 100 ms. The target crosses the gap; the shooter aims at the target's
+    **rendered** (interpolated) body centre and fires. For each shot the bot computes "what I saw" with
+    `sim.RayPlayer` against the rendered position and compares it with the server's `hitId`.
+    - Pass: **at least 300 shots** with lagcomp on, and **≥ 97 % agreement** between the shooter's verdict and the
+      server's.
+    - Also report the same agreement with lagcomp off, with no pass bar. It is expected to be much lower; that is
+      the P08 demonstration.
+    - Allowed disagreement sources: the client interpolates between snapshots 3–4 ticks apart, while the server
+      interpolates between consecutive ticks, so positions differ while the target accelerates. That matters only
+      for grazing shots within a few cm of a box edge. Shots the server flags `clamped` count as disagreements.
+    Reason: 3 % covers the edge cases; a larger gap would mean the rewind is wrong.
+40. **Pacer drain**: after 2 s without a starvation the margin falls by one tick per second to the 1-tick minimum.
+    The first starvation of a session raises it too (no first-second blind spot). One stall still raises at most
+    once per second. Unit test: 6 → 1 within 8 s on a calm feed
+    (`TestPacerMarginRaisesAndDrains`). Reason: research R5 measured 183 ms dumb-mode input → motion against the
+    A.4 estimate of 40–72 ms; a margin stuck at 6 ticks adds about 94 ms at 64 Hz.
+
+## 2026-11-23 — duel: review V5/V8 fixes
+
+1. **Facing reads start-of-frame positions** for both fighters (`sim/duel/duel.go`), so the step no longer depends on
+   which fighter is processed first. The recorded determinism trace hash did not change (a49b4b920738736c): that
+   stream never hit the order-dependent case; `TestFacingOrderIndependent` covers it.
+2. **Long stalls cannot overwrite the input ring.** D is capped at `MaxDelay` = 60, local inputs are at most D+1
+   frames ahead, and remote inputs more than RingN/2 frames ahead of the current frame are ignored.
+   `TestLongLockstepStall` silences one peer for 1000 slots and resumes in sync.
+3. **The seed travels as a decimal string** (relay `start.seed`, WASM `newSession`, bot), never as a JSON float,
+   and the desync banner, the HUD and `duelbot` output show it, so a P25 flip is reproducible.
+4. **No code was copied from the feat/netcode-lab-dsh worktree** (commits 5f895f4, b83cb85); `sim/duel` here was
+   written in this branch.
+5. **`duelrelay.Mount`** registers `/duel/ws`, `/duel/wt` and the page under `/duel/` on another mux, for core to
+   call from the game server. Until then the duel stays on the relay's own ports.

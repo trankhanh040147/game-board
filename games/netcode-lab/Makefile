@@ -62,6 +62,7 @@ duel-www:
 	cp $(GOROOT_WASM)/wasm_exec.js $(PUBLIC)/wasm_exec.js
 	cd client && npx vite build --config vite.duel.config.ts
 	cp $(PUBLIC)/duel.wasm $(PUBLIC)/wasm_exec.js $(BIN)/duel-www/
+	mkdir -p $(BIN)/duel-www/duel && cp $(PUBLIC)/duel/* $(BIN)/duel-www/duel/
 
 ## duel-run: relay on :8090 (page + WebSocket) and :8453 (HTTPS + WebTransport)
 duel-run: duel

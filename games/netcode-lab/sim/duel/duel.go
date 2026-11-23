@@ -86,8 +86,11 @@ func Step(s *State, in [2]uint8) {
 		}
 		return
 	}
+	// Facing reads both positions from the start of the frame, so the result
+	// does not depend on which fighter is processed first.
+	x0 := [2]int32{s.F[0].X, s.F[1].X}
 	for i := range 2 {
-		f, o, b := &s.F[i], &s.F[1-i], in[i]
+		f, b := &s.F[i], in[i]
 		pressed := b &^ f.Prev
 		f.Prev = b
 		switch {
@@ -123,9 +126,9 @@ func Step(s *State, in [2]uint8) {
 			if pressed&BtnAttack != 0 {
 				f.Atk, f.Hit = 1, 0
 			}
-			if o.X > f.X {
+			if x0[1-i] > x0[i] {
 				f.Facing = 1
-			} else if o.X < f.X {
+			} else if x0[1-i] < x0[i] {
 				f.Facing = -1
 			}
 		}

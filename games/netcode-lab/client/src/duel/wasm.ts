@@ -8,7 +8,7 @@ export interface DuelStats {
   stallFrames: number; stallMs: number; syncWaits: number; checksCompared: number; remoteChanges: number;
   packetsIn: number; packetsOut: number; rttMs: number; jitterMs: number; rttSamples: number;
   rollbacksPerSec: number; rolledBackPerSec: number; stallFramesPerSec: number; stallMsPerSec: number;
-  injectedAt: number; injectedBit: number; injectedFighter: number;
+  seed: string; injectedAt: number; injectedBit: number; injectedFighter: number;
   desync: { frame: number; local: string; remote: string } | null;
 }
 export interface NetcodeDuel {
@@ -18,7 +18,7 @@ export interface NetcodeDuel {
   MODE: { rollback: number; lockstep: number };
   autoDelay(rttMs: number): number;
   lockstepAutoDelay(rttMs: number): number;
-  newSession(c: { side: number; delay: number; mode: number; epoch: number; seed: number }): number;
+  newSession(c: { side: number; delay: number; mode: number; epoch: number; seed: string }): number;
   begin(h: number): void;
   tick(h: number, buttons: number, nowMs: number): boolean;
   packet(h: number, nowMs: number): Uint8Array;

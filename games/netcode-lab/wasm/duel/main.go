@@ -7,6 +7,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -65,12 +66,24 @@ func statsToJS(s *duel.Session) any {
 		"rollbacksPerSec": st.RollbacksPerSec, "rolledBackPerSec": st.RolledBackPerSec,
 		"stallFramesPerSec": st.StallFramesPerSec, "stallMsPerSec": st.StallMsPerSec,
 		"injectedAt": int(st.InjectedAt), "injectedBit": int(st.InjectedBit), "injectedFighter": int(st.InjectedFighter),
-		"desync": nil,
+		"desync": nil, "seed": fmt.Sprintf("%d", st.Seed),
 	}
 	if d := s.Desync(); d != nil {
 		out["desync"] = map[string]any{"frame": int(d.Frame), "local": fmt.Sprintf("%016x", d.Local), "remote": fmt.Sprintf("%016x", d.Remote)}
 	}
 	return out
+}
+
+// seedFromJS takes the seed as a decimal string (preferred) or a safe integer.
+func seedFromJS(v js.Value) uint64 {
+	if v.Type() == js.TypeString {
+		n, err := strconv.ParseUint(v.String(), 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("NetcodeDuel: bad seed %q", v.String()))
+		}
+		return n
+	}
+	return uint64(v.Int())
 }
 
 func main() {
@@ -90,7 +103,7 @@ func main() {
 			h := nextH
 			nextH++
 			handles[h] = duel.NewSession(duel.Config{Side: c.Get("side").Int(), Delay: c.Get("delay").Int(),
-				Mode: duel.Mode(c.Get("mode").Int()), Epoch: uint16(c.Get("epoch").Int()), Seed: uint64(c.Get("seed").Int())})
+				Mode: duel.Mode(c.Get("mode").Int()), Epoch: uint16(c.Get("epoch").Int()), Seed: seedFromJS(c.Get("seed"))})
 			return h
 		}),
 		"begin":  fn(func(a []js.Value) any { sess(a[0]).Begin(); return nil }),

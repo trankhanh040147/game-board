@@ -163,3 +163,46 @@ func TestStateBytes(t *testing.T) {
 		t.Fatalf("state %d B > 64", StateBytes)
 	}
 }
+
+// Mirrored fighters must turn to face each other in the same frame, whichever
+// is processed first.
+func TestFacingOrderIndependent(t *testing.T) {
+	s := New()
+	s.F[0].X, s.F[1].X = 400*Q, 400*Q+Q   // fighter 1 just right of 0
+	s.F[0].Facing, s.F[1].Facing = -1, 1  // both face away
+	Step(&s, [2]uint8{BtnRight, BtnLeft}) // they walk through each other's start X
+	if s.F[0].Facing != 1 || s.F[1].Facing != -1 {
+		t.Fatalf("facing %d %d, want 1 -1 (from start-of-frame positions)", s.F[0].Facing, s.F[1].Facing)
+	}
+}
+
+// A lockstep peer whose opponent goes silent for longer than the ring (600
+// slots) resumes in sync: no input slot in use is overwritten.
+func TestLongLockstepStall(t *testing.T) {
+	a := NewSession(Config{Side: 0, Delay: 2, Mode: ModeLockstep})
+	b := NewSession(Config{Side: 1, Delay: 2, Mode: ModeLockstep})
+	a.Begin()
+	b.Begin()
+	ba, bb := NewBotInput(1), NewBotInput(2)
+	now := 0.0
+	for slot := range 3000 {
+		now += FrameMs
+		a.Tick(ba.Next(), now)
+		b.Tick(bb.Next(), now)
+		silent := slot >= 300 && slot < 1300 // b's packets lost for 1000 slots
+		if !silent {
+			if err := a.Receive(b.Packet(now), now); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := b.Receive(a.Packet(now), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if a.desync != nil || b.desync != nil {
+		t.Fatalf("desync after stall: %+v %+v", a.desync, b.desync)
+	}
+	if a.Stats().StallFrames < 900 || a.Stats().ChecksCompared < 1500 {
+		t.Fatalf("stall %d checks %d", a.Stats().StallFrames, a.Stats().ChecksCompared)
+	}
+}

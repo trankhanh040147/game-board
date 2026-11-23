@@ -129,7 +129,7 @@ function onControl(m: any) {
       if (h) D.free(h);
       side = m.side; matchInfo = m; peerName = m.peer; peerTransport = m.peerTransport; peerProfile = m.peerProfile;
       modeSel.value = String(m.mode); delaySel.value = String(m.delay);
-      h = D.newSession({ side: m.side, delay: m.delay, mode: m.mode, epoch: m.epoch, seed: m.seed + m.side });
+      h = D.newSession({ side: m.side, delay: m.delay, mode: m.mode, epoch: m.epoch, seed: String(BigInt(m.seed) + BigInt(m.side)) });
       startAt = performance.now();
       slotsDone = Math.floor((performance.now() - t0) / (1000 / D.HZ));
       break;
@@ -169,13 +169,26 @@ function rows(id: string, r: [string, string, string?][]) {
   $(id).innerHTML = r.map(([k, v, c]) => `<tr><td class="dim">${k}</td><td class="${c ?? ""}">${v}</td></tr>`).join("");
 }
 
+// Cosmetic art (client/public/duel, CC0, docs/ASSETS.md). It only reads sim state; nothing here feeds the sim.
+// Sheets: 96×128 frames, rows idle(1) walk(8) jump(1) attack(3) hit(2). Missing art falls back to boxes, logged once.
+function img(src: string) { const i = new Image(); i.src = src; i.onerror = () => console.warn(`duel art missing: ${src}`); return i; }
+const art = { fighters: [img("./duel/fighter_blue.png"), img("./duel/fighter_orange.png")], bg: img("./duel/stage_bg.png"), ground: img("./duel/ground_tile.png") };
+const ready = (i: HTMLImageElement) => i.complete && i.naturalWidth > 0;
+const sfx = { punch: new Audio("./duel/punch.ogg"), whoosh: new Audio("./duel/whoosh.ogg") };
+function play(a: HTMLAudioElement) { const c = a.cloneNode() as HTMLAudioElement; c.volume = 0.5; c.play().catch(() => {}); }
+const FW = 96, FH = 128;
+const cos = [0, 1].map(() => ({ lastX: 0, walkT: 0, lastAtk: 0, lastStun: 0 }));
+let soundFrame = -1;
+
 let flashUntil = 0;
 let lastRb = 0;
 function render() {
   requestAnimationFrame(render);
   const W = canvas.width, Hh = canvas.height;
   ctx.fillStyle = "#0b0d11"; ctx.fillRect(0, 0, W, Hh);
-  ctx.fillStyle = "#1f2430"; ctx.fillRect(0, Hh - 40, W, 40);
+  if (ready(art.bg)) ctx.drawImage(art.bg, 0, 0, W, Hh - 40);
+  if (ready(art.ground)) { for (let x = 0; x < W; x += 40) ctx.drawImage(art.ground, x, Hh - 40, 40, 40); }
+  else { ctx.fillStyle = "#1f2430"; ctx.fillRect(0, Hh - 40, W, 40); }
   if (!h) { canvas.className = ""; return; }
   const st: DuelState = D.state(h);
   const s: DuelStats = D.stats(h);
@@ -186,11 +199,37 @@ function render() {
   canvas.className = s.desync ? "desync" : now < flashUntil ? "rb" : stalled ? "stall" : "";
   st.f.forEach((f, i) => {
     const x = f.x / q, y = gy - f.y / q, w = D.W / q, hgt = D.H / q;
-    ctx.fillStyle = i === 0 ? "#2563EB" : "#EA580C";
-    ctx.globalAlpha = f.stun ? 0.5 : 1;
-    ctx.fillRect(x - w / 2, y - hgt, w, hgt);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#fff"; ctx.fillRect(x + f.facing * (w / 2 - 6) - 3, y - hgt + 12, 6, 6);
+    const c = cos[i];
+    const moving = Math.abs(f.x - c.lastX) > 0;
+    c.walkT = moving ? c.walkT + 1 : 0;
+    c.lastX = f.x;
+    if (st.frame !== soundFrame) {
+      if (f.atk > 0 && c.lastAtk === 0) play(sfx.whoosh);
+      if (f.stun > 0 && c.lastStun === 0) play(sfx.punch);
+    }
+    c.lastAtk = f.atk; c.lastStun = f.stun;
+    const sheet = art.fighters[i];
+    if (ready(sheet)) {
+      let row = 0, col = 0;
+      if (f.stun) { row = 4; col = Math.floor(f.stun / 9) % 2; }
+      else if (f.atk) { row = 3; col = Math.min(2, Math.floor((f.atk - 1) * 3 / D.ATK.total)); }
+      else if (f.y > 0) row = 2;
+      else if (moving) { row = 1; col = Math.floor(c.walkT / 5) % 8; }
+      const dh = hgt * 1.5, dw = dh * FW / FH;
+      ctx.save();
+      ctx.translate(x, y);
+      if (f.facing < 0) ctx.scale(-1, 1);
+      ctx.drawImage(sheet, col * FW, row * FH, FW, FH, -dw / 2, -dh, dw, dh);
+      ctx.restore();
+      ctx.strokeStyle = i === 0 ? "rgba(37,99,235,.7)" : "rgba(234,88,12,.7)"; // the sim's box: the real hurtbox
+      ctx.strokeRect(x - w / 2, y - hgt, w, hgt);
+    } else {
+      ctx.fillStyle = i === 0 ? "#2563EB" : "#EA580C";
+      ctx.globalAlpha = f.stun ? 0.5 : 1;
+      ctx.fillRect(x - w / 2, y - hgt, w, hgt);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#fff"; ctx.fillRect(x + f.facing * (w / 2 - 6) - 3, y - hgt + 12, 6, 6);
+    }
     if (f.atk > D.ATK.startup && f.atk <= D.ATK.startup + D.ATK.active) {
       const x0 = x + f.facing * w / 2, x1 = x0 + f.facing * D.ATK.reach / q;
       ctx.fillStyle = "rgba(255,255,255,.6)";
@@ -202,6 +241,7 @@ function render() {
     ctx.fillStyle = "#e6e8ee"; ctx.font = "12px ui-sans-serif,system-ui";
     ctx.fillText(`${i === side ? "you" : "opponent"} · KOs ${st.score[i]}`, bx, 40);
   });
+  soundFrame = st.frame;
   ctx.fillStyle = "#8a91a0"; ctx.font = "12px ui-monospace,monospace";
   ctx.fillText(`frame ${st.frame}`, W / 2 - 40, 20);
   if (st.ko) { ctx.fillStyle = "#e6e8ee"; ctx.font = "bold 28px ui-sans-serif"; ctx.fillText("K.O.", W / 2 - 30, Hh / 2); }
@@ -228,14 +268,15 @@ function render() {
     ["Stall frames · ms total", `${s.stallFrames} · ${fmt(s.stallMs)}`],
     ["Playout buffer D", dTxt],
   ] : [["Stalls", "lockstep only", "dim"]]);
-  const inj = s.injectedAt >= 0 ? `bit ${s.injectedBit} of fighter ${s.injectedFighter} x at frame ${s.injectedAt} (seeded)` : "none";
+  const inj = s.injectedAt >= 0 ? `bit ${s.injectedBit} of fighter ${s.injectedFighter} x at frame ${s.injectedAt} (seed ${s.seed})` : "none";
   rows("t-ck", [
     ["Frames compared", String(s.checksCompared)],
+    ["My session seed", s.seed],
     ["Injected here", inj, s.injectedAt >= 0 ? "warn" : ""],
     ["Status", s.desync ? `DESYNC at frame ${s.desync.frame}` : "in sync", s.desync ? "bad" : "ok"],
   ]);
   desyncEl.innerHTML = s.desync ? `<span class="bad">DESYNC at frame ${s.desync.frame}: my checksum ${s.desync.local}, opponent's ${s.desync.remote}. ` +
-    `${s.injectedAt >= 0 ? `This window flipped one bit at frame ${s.injectedAt}.` : "The opponent's sim diverged."} Restart both to resync.</span>` : "";
+    `${s.injectedAt >= 0 ? `This window flipped bit ${s.injectedBit} of fighter ${s.injectedFighter} x at frame ${s.injectedAt} (seed ${s.seed}).` : "The opponent's sim diverged (its seed and flip are on its screen)."} Restart both to resync.</span>` : "";
   rows("t-net", [
     ["Peer RTT (median of 32, via relay)", `${fmt(s.rttMs)} ms`],
     ["Peer jitter", `${fmt(s.jitterMs, 1)} ms`],
@@ -246,12 +287,23 @@ function render() {
   ]);
 }
 
+// The relay's own info, or (when the duel is mounted on the game server) the game server's, with the duel WT path.
+async function duelInfo(): Promise<any> {
+  const r = await fetch("./api/duel/info", { cache: "no-store" }).catch(() => null);
+  if (r?.ok) return r.json();
+  const g = await fetch("/api/info", { cache: "no-store" }).catch(() => null);
+  if (!g?.ok) return null;
+  const info = await g.json();
+  if (info.wt) info.wt = { ...info.wt, path: "/duel/wt" };
+  return info;
+}
+
 async function connect(): Promise<Transport> {
   const forceWs = params.get("transport") === "ws";
   if (!forceWs && webTransportPossible()) {
     try {
-      const info = await (await fetch("./api/duel/info", { cache: "no-store" })).json();
-      if (info.wt) return await WtTransport.connect(info);
+      const info = await duelInfo();
+      if (info?.wt) return await WtTransport.connect(info);
     } catch (e) { console.warn("duel: WebTransport failed, using WebSocket", e); }
   }
   return WsTransport.connect("/duel/ws");

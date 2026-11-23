@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math/rand/v2"
+	"strconv"
 	"sync"
 	"time"
 
@@ -189,7 +190,7 @@ func (r *Relay) startLocked(rm *room) {
 		return
 	}
 	rm.epoch++
-	seed := rand.Uint32()
+	seed := strconv.FormatUint(uint64(rand.Uint32()), 10) // decimal string: never a JSON float
 	for i, p := range rm.peers {
 		o := rm.peers[1-i]
 		send(p.conn, map[string]any{"t": "start", "side": i, "epoch": rm.epoch, "seed": seed, "mode": rm.mode,
