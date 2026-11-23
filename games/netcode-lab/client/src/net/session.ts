@@ -234,7 +234,9 @@ export class Session implements LabBackend {
 
   /** Called every render frame. Runs the fixed ticks the pacer says are due; never passes frame dt to the sim. */
   frame(now: number, sample: () => InputIntent, onFire: (seq: number, clientTick: number) => { victimId: number; hitbox: number } | null | void) {
-    if (now - this.lastPing >= PING_MS) {
+    // Ping only after the welcome: the server drops datagrams that arrive before the join is processed, and those
+    // unacked pings would count as uplink loss.
+    if (this.welcomed && now - this.lastPing >= PING_MS) {
       this.lastPing = now;
       this.t.sendBinary(this.sim.encodePing(this.conn, now));
     }

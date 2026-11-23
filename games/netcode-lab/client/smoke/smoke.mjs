@@ -182,12 +182,12 @@ try {
     await goX(A, 5.5); await goX(T, 5.5);
     await A.waitForTimeout(500);
     // Aim at the target as this client draws it (interpolated), after mouse-down so the press cannot move the aim.
-    const aimAndFire = async () => {
+    const aimAndFire = async (aimY = 1.0) => {
       await A.evaluate(() => { window.__shot = null; const s = window.__netlab.session; if (!s.__wrapped) { const prev = s.onSnapEvent; s.onSnapEvent = (e, now) => { prev(e, now); if (e.type === "shot") { window.__shot = e; window.__marker = getComputedStyle(document.getElementById("hitmarker")).display; } }; s.__wrapped = true; } });
-      const aim = () => A.evaluate((tid) => {
+      const aim = () => A.evaluate(([tid, aimY]) => {
         const n = window.__netlab, e = n.drawn().get(tid), m = n.session.ownView(performance.now());
-        const dx = e.x - m.x, dz = e.z - m.z; n.input.yaw = Math.atan2(-dx, -dz); n.input.pitch = Math.atan2(((e.y ?? 0) + 1.0) - (m.y + 1.6), Math.hypot(dx, dz));
-      }, t.id);
+        const dx = e.x - m.x, dz = e.z - m.z; n.input.yaw = Math.atan2(-dx, -dz); n.input.pitch = Math.atan2(((e.y ?? 0) + aimY) - (m.y + 1.6), Math.hypot(dx, dz));
+      }, [t.id, aimY]);
       // Aim before the press (the first fire tick may be sampled right after it) and again after it.
       await A.mouse.move(640, 380); await aim(); await A.mouse.down(); await aim();
       await A.waitForTimeout(30); await A.mouse.up();
@@ -215,7 +215,36 @@ try {
     await T.keyboard.up("KeyA");
     check("P08 (lag comp off, target strafing): shot event with lagcomp off and a miss reason on screen", !!miss.shot && miss.shot.lagcomp === false && /lag compensation off/.test(miss.reason),
       miss.shot ? `${miss.shot.hitId ? "hit" : "miss"}, seenId ${miss.shot.seenId}, server MovedCm ${miss.shot.movedCm} · "${miss.reason.split("\n")[0]}"` : "no shot event");
+    // P24: a real kill (headshot = 100), then the victim's death replay.
+    const preset = async (id) => {
+      if (!(await A.locator("#lab.open").isVisible())) await A.keyboard.press("F1");
+      await A.click(`#lab [data-preset="${id}"]`);
+      await A.waitForFunction((id) => window.__netlab.session.activePreset === id, id, { timeout: 3000 });
+      await A.keyboard.press("F1");
+      await play(A);
+    };
+    await preset("P24");
+    await goX(T, 5.5);
+    await A.waitForTimeout(800);
+    const kill = await aimAndFire(1.62);
+    const replay = await T.waitForFunction(() => { const r = document.getElementById("deathreplay"); return r && getComputedStyle(r).display !== "none" ? r.innerText : null; }, null, { timeout: 4000 })
+      .then((h) => h.jsonValue(), () => null);
+    const feedA = await A.locator("#killfeed").innerText();
+    check("P24: a real headshot kill shows in the kill feed and opens the victim's death replay", !!kill.shot && kill.shot.hitbox === 2 && /smoke-target/.test(feedA) && !!replay,
+      `${kill.shot ? `hitbox ${kill.shot.hitbox}, damage ${kill.shot.damage}, seenId ${kill.shot.seenId}, lagcomp ${kill.shot.lagcomp}` : "no shot event"} · feed "${feedA.split("\n").pop()}" · replay "${(replay ?? "not shown").split("\n").slice(0, 3).join(" / ")}"`);
+    // P03: the modded-client button. Server authority rejects the forged claim; trust mode accepts it.
+    await T.waitForFunction(() => !window.__netlab.session.dead, null, { timeout: 6000 }).catch(() => {});
+    await preset("P01");
     await A.keyboard.press("F1");
+    await A.click("#forged-claim");
+    const rejected = await A.waitForFunction(() => /rejected claim/.test(document.getElementById("killfeed").innerText) ? document.getElementById("killfeed").innerText : null, null, { timeout: 4000 }).then((h) => h.jsonValue(), () => null);
+    check("P03 server authority: forged headshot claim is rejected and shown", !!rejected, (rejected ?? "no claimRejected").split("\n").pop());
+    await A.keyboard.press("F1");
+    await preset("P03");
+    await A.keyboard.press("F1");
+    await A.click("#forged-claim");
+    const trusted = await A.waitForFunction(() => /trust-mode claim/.test(document.getElementById("killfeed").innerText) ? document.getElementById("killfeed").innerText : null, null, { timeout: 4000 }).then((h) => h.jsonValue(), () => null);
+    check("P03 trust mode: the same forged claim lands as a kill (labelled trust-mode claim)", !!trusted, (trusted ?? "no trust kill").split("\n").pop());
     await A.click(`#lab [data-preset="P01"]`);
     await A.keyboard.press("F1");
   } finally {
