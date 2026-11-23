@@ -380,3 +380,13 @@ now uses the previous frame and agrees with an independent trace to within 0.7 m
     and 23.7, 18.4, 11.7, 1.3, 0.4 frames rolled back/s. Reason: A.13 says input delay hides the first part of the
     trip and rollback corrects the rest; the count only drops once nothing is left to correct. DEMO.md P22 tells the
     presenter to point at frames rolled back and depth, and at the count's drop once D ≥ 3 on the default route.
+53. **Zero-alloc loop covers the receive path too** (P19; bots measured 1117 MB allocated in ~100 s with 50 bots
+    at 128 Hz in zeroalloc mode). Live profile, 20 bots, 12 s window (`bin/server -pprof`, `/debug/pprof/allocs`
+    diff): 29.6 MB before, 7.2 MB after.
+    - WebSocket binary messages are read into pooled buffers (`transport.PutBuf` from the uplink conditioner's
+      Release). The connection loop reads with a non-cancellable context, because coder/websocket otherwise sets
+      up a per-read timeout (`context.AfterFunc`) on every message. Together these were about half of all bytes.
+    - The ordered conditioner shifts its short FIFO down instead of re-slicing (re-slicing forced reallocations).
+    - Input packets decode into a per-client scratch.
+    - Left on purpose: 1 Hz stats JSON (control path), first fill of the delta-baseline slots and buffer pools
+      (warm-up), and quic-go's own copy per WebTransport datagram.

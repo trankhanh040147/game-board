@@ -776,3 +776,15 @@ at 20:27:45. The no-game-code probe also saw pauses up to 295 ms.
 Compared with the run at `91b61db` (20 / 25 corrections at a mean load of 18), corrections fell and the 3.1 s
 repeat pattern after a burst is gone. The load was higher this time, so the two runs are not a controlled
 comparison. A pass or fail on a quiet host is still owed: `sh scripts/quiet-window.sh` runs it.
+
+## P19 receive-path allocations (2026-11-23, core; host load 30–36)
+
+`bin/server -pprof -infra=false`, 20 walker bots for 25 s, allocation profile diffed between t=8 s and t=20 s:
+
+| Build | Bytes allocated in 12 s | Main sources |
+|---|---|---|
+| 0bbe723 | 29.6 MB | WebSocket `io.ReadAll` 9.2 MB + per-read timeout contexts ~5 MB, ordered FIFO 4.6 MB, baselines 2 MB, stats JSON 3.6 MB, input decode 1.5 MB |
+| after DECISIONS 53 | 7.2 MB | pprof's own gzip 2.2 MB, stats JSON 1.5 MB, baseline/pool warm-up 2 MB, timers 0.5 MB |
+
+Allocation volume is a byte count, so it does not depend on host load. The GC-pause and tick-time comparison
+(bots' check 5) still needs the quiet window.

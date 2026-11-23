@@ -126,6 +126,7 @@ type Client struct {
 	inputLead      int8
 	ackedTick      uint32
 	ackedBaseline  uint8
+	inScratch      codec.Input        // reused by onDatagram (one uplink goroutine per client)
 	recvMs         map[uint32]float64 // arrival time of fire inputs (shot id = input seq), for P11
 	claims         []codec.Claim
 	reportRTT      float64 // client-reported (clock sync) RTT, from {t:"report"}
@@ -540,8 +541,8 @@ func (c *Client) onDatagram(b []byte) {
 	}
 	switch h.Type {
 	case codec.TInput:
-		var in codec.Input
-		codec.ReadInput(&rd, &in)
+		in := &c.inScratch
+		codec.ReadInput(&rd, in)
 		if rd.Err != nil || len(in.Cmds) == 0 {
 			return
 		}
@@ -731,9 +732,12 @@ func (r *Room) HandleConn(conn transport.Conn) {
 	defer r.removeClient(c)
 	r.welcome(c)
 	r.broadcastPlayers()
+	// The loop ends when the connection closes (removeClient), so reads need
+	// no per-read cancellation (that allocated on every message, P19).
+	loopCtx := transport.NoCancel(ctx)
 
 	for {
-		m, err := conn.Recv(ctx)
+		m, err := conn.Recv(loopCtx)
 		if err != nil {
 			return
 		}
@@ -792,6 +796,7 @@ func (r *Room) addClient(conn transport.Conn, name string, spectate bool) (*Clie
 	ordered := conn.Kind() == transport.KindWS
 	seed := uint64(time.Now().UnixNano()) ^ uint64(id)<<32
 	c.up = cond.NewLink(r.defCond.Up, ordered, seed, c.onDatagram)
+	c.up.Release = transport.PutBuf // received buffers go back to the transport's pool
 	deliver := func(b []byte) {
 		c.bytes.downDatagram.Add(uint64(len(b)))
 		if len(b) > 0 && b[0] == codec.TSnapshot {

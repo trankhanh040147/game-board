@@ -315,8 +315,11 @@ func (l *Link) run() {
 					l.stats.MaxStallMs = max(l.stats.MaxStallMs, stall)
 				}
 				due = append(due, it)
-				l.fifo[0] = item{}
-				l.fifo = l.fifo[1:]
+				// Shift down instead of re-slicing, so the backing array is
+				// reused and appends do not reallocate (the queue is short).
+				n := copy(l.fifo, l.fifo[1:])
+				l.fifo[n] = item{}
+				l.fifo = l.fifo[:n]
 			}
 			if len(l.fifo) > 0 {
 				wait = l.fifo[0].at.Sub(now)

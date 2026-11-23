@@ -10,6 +10,7 @@ import (
 	"flag"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -27,6 +28,7 @@ func main() {
 	dist := flag.String("dist", "client/dist", "built client directory")
 	extraWWW := flag.String("www", "bin/duel-www", "extra built pages served after -dist (infra.html, duel.html); empty disables")
 	infra := flag.Bool("infra", true, "mount the M7 infrastructure demo: region rooms /r/{hcm,hn,sg}, beacons, matchmaker, /metrics")
+	pprofOn := flag.Bool("pprof", false, "serve net/http/pprof at /debug/pprof/ (P19 allocation profiling; off by default)")
 	relaxAfter := flag.Float64("relax-after", 10, "matchmaker: seconds before the threshold relaxes")
 	verbose := flag.Bool("v", false, "debug logging")
 	flag.Parse()
@@ -77,6 +79,16 @@ func main() {
 			}
 			mux.HandleFunc("/api/duel/info", info("/duel/wt"))
 			mux.HandleFunc("/api/infra/info", info(""))
+		}
+	}
+	if *pprofOn {
+		prev := cfg.Mount
+		cfg.Mount = func(mux *http.ServeMux, wt func(func(transport.Conn)) http.Handler, certHash func() (string, int)) {
+			if prev != nil {
+				prev(mux, wt, certHash)
+			}
+			mux.HandleFunc("/debug/pprof/", pprof.Index)
+			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 		}
 	}
 	if err := server.Serve(ctx, log, room, cfg); err != nil {
