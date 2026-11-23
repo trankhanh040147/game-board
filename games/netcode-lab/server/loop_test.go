@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"netcodelab/net/codec"
 	"netcodelab/net/cond"
 	"netcodelab/sim"
 )
@@ -133,5 +134,38 @@ func waitDrained(r *Room) {
 			return
 		}
 		runtimeGosched()
+	}
+}
+
+func TestInterestGrid(t *testing.T) {
+	r := NewRoom(slog.New(slog.NewTextHandler(io.Discard, nil)), "x")
+	f := sim.FromFloat
+	me := testClient(r, 1, 0, [3]sim.Fx{f(1), 0, f(1)}) // cell (0,0) with 8 m cells
+	testClient(r, 2, 1, [3]sim.Fx{f(-7), 0, f(-1)})     // cell (-1,-1): neighbour
+	testClient(r, 3, 1, [3]sim.Fx{f(-9), 0, f(1)})      // cell (-2,0): out
+	testClient(r, 4, 1, [3]sim.Fx{f(15), 0, f(15)})     // cell (1,1): neighbour
+	testClient(r, 5, 1, [3]sim.Fx{f(17), 0, f(0)})      // cell (2,0): out
+	ents := []codec.Entity{}
+	for id := uint8(1); id <= 5; id++ {
+		ents = append(ents, codec.Entity{ID: id, Pos: r.clients[id].state.Pos})
+	}
+	s := DefaultSettings()
+	var snap codec.Snapshot
+	r.fillSnapshot(me, &snap, 1, 0, ents, s)
+	if len(snap.Entities) != 4 {
+		t.Fatalf("interest off: %d entities", len(snap.Entities))
+	}
+	s.Interest = true
+	snap = codec.Snapshot{}
+	r.fillSnapshot(me, &snap, 1, 0, ents, s)
+	got := []uint8{}
+	for _, e := range snap.Entities {
+		got = append(got, e.ID)
+	}
+	if len(got) != 2 || got[0] != 2 || got[1] != 4 {
+		t.Fatalf("interest on: got %v, want [2 4]", got)
+	}
+	if floorDiv(-1, 8) != -1 || floorDiv(-8, 8) != -1 || floorDiv(-9, 8) != -2 || floorDiv(7, 8) != 0 {
+		t.Fatal("floorDiv")
 	}
 }

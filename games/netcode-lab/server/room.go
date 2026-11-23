@@ -127,7 +127,8 @@ type Client struct {
 	reportLoss    float64
 	reportJitter  float64
 
-	bytes byteCounters
+	bytes    byteCounters
+	entsSent atomic.Uint32 // entities in the last snapshot (P28)
 
 	// owned by the tick loop (room.mu)
 	spectator      bool
@@ -400,7 +401,8 @@ func (r *Room) sendSnapshots(tick uint32, s Settings, now float64) {
 			snap = &r.snap
 			snap.Entities, snap.Events = snap.Entities[:0], snap.Events[:0]
 		}
-		r.fillSnapshot(c, snap, tick, now, ents)
+		r.fillSnapshot(c, snap, tick, now, ents, s)
+		c.entsSent.Store(uint32(len(snap.Entities)))
 		var w codec.Writer
 		if !naive {
 			w.B = r.pool.get()
@@ -419,7 +421,7 @@ func (r *Room) sendSnapshots(tick uint32, s Settings, now float64) {
 }
 
 // fillSnapshot sets everything in snap for client c except the header.
-func (r *Room) fillSnapshot(c *Client, snap *codec.Snapshot, tick uint32, now float64, ents []codec.Entity) {
+func (r *Room) fillSnapshot(c *Client, snap *codec.Snapshot, tick uint32, now float64, ents []codec.Entity, s Settings) {
 	c.mu.Lock()
 	starved, lead, acked := c.starved, c.inputLead, c.ackedTick
 	c.mu.Unlock()
@@ -440,10 +442,20 @@ func (r *Room) fillSnapshot(c *Client, snap *codec.Snapshot, tick uint32, now fl
 		snap.Events = append(snap.Events, pe.ev)
 	}
 	c.events = keep
+	cell := sim.FromFloat(float64(s.InterestCellM))
+	filter := s.Interest && !c.spectator
+	cx, cz := floorDiv(c.state.Pos[0], cell), floorDiv(c.state.Pos[2], cell)
 	for _, e := range ents {
-		if e.ID != c.id {
-			snap.Entities = append(snap.Entities, e)
+		if e.ID == c.id {
+			continue
 		}
+		if filter {
+			ex, ez := floorDiv(e.Pos[0], cell), floorDiv(e.Pos[2], cell)
+			if ex-cx > 1 || cx-ex > 1 || ez-cz > 1 || cz-ez > 1 {
+				continue
+			}
+		}
+		snap.Entities = append(snap.Entities, e)
 	}
 }
 
@@ -1025,6 +1037,7 @@ func (r *Room) sendStats() {
 		you["serverAckRttMs"] = es.RTTMs
 		you["downSent"], you["downAcked"], you["downLost"] = es.Sent, es.Acked, es.Lost
 		you["cond"] = CondPair{Up: c.up.Params(), Down: c.down.Params()}
+		you["entitiesPerSnapshot"] = c.entsSent.Load()
 		you["condStats"] = map[string]cond.Stats{"up": c.up.Stats(), "down": c.down.Stats()}
 		r.send(c, map[string]any{
 			"t": "stats", "serverTick": tick, "serverTimeMs": r.NowMs(), "tickRate": s.TickRate, "sendRate": s.SendRate,
@@ -1045,4 +1058,13 @@ const ProtocolVersion = 2
 func (c *Client) syncRTT() {
 	c.up.SetReverseDelay(c.down.Params().DelayMs)
 	c.down.SetReverseDelay(c.up.Params().DelayMs)
+}
+
+// floorDiv rounds toward -inf, so every grid cell has the same width.
+func floorDiv(a, b int32) int32 {
+	q := a / b
+	if (a%b != 0) && ((a < 0) != (b < 0)) {
+		q--
+	}
+	return q
 }

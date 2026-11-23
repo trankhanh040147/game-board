@@ -40,6 +40,10 @@ type Settings struct {
 	// Subtick (P26): use the click's position inside the tick (subtickFrac)
 	// instead of quantising the shot to the tick.
 	Subtick bool `json:"subtick"`
+	// Interest (P28): send each client only entities in its grid cell and the
+	// 8 neighbouring cells; InterestCellM is the cell size in metres.
+	Interest      bool `json:"interest"`
+	InterestCellM int  `json:"interestCellM"`
 }
 
 // DefaultSettings match A.1 / B.4.
@@ -49,7 +53,7 @@ func DefaultSettings() Settings {
 		InterpMs: 100, InterpAuto: true, InterpK: 2,
 		LagComp: true, HistoryMs: 1000,
 		TickRate: 64, SendRate: 20, FPSCap: 60,
-		Transport: "wt", SpeedScale: 1, Loop: "zeroalloc", Subtick: true,
+		Transport: "wt", SpeedScale: 1, Loop: "zeroalloc", Subtick: true, InterestCellM: 8,
 	}
 }
 
@@ -86,6 +90,8 @@ func SupportedSettings() []SettingInfo {
 		{Key: "favorVictimRttMs", Kind: "int", Min: 0, Max: 300, Built: true, Note: "0 = off; no rewind for shooters above this RTT (P24)"},
 		{Key: "loop", Kind: "enum", Allowed: []string{"zeroalloc", "naive"}, Built: true, Note: "P19: allocating vs zero-alloc server loop, same bytes on the wire"},
 		{Key: "subtick", Kind: "bool", Built: true, Note: "P26: shot timed at the click inside the tick vs quantised to the tick end"},
+		{Key: "interest", Kind: "bool", Built: true, Note: "P28: replicate only entities in nearby grid cells"},
+		{Key: "interestCellM", Kind: "int", Min: 4, Max: 64, Built: true, Note: "P28 grid cell size (m); the window is 3x3 cells"},
 		{Key: "goMemLimitMB", Kind: "int", Min: 0, Max: 65536, Built: true, Note: "GOMEMLIMIT via runtime/debug.SetMemoryLimit; 0 = no limit"},
 		{Key: "speedScale", Kind: "float", Min: 0.25, Max: 2, Built: true, Note: "server-only movement modifier, not known to clients (rubber-band, P25)"},
 		{Key: "tickRate", Kind: "enum", Allowed: allowedTick, Built: true},
@@ -109,6 +115,9 @@ func (s Settings) Validate() error {
 	}
 	if s.GoMemLimitMB < 0 || s.GoMemLimitMB > 65536 {
 		return fmt.Errorf("goMemLimitMB out of range 0..65536")
+	}
+	if s.InterestCellM < 4 || s.InterestCellM > 64 {
+		return fmt.Errorf("interestCellM out of range 4..64")
 	}
 	if s.SpeedScale < 0.25 || s.SpeedScale > 2 {
 		return fmt.Errorf("speedScale out of range 0.25..2")
@@ -269,7 +278,12 @@ func Presets() []Preset {
 			},
 			Banner: "Shots quantised to the tick: the server times every shot at the tick end, up to one tick (15.6 ms at 64 Hz) after the click. Toggle sub-tick to compare the timing-error histogram. Sub-tick is not the same as 128 Hz."},
 		{ID: "P27", Title: "Compression", Section: "A.15"},
-		{ID: "P28", Title: "Interest management", Section: "A.15"},
+		{ID: "P28", Title: "Interest management", Section: "A.15", Built: true,
+			apply: func(s *Settings) {
+				base(s)
+				s.Interest = true
+			},
+			Banner: "Each client gets only the players in nearby 8 m grid cells: fewer entities and bytes per client, and less server work per tick. Compare with it off, with many bots."},
 		{ID: "P29", Title: "Transport", Section: "A.15"},
 	}
 }
