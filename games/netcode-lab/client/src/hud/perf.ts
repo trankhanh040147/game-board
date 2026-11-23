@@ -1,5 +1,5 @@
-// M5/M6 presenter displays (D3): P11 shot budget, P12 cost meters, P15 budget table, P19 tick health, P29 snapshot
-// inter-arrival. One mount call, after the page has set its own Session handlers:
+// M5/M6 presenter displays (D3): P11 shot budget, P12 cost meters, P14 peek test (server-run), P15 budget table,
+// P19 tick health, P29 snapshot inter-arrival. One mount call, after the page has set its own Session handlers:
 //
 //   mountPerf(session, hudRoot)
 //
@@ -9,7 +9,7 @@
 import type { Session } from "../net/session";
 import { SEGMENTS, type SegKey, type ShotStamps, segments, total, rollingMean, withinTolerance, WHY, ClockSync, ArrivalHist } from "./budgetCalc";
 
-const PRESETS = new Set(["P11", "P12", "P15", "P19", "P29"]);
+const PRESETS = new Set(["P11", "P12", "P14", "P15", "P19", "P29"]);
 const COLORS = ["#60a5fa", "#a78bfa", "#f472b6", "#fbbf24", "#34d399", "#22d3ee", "#f87171"];
 const TOKEN_KEY = "netlab.adminToken";
 
@@ -38,7 +38,8 @@ export function mountPerf(s: Session, root: HTMLElement) {
   root.appendChild(panel);
   // Fixed header (never re-rendered): the P19 loop switch, so a click never lands on a replaced button.
   const head = document.createElement("div");
-  head.innerHTML = `<div data-p19ctl>P19 loop: <button data-loop="zeroalloc">zero-alloc</button><button data-loop="naive">allocating</button><button data-reset>reset window</button></div>`;
+  head.innerHTML = `<div data-p19ctl>P19 loop: <button data-loop="zeroalloc">zero-alloc</button><button data-loop="naive">allocating</button><button data-reset>reset window</button></div>
+    <div data-p14ctl>P14: <button data-peek="3">run peek test (3 crossings)</button><button data-peek="10">10 crossings</button></div>`;
   const body = document.createElement("div");
   panel.append(head, body);
   let forced = false;
@@ -57,6 +58,7 @@ export function mountPerf(s: Session, root: HTMLElement) {
   let histKey = "";
   const perTransport: Record<string, { stalls: number; gaps: number; maxGap: number; intervalMs: number }> = {};
   const byLoop: Record<string, any> = {};
+  let peek: any = null; // last {t:"peekTest"} broadcast (P14)
 
   addEventListener("mousedown", (e) => { if (e.button === 0) clickAt = e.timeStamp; }, true);
 
@@ -77,6 +79,7 @@ export function mountPerf(s: Session, root: HTMLElement) {
   };
   const prevCtl = t.onControl;
   t.onControl = (m: any) => {
+    if (m?.t === "peekTest") peek = m;
     if (m?.t === "shotTrace") {
       const st = bySeq.get(m.shotSeq);
       if (st) { st.targetRecvMs = m.targetRecvServerMs; st.targetInterpMs = m.targetInterpMs; st.targetFrameMs = m.targetFrameServerMs; }
@@ -211,6 +214,27 @@ export function mountPerf(s: Session, root: HTMLElement) {
       <div class="dim">Red bins are stalls. Compare with <code>?transport=ws</code> at 5% loss (B.9 check 6).</div>`;
   }
 
+  function peekTest(): string {
+    const m = peek;
+    let h = `<h3>P14 peeker's advantage (server-run peek test)</h3>`;
+    if (!m) return h + `<div class="dim">Not run yet. The server joins a holder bot and a peeker bot and measures how long the peeker saw the holder before the holder saw the peeker (admin).</div>`;
+    const su = m.setup ?? {};
+    const cond = su.cond ? `${f(su.cond.up?.delayMs, 0)}+${f(su.cond.down?.delayMs, 0)} ms (${su.condLabel ?? "simulated"})` : "—";
+    h += `<div class="dim">Setup: ${su.tickRate} Hz, ${su.sendRate}/s, buffer ${su.interpMs} ms, FPS cap ${su.fpsCap || "none"}, lag comp ${su.lagcomp ? "on" : "off"}, conditioner ${cond}</div>`;
+    if (m.state === "running") return h + `<div>Running ${m.crossings} crossings…</div>`;
+    if (m.state === "error") return h + `<div class="bad">Error: ${m.error}</div>`;
+    const r = m.result ?? {}, a = r.advantageMs ?? {};
+    h += `<table><tr><th></th><th>ms</th></tr>
+      <tr><td><b>${r.label ?? "our measurement"}</b>: advantage mean ± sd</td><td><b>${f(a.mean)} ± ${f(a.sd)}</b></td></tr>
+      <tr><td>min / max</td><td>${f(a.min)} / ${f(a.max)}</td></tr>
+      <tr><td>crossings complete / started</td><td>${r.crossingsComplete ?? "—"} / ${r.crossingsStarted ?? "—"}</td></tr>`;
+    if (r.peekerSeesMinusExposeMs !== undefined) h += `<tr><td>peeker sees − exposed / holder sees − exposed</td><td>${f(r.peekerSeesMinusExposeMs?.mean ?? r.peekerSeesMinusExposeMs)} / ${f(r.holderSeesMinusExposeMs?.mean ?? r.holderSeesMinusExposeMs)}</td></tr>`;
+    h += `</table>`;
+    const ref = m.ref;
+    if (ref) h += `<div class="dim" style="margin-top:4px"><b>${ref.label ?? "ref"}</b> · ${ref.source}: ${(ref.values ?? []).map((v: any) => `${v.what} ${v.ms} ms`).join(" · ")}. ${ref.note ?? ""}</div>`;
+    return h;
+  }
+
   function render() {
     const preset = s.activePreset ?? "";
     const open = forced || PRESETS.has(preset);
@@ -223,10 +247,12 @@ export function mountPerf(s: Session, root: HTMLElement) {
     if (show("P12")) html += cost(st);
     if (show("P19")) html += tick(st);
     if (show("P29")) html += arrivals();
+    if (show("P14") || (forced && peek)) html += peekTest();
     html += `<div class="dim">F3 toggles this panel · clock offset ${f(clock.offsetMs)} ms (from pongs)</div>`;
     if (html !== lastHtml) { body.innerHTML = html; lastHtml = html; }
     const p19 = show("P19");
     (head.firstElementChild as HTMLElement).style.display = p19 ? "" : "none";
+    (head.querySelector("[data-p14ctl]") as HTMLElement).style.display = show("P14") ? "" : "none";
     head.querySelectorAll<HTMLButtonElement>("[data-loop]").forEach((b) => b.classList.toggle("on", b.dataset.loop === s.settings?.loop));
   }
   let lastHtml = "";
@@ -236,7 +262,8 @@ export function mountPerf(s: Session, root: HTMLElement) {
     if (!b) return;
     if (b.dataset.loop) s.setSetting("loop", b.dataset.loop, tok());
     if (b.hasAttribute("data-reset")) t.sendControl({ t: "statsReset", token: tok() });
+    if (b.dataset.peek) t.sendControl({ t: "peekTest", token: tok(), crossings: Number(b.dataset.peek) });
   });
   setInterval(render, 500);
-  return { render, state: () => ({ shots: shots.map((x) => ({ ...x, seg: segments(x) })), hist: { ...hist, counts: [...hist.counts] }, clockOffsetMs: clock.offsetMs, byLoop, perTransport }) };
+  return { render, peek: () => peek, state: () => ({ shots: shots.map((x) => ({ ...x, seg: segments(x) })), hist: { ...hist, counts: [...hist.counts] }, clockOffsetMs: clock.offsetMs, byLoop, perTransport }) };
 }

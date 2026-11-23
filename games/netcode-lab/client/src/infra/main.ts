@@ -3,6 +3,10 @@
 // relayed routes. Route settings are simulated (A.16); the RTTs on this page are measured by this browser over them.
 import { WsTransport, WtTransport, webTransportPossible, type Transport } from "../net/transport";
 
+interface PresetDoc { id: string; idea: string; observe: string; banner: string }
+const found = import.meta.glob<PresetDoc[]>("../../../docs/presets.json", { eager: true, import: "default" });
+const DOCS = new Map<string, PresetDoc>((Object.values(found)[0] ?? []).map((p) => [p.id, p]));
+
 const css = `
 :root{--bg:#0f1115;--panel:#171a21;--line:#2a2f3a;--text:#e6e8ee;--dim:#8a91a0;--blue:#2563EB;--orange:#EA580C;--bad:#ef4444;--ok:#22c55e;--warn:#f59e0b}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 ui-sans-serif,system-ui,sans-serif}
@@ -18,6 +22,7 @@ ol{margin:4px 0;padding-left:18px}a{color:#7aa2ff}
 document.head.insertAdjacentHTML("beforeend", `<style>${css}</style>`);
 document.body.innerHTML = `<main>
 <h1>Regions, beacons and matchmaking <span class="tag">routes simulated</span></h1>
+<div id="pbanner" style="grid-column:1/-1;display:none;padding:6px 8px;border-left:3px solid var(--blue);background:#141a26"></div>
 <section><h2>Me (P16)</h2>
   <div class="row">ISP <select id="isp"><option>viettel</option><option>vnpt</option><option>fpt</option></select>
   Last mile <select id="lm"><option>good</option><option>wifi</option><option>bad</option></select></div>
@@ -191,5 +196,40 @@ async function loadRoutes() {
   if (!$("cutState").innerHTML) $("cutState").innerHTML = `Cable cut: <b class="${t.cableCut ? "bad" : "ok"}">${t.cableCut ? "ON" : "off"}</b> (simulated)`;
 }
 
+// ?preset=Pxx (links from the game's Lab): put this page in the preset's state. The cable cut is server-wide and
+// needs the admin token (?admin=, the Lab's stored token, or the field); everything here is a simulated route.
+const PRESET_STATE: Record<string, { route: string; cut: boolean; region: string; keep: boolean; pingRoutes?: string[]; how: string }> = {
+  P16: { route: "direct", cut: false, region: "sg", keep: false, how: "Ping, then press “Cut cables to sg” and ping again: only routes to sg get worse." },
+  P17: { route: "direct", cut: false, region: "best", keep: false, how: "Ping (10× per region, median), then “Find match”: watch the threshold relax from 60 to 100 ms after 10 s." },
+  P18: { route: "relay-backbone", cut: false, region: "sg", keep: false, pingRoutes: ["direct", "relay-public", "relay-backbone"], how: "Pinged once per route: compare the jitter, loss and budget bars of public vs backbone. Cut the cables to see backbone hold up." },
+  P20: { route: "direct", cut: false, region: "sg", keep: true, how: "Keep pinging is on (Prometheus needs traffic every minute). Open Grafana, cut the cables, and watch the mean stay calm while p99 and the per-ISP p95 alert fire." },
+};
+async function applyPreset(id: string) {
+  const st = PRESET_STATE[id];
+  if (!st) return;
+  const d = DOCS.get(id);
+  const tokIn = $<HTMLInputElement>("tok");
+  let stored = ""; try { stored = new URLSearchParams(location.search).get("admin") ?? sessionStorage.getItem("netlab.adminToken") ?? ""; } catch { /* storage blocked */ }
+  if (stored && !tokIn.value) tokIn.value = stored;
+  $<HTMLSelectElement>("route").value = st.route;
+  $<HTMLSelectElement>("bregion").value = st.region;
+  const now = (await (await fetch("./api/regions", { cache: "no-store" })).json()).cableCut as boolean;
+  let cutNote = `cable cut ${now ? "ON" : "off"}`;
+  if (now !== st.cut) {
+    if (tokIn.value) { await setCut(st.cut); cutNote = `cable cut set ${st.cut ? "ON" : "off"}`; }
+    else cutNote += ` (the preset wants it ${st.cut ? "ON" : "off"}: enter the admin token)`;
+  }
+  const b = $("pbanner");
+  b.style.display = "";
+  b.innerHTML = `<b>${id} ${d?.idea ?? ""}</b> · ${d?.banner ?? ""}<br><span class="dim">Observe: ${d?.observe ?? ""}</span><br>
+    State: route <b>${st.route}</b> · budget region <b>${st.region}</b> · ${cutNote}${st.keep ? " · keep pinging on" : ""} <span class="tag">simulated</span><br>${st.how}`;
+  for (const r of st.pingRoutes ?? []) { $<HTMLSelectElement>("route").value = r; await round(); }
+  $<HTMLSelectElement>("route").value = st.route;
+  if (st.keep && !$<HTMLInputElement>("keep").checked) { $<HTMLInputElement>("keep").checked = true; $("keep").dispatchEvent(new Event("change")); }
+  if (id === "P20") b.innerHTML += `<br><a href="${location.protocol}//${location.hostname}:3000/d/netcode-lab" target="_blank">Grafana dashboard (docker compose, port 3000)</a>`;
+}
+
 info = await fetch("./api/infra/info", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-loadRoutes();
+await loadRoutes();
+const presetParam = new URLSearchParams(location.search).get("preset");
+if (presetParam) applyPreset(presetParam.toUpperCase());

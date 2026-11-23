@@ -5,7 +5,7 @@
 export const SEGMENTS = [
   { key: "shooterFrame", label: "click → input sent (shooter frame)" },
   { key: "uplink", label: "uplink" },
-  { key: "tickWait", label: "wait for server tick" },
+  { key: "tickWait", label: "input playout buffer (waits for its stamped tick)" },
   { key: "snapshotWait", label: "wait for snapshot send" },
   { key: "downlink", label: "downlink to target" },
   { key: "interp", label: "target interpolation" },
@@ -65,7 +65,7 @@ export function rollingMean(all: Record<SegKey, number | null>[], n = 20): { mea
 export const WHY: Record<SegKey, string> = {
   shooterFrame: "formula: half a frame; measured includes waiting for the 10 shots/s fire cooldown and the pacer's input tick",
   uplink: "formula: the conditioner's one-way delay; measured adds jitter, queueing and clock-sync error (±RTT/2 at worst)",
-  tickWait: "formula: half a tick on average; one shot lands anywhere in [0, 1 tick], and the server buffers inputs (pacer margin)",
+  tickWait: "by design (DECISIONS 51): the server holds each input until the tick it was stamped for, so this is the input playout buffer (pacer margin of a few ticks); the formula counts only half a tick",
   snapshotWait: "formula: half a send interval; 20/s at 64 Hz alternates 3- and 4-tick gaps, so one shot is 0–62.5 ms",
   downlink: "formula: the conditioner's one-way delay; measured adds jitter and both clients' clock-sync error",
   interp: "formula: the configured buffer; measured is how long until the target's render time reached the shot, minus frame wait",

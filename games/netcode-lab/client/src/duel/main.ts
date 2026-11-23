@@ -66,6 +66,9 @@ const modeSel = $<HTMLSelectElement>("mode"), delaySel = $<HTMLSelectElement>("d
 
 const params = new URLSearchParams(location.search);
 const room = params.get("room") ?? "duel";
+// ?preset=P21|P22|P23|P25 (links from the game's Lab): applied once, when the first match starts.
+let pendingPreset = (params.get("preset") ?? "").toUpperCase();
+const PRESET_CFG: Record<string, { mode: number; delay: number }> = { P21: { mode: 0, delay: 0 }, P22: { mode: 0, delay: -1 }, P23: { mode: 1, delay: -1 } };
 
 let D: NetcodeDuel;
 let net: Transport | null = null;
@@ -132,6 +135,15 @@ function onControl(m: any) {
       h = D.newSession({ side: m.side, delay: m.delay, mode: m.mode, epoch: m.epoch, seed: String(BigInt(m.seed) + BigInt(m.side)) });
       startAt = performance.now();
       slotsDone = Math.floor((performance.now() - t0) / (1000 / D.HZ));
+      if (pendingPreset) {
+        const id = pendingPreset, cfg = PRESET_CFG[id];
+        setBanner(id);
+        if (cfg && (cfg.mode !== m.mode || cfg.delay !== m.delay)) restart(cfg.mode, cfg.delay); // the next start carries it
+        else {
+          pendingPreset = "";
+          if (id === "P25") setTimeout(() => { if (h) D.inject(h); }, WARMUP_MS + 500); // after frame 0
+        }
+      }
       break;
   }
 }
