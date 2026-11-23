@@ -16,7 +16,8 @@ func TestDeltaSnapshotsOverTheWire(t *testing.T) {
 	room, url := newTestServer(t)
 	a := joinE2E(t, url, "receiver")
 	b := joinE2E(t, url, "mover")
-	ctrl(t, a.conn, map[string]any{"t": "preset", "id": "P27", "token": "secret"})
+	// The P27 settings directly (the preset is built:false until its meter panel lands).
+	ctrl(t, a.conn, map[string]any{"t": "lab", "token": "secret", "settings": map[string]any{"compQuant": true, "compBitpack": true, "compDelta": true}})
 	next(t, a.conn, "settings")
 
 	var store codec.Baselines
