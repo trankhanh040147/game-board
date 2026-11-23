@@ -376,6 +376,7 @@ func main() {
 	token := flag.String("token", os.Getenv("NETLAB_ADMIN_TOKEN"), "admin token for -tick (default $NETLAB_ADMIN_TOKEN)")
 	stats := flag.Bool("stats", false, "record the server's 1 Hz tick stats (via bot 1) and print a load report")
 	warmup := flag.Duration("warmup", 10*time.Second, "with -stats: stats received in the first warmup after the last bot joined are not counted")
+	statsReset := flag.Bool("statsreset", false, "with -stats and -token: send statsReset after the warmup so the server's whole-window histograms cover only the measured window (off by default: a fresh server's window already starts at the run)")
 	perBot := flag.Bool("perbot", true, "print one summary per bot (false: totals only)")
 	flag.Parse()
 	if *kind != "walker" && *kind != "probe" && *kind != "shootrun" {
@@ -450,7 +451,7 @@ func main() {
 	}
 	if rec != nil {
 		rec.setFrom(time.Now().Add(*warmup))
-		if rec.token != "" {
+		if rec.token != "" && *statsReset {
 			go func() {
 				select {
 				case <-time.After(*warmup):
