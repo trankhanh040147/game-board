@@ -12,10 +12,10 @@ Status from the results recorded below only. "not run" = no result in this file 
 | # | Check (HANDOFF B.9) | Status | Recorded result | Section |
 |---|---|---|---|---|
 | 1 | Determinism, native vs WASM, arm64 and amd64 | **pass** | Identical state hashes on every tick at 20/30/64/128 Hz | [section](#check-1--determinism-native-vs-wasm-b9-1) |
-| 2 | Reconciliation, 0 corrections over 5 min | **fail** | Latest runs: 15 corrections (WebTransport), 45 (WebSocket); corrections track server starvations on a loaded host. "With modifier" half cannot run (no speed modifier yet) | [core runs](#check-2--reconciliation-0-corrections-over-5-minutes-b9-2-not-yet-met-on-a-shared-loaded-host), [bots runs](#check-2--runs-by-bots-2026-11-23-one-bot-per-server-5-minutes-each) |
-| 3 | Lag compensation (unit + integration) | not run | — | — |
+| 2 | Reconciliation, 0 corrections over 5 min | **fail** (on this shared host) | At HEAD (`91b61db` build): 20 corrections (WS), 25 (WT) in 5 min, load avg mean 18; most line up with host stalls also seen by a no-game-code probe. Modifier half: speedScale 0.8 gives 2394 corrections in 120 s (they appear; smoothing is a client render property) | [at HEAD](#check-2-at-head--5-minutes-1-bot-defaults-2026-11-23-18361841-bots), [speed modifier](#check-2-second-half--server-only-speed-modifier-on-2026-11-23-18481850-bots) |
+| 3 | Lag compensation (unit + integration) | **pass** | Unit: core's rewind test passes. Integration (DECISIONS 39 bar: ≥ 300 shots, ≥ 97%): lagcomp on 1500/1500 = 100.0%; off 70.0% of 2023 (reported only) | [integration](#check-3-integration--shooter-vs-runner-lagcomp-on-and-off-2026-11-23-18481854-bots) |
 | 4 | Shot budget vs 190 ms est. / 71 ms | not run | — | — |
-| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | not run (preliminary only) | 40 bots, current loop only: 99.92% (64 Hz) / 99.93% (128 Hz) of ticks within budget; per-second p99 max 67.7 / 33.1 ms; no zero-alloc toggle, no human players | [section](#check-5-preliminary--tick-health-with-40-bots-b9-5-p19-p28) |
+| 5 | Tick health, 10 players + 40 bots at 128 Hz, both loop variants | not run (preliminary only) | 40 bots, current loop: 128 Hz tick time p99 1.52 ms, 99.81% within budget; start lateness 97.38% within budget (host). No P19 toggle, no human players | [at HEAD](#check-5-at-head--40-bots-server-whole-window-histograms-2026-11-23-18551858-bots) |
 | 6 | Transport stalls at 5% loss, WS vs datagrams | not run | — | — |
 | 7 | Client smoke (Playwright) | **partial** | 18/0/1 at `6db531d` (review: 18/1 independently), 20/0/1 at `082b412` with WT; shoot skipped: shooting not testable until M3 | [section](#check-7--client-smoke-playwright-b9-7-partial-shooting-not-testable-until-m3) |
 | 8 | Team playtest, 4+ people | not run | Notes go in DEMO.md | — |
@@ -447,3 +447,44 @@ Limits:
 
 Discarded: runs at 18:42 built from the shared working tree, which held core's uncommitted server edits (lagcomp
 on: 1273 shots, 100%; off: 1893 shots, 74.7%). They are not counted because their server code is not a commit.
+
+## Check 5 at HEAD — 40 bots, server whole-window histograms (2026-11-23 18:55–18:58, bots)
+
+Still preliminary for B.9 #5: current loop only (the P19 allocating vs zero-alloc toggle is not built yet), 40 bots
+and no human players. Clean worktree build at `152ea15`. Each run had a fresh server, 40 walker bots from one
+process for 100 s, and a 10 s warmup for the per-second figures. The whole window is the server's own histogram
+since start, read from the last 1 Hz stats message; `statsReset` was not used because it crashes the server (see
+check 2, second half). It therefore includes the ~2 s ramp-up and the warmup.
+
+```
+HTTP_PORT=18610 sh scripts/check5-load.sh 64 40 100s 10s
+HTTP_PORT=18610 sh scripts/check5-load.sh 128 40 100s 10s
+```
+
+Server lifetime: the script prints the server PID and checks it at the end: 88056 (64 Hz) and 92374 (128 Hz),
+both "alive at end"; 0 bots with errors.
+
+| | 64 Hz | 128 Hz |
+|---|---|---|
+| Budget per tick | 15.625 ms | 7.8125 ms |
+| Load avg 1 min, before → after | 14.25 → 15.01 | 14.77 → 16.01 |
+| Whole-window tick time: samples | 6400 | 12765 |
+| Tick time p50 / p95 / **p99** / p999 / max | 0.04 / 0.9 / **2.16** / 26.48 / 378.67 ms | 0.04 / 0.77 / **1.52** / 12.27 / 71.72 ms |
+| Tick time **% within budget** (over budget) | **99.81** (12) | **99.81** (24) |
+| Start lateness p50 / p95 / p99 / p999 / max | 0.2 / 1.01 / 21.01 / 382.70 / 382.70 ms | 0.24 / 2.81 / 19.29 / 87.97 / 87.97 ms |
+| Start lateness % within budget (over budget) | 98.88 (72) | 97.38 (335) |
+| Catch-up ticks / schedule resets | 72 / 0 | 335 / 0 |
+| GC: cycles, pause p50 / p99 / max | 64, 0.049 / 3.67 / 12.58 ms | 92, 0.049 / 2.62 / 41.94 ms |
+| Heap, total allocated, goroutines | 15.3 MB, 609 MB, 140 | 25.1 MB, 909 MB, 140 |
+| Per-second view after warmup: tick-weighted % within budget | 99.79 (5632 ticks) | 99.79 (11264 ticks) |
+| Bot corrections, all 40 bots / worst bot's starvations | 95 / 7 | 822 / 41 |
+| Bot RTT median (median over bots) | 40.39 ms | 40.32 ms |
+
+Reading against B.9 #5 ("p99 tick time under budget and ≥ 99% of ticks within budget"):
+- **Tick processing time** meets both at 128 Hz with the current loop: p99 1.52 ms < 7.81 ms, 99.81% within budget.
+- **Tick start lateness** does not. It is 97.38% within budget at 128 Hz, with p99 19.29 ms. The no-game-code
+  probe sees the same lateness on this host (check 2 at HEAD), so this is host scheduling.
+- **Not yet:** both loop variants (P19 toggle), 10 human players, an idle host, and `statsReset` to drop the ramp-up.
+
+GC allocates about 6 MB/s at 64 Hz and 9 MB/s at 128 Hz for 40 players (609 MB and 909 MB over ~100 s). The
+41.9 ms GC pause max at 128 Hz is larger than one tick budget.
