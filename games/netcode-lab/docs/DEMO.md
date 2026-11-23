@@ -16,28 +16,42 @@ The server listens on two ports (defaults from `cmd/server/main.go` flags and th
 1. On the host, from games/netcode-lab: `make run` (builds WASM, server and client, then runs
    `bin/server -http 0.0.0.0:8080 -https 0.0.0.0:8443`).
 2. Admin token for the Lab panel: set `NETLAB_ADMIN_TOKEN`, or copy the generated `adminToken` from the server log.
-3. LAN players open `https://<host-ip>:8443` and accept one certificate warning. The page connects over WebTransport.
-4. If that fails, players open `http://<host-ip>:8080`. The game runs in WebSocket-fallback mode with a visible banner
-   (DECISIONS: transport). Not verified yet: the client WebTransport connect and the fallback banner are still being wired.
+3. LAN players open `https://<host-ip>:8443` and accept one certificate warning. The start card then shows
+   "✓ Game server connected over WebTransport" (seen 2026-11-23 @ e10d4de on https://127.0.0.1:8443, headless Chrome 156).
+4. If that fails, players open `http://<host-ip>:8080`. The start card shows "connected over WebSocket" and the banner
+   shows "WebSocket fallback — page is plain HTTP, not a secure context; game packets go over TCP." (seen 2026-11-23 @ e10d4de
+   on http://172.16.3.48:8080). Note: `http://127.0.0.1:8080` is a secure context, so on the host itself that URL
+   uses WebTransport. Add `?transport=ws` to force WebSocket.
+   Not verified: a second machine on the LAN, and the certificate warning click in a headed browser.
 5. Allow TCP 8080 and TCP + UDP 8443 through the host firewall.
 
 ## Core netcode (A.4–A.10)
 
 ### P01 — Vocabulary
 
-Status: not built yet
+Status: verified 2026-11-23 @ e10d4de
 
-- **Idea:** Vocabulary. See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P01**. Toggles it sets (HANDOFF B.6): Net graph HUD: RTT, tick, snapshot rate, FPS
-- **What to point at:** All four values visible and correct.
+- **Idea:** Vocabulary. See [CONCEPTS.md](CONCEPTS.md#a1).
+- **What to click:** open the page with `?admin=<token>`, press **F1**, click **P01**. The Lab footer shows "active preset P01". Press F1 to close.
+- **What to point at:** the net graph (top left). Each row says where its value comes from (`measured`, `server`, `setting`).
+- **Banner:** "P01 RTT, tick, snapshot and frame: 64 Hz server, 20 snapshots/s, 60 FPS, 40 ms RTT."
+- **Observed** (Run 2026-11-23 @ e10d4de: headless Chrome for Testing 156 over WebTransport (`https://127.0.0.1:8443`), server `NETLAB_ADMIN_TOKEN=demo bin/server -http 127.0.0.1:8080 -https 127.0.0.1:8443`, 2 walker bots (`bin/bot -n 2`), default conditioner.):
+  - RTT 41 ms (measured), server tick "2069 @ 64 Hz" (server), snapshots 19.7/s (set 20, measured), FPS 61 (16.7 ms, measured).
+  - All four B.6 values are visible and match the defaults (40 ms RTT, 64 Hz, 20/s, 60 FPS).
 
-### P02 — Dumb client (A.4)
+### P02 — Dumb client
 
-Status: not built yet
+Status: verified 2026-11-23 @ e10d4de (pointer-lock step not verified, see note)
 
-- **Idea:** Dumb client (A.4). See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P02**. Toggles it sets (HANDOFF B.6): `mode=dumb`: render only server state, even for yourself
-- **What to point at:** Pressing W moves you only after about one RTT plus waits; HUD "input → motion: N ms" (measured). Scorecard Instant ✗, Cheat-proof ✓.
+- **Idea:** Dumb client (A.4). See [CONCEPTS.md](CONCEPTS.md#a4).
+- **What to click:** F1 → **P02** → F1. Click the view to lock the mouse. From standing still, tap **W** several times.
+- **What to point at:** the mode HUD line "input → motion: N ms (measured, median of K)", and the scorecard.
+- **Banner:** "P02 The client only draws what the server sends: correct, cheat-proof, and you move one RTT plus waits late."
+- **Observed** (Run 2026-11-23 @ e10d4de: headless Chrome for Testing 156 over WebTransport (`https://127.0.0.1:8443`), server `NETLAB_ADMIN_TOKEN=demo bin/server -http 127.0.0.1:8080 -https 127.0.0.1:8443`, 2 walker bots (`bin/bot -n 2`), default conditioner.):
+  - "input → motion: 103 ms (measured, median of 6)" with RTT 41 ms, so one RTT plus tick, snapshot and frame waits.
+  - Mode HUD: "prediction off: you see only the server's state of yourself".
+  - Scorecard: ✗ Instant "waits for the server (no prediction)", ✓ Cheat-proof "server authority".
+- **Note:** Headless Chrome does not grant pointer lock, so the test hook set `input.locked`; the W presses were real keyboard events. The Play click → pointer lock step is not verified.
 
 ### P03 — Trust client (A.5)
 
@@ -47,37 +61,58 @@ Status: not built yet
 - **What to click:** Lab panel (F1) → preset **P03**. Toggles it sets (HANDOFF B.6): `mode=trust`: the client sends its position and hit claims, the server relays. Button "modded client": a bot or the presenter claims headshots through walls
 - **What to point at:** In trust mode fake kills land in the kill feed. In authoritative modes the same packets are rejected and logged "rejected claim".
 
-### P04 — Prediction (A.6)
+### P04 — Prediction
 
-Status: not built yet
+Status: partly: input → motion measured 44 ms, not "the current frame" (16.7 ms at 60 FPS)
 
-- **Idea:** Prediction (A.6). See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P04**. Toggles it sets (HANDOFF B.6): `predict=on`
-- **What to point at:** Own movement reacts in the current frame while the server still decides.
+- **Idea:** Prediction (A.6). See [CONCEPTS.md](CONCEPTS.md#a6).
+- **What to click:** F1 → **P04** → F1. Tap **W** from standing still, then hold W.
+- **What to point at:** "input → motion" (compare with P02), and the corrections count. P04 has reconcile off, so each snapshot snaps you back.
+- **Banner:** "P04 Your own movement runs locally at once; without reconciliation each snapshot snaps you back to the past."
+- **Observed** (Run 2026-11-23 @ e10d4de: headless Chrome for Testing 156 over WebTransport (`https://127.0.0.1:8443`), server `NETLAB_ADMIN_TOKEN=demo bin/server -http 127.0.0.1:8080 -https 127.0.0.1:8443`, 2 walker bots (`bin/bot -n 2`), default conditioner.):
+  - "input → motion: 44 ms (measured, median of 4)", against 103 ms in P02.
+  - Mode HUD: "pending: #1329 … #1334 … · replayed: 0 · corrections: 89 (since last Lab change) · reconcile OFF (hard snap)".
+  - Scorecard: ~ Instant "predicted, but snaps back without reconciliation".
+- **Open:** B.6 asks for a reaction in the current frame; 44 ms is about 2–3 frames. The stutter is visual and was not checked headless. Headless Chrome does not grant pointer lock, so the test hook set `input.locked`; the W presses were real keyboard events. The Play click → pointer lock step is not verified.
 
-### P05 — Reconciliation (A.7)
+### P05 — Reconciliation
 
-Status: not built yet
+Status: partly: corrections were 4 after walking, not 0
 
-- **Idea:** Reconciliation (A.7). See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P05**. Toggles it sets (HANDOFF B.6): `reconcile=on/off` (off means hard snap to server state)
-- **What to point at:** HUD "pending: #41 #42 #43, replayed: 2, corrections: 0". Off shows stutter.
+- **Idea:** Reconciliation (A.7). See [CONCEPTS.md](CONCEPTS.md#a7).
+- **What to click:** F1 → **P05** → F1. Walk with **W**. To show the contrast, switch to P04 (reconcile off).
+- **What to point at:** the mode HUD line "pending: #… · replayed: N · corrections: N".
+- **Banner:** "P05 Unacknowledged inputs are replayed on top of the server state: same rules, so nothing moves."
+- **Observed** (Run 2026-11-23 @ e10d4de: headless Chrome for Testing 156 over WebTransport (`https://127.0.0.1:8443`), server `NETLAB_ADMIN_TOKEN=demo bin/server -http 127.0.0.1:8080 -https 127.0.0.1:8443`, 2 walker bots (`bin/bot -n 2`), default conditioner.):
+  - While moving: "input → motion: 29 ms (measured, median of 3) | pending: #1816 … #1821 … · replayed: 5 · corrections: 4 (since last Lab change)".
+  - After stopping: "replayed: 8 · corrections: 4". The net graph showed "server input buffer 0 (starved 51)" and a 110 ms max snapshot gap.
+  - Scorecard: ✓ Instant "prediction + reconciliation".
+- **Open:** B.6 expects "corrections: 0". The 4 corrections fit the B.9 check 2 issue that review (V1) is chasing; input-buffer starvation is one candidate. Headless Chrome does not grant pointer lock, so the test hook set `input.locked`; the W presses were real keyboard events. The Play click → pointer lock step is not verified.
 
-### P06 — Raw snapshots (A.8)
+### P06 — Raw snapshots
 
-Status: not built yet
+Status: partly: the P06 preset is not built (server lists it "not built yet"); the effect works through Lab settings, and the stepping was not checked visually
 
-- **Idea:** Raw snapshots (A.8). See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P06**. Toggles it sets (HANDOFF B.6): `interp=off`, with jitter in the conditioner
-- **What to point at:** Other players visibly step every 50 ms, with bigger steps under jitter.
+- **Idea:** Raw snapshots (A.8). See [CONCEPTS.md](CONCEPTS.md#a8).
+- **What to click (until P06 is built):** F1 → under "My network conditioner (simulated)" click **Bad route (80 ms, jitter 15, loss 1%)** → under "Server settings" untick **interp** → F1.
+- **What to point at:** the bots. They should step every 50 ms, with bigger steps under jitter. Mode HUD: "others: raw latest snapshot (no interpolation)".
+- **Observed** (Run 2026-11-23 @ e10d4de: headless Chrome for Testing 156 over WebTransport (`https://127.0.0.1:8443`), server `NETLAB_ADMIN_TOKEN=demo bin/server -http 127.0.0.1:8080 -https 127.0.0.1:8443`, 2 walker bots (`bin/bot -n 2`), default conditioner.):
+  - Banner "Custom Lab settings (no preset)"; Lab footer "active preset custom".
+  - Mode HUD: "others: raw latest snapshot (no interpolation)"; net graph "interp buffer off (raw)".
+  - Net graph: RTT 81 ms, jitter 19 ms, snapshots 19.0/s, max snapshot gap 102 ms. "loss up/down" showed 0.0 / 0.0 % within the 1.5 s window, although the profile sets 1%.
+  - Scorecard: ✗ Smooth "others drawn at raw snapshots".
 
-### P07 — Interpolation (A.9)
+### P07 — Interpolation
 
-Status: not built yet
+Status: partly: the P07 preset is not built; through Lab settings, verified 2026-11-23 @ e10d4de
 
-- **Idea:** Interpolation (A.9). See [CONCEPTS.md](CONCEPTS.md) for the Part A section.
-- **What to click:** Lab panel (F1) → preset **P07**. Toggles it sets (HANDOFF B.6): `interp=on`, buffer slider, optional **truth ghost** (server's current position)
-- **What to point at:** Smooth motion; the ghost runs ahead by a measured ≈ 120 ms.
+- **Idea:** Interpolation (A.9). See [CONCEPTS.md](CONCEPTS.md#a9).
+- **What to click (until P07 is built):** F1 → tick **interp** and **truthGhost** under "Server settings" → conditioner **Default (40 ms)** → F1.
+- **What to point at:** smooth bots, the truth ghost running ahead of each bot, and the HUD line "truth ghost leads what you see by N ms".
+- **Observed** (Run 2026-11-23 @ e10d4de: headless Chrome for Testing 156 over WebTransport (`https://127.0.0.1:8443`), server `NETLAB_ADMIN_TOKEN=demo bin/server -http 127.0.0.1:8080 -https 127.0.0.1:8443`, 2 walker bots (`bin/bot -n 2`), default conditioner.):
+  - Mode HUD: "others: interpolated 100 ms in the past | truth ghost leads what you see by 120 ms (measured: synced server clock − render time)".
+  - 10 samples over 5 s: 121, 120, 120, 120, 120, 120, 120, 120, 120, 120 ms. B.6 expects ≈ 120 ms.
+  - Net graph: "interp buffer 100 ms (2× interval)". Scorecard: ✓ Smooth "interpolation".
 
 ### P08 — Three truths (A.10)
 
