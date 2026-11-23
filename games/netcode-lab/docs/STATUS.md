@@ -35,6 +35,7 @@ core (claude), client (claude), review (hermes), research (hermes), art (antigra
 | V3–V10 | review | Reviews; V10: M3 checklist 10/14 pass | Reports delivered to lead. |
 | S6–S9 | scribe | STATUS, B.9 table, PLAYTEST.md, README refresh | `d638d67`, `bbee2c5`, `56196a5` + `bd04544` (PLAYTEST), `8225bba` (README) |
 | S11 | scribe | DEMO.md walk of every built preset, duel and infra sections | `26144cc` at `078053b`: verified P01–P05, P07–P10; partly P06, P12, P13, P24, P26, P27, P28; duel P21, P23 and infra P16 verified with bots (pages not walked); P17, P20, P22 partly; P18, P25 not checked. |
+| S12 | scribe | Duel page and infra.html walked in Chromium; P22 deviation recorded | `02af1c3` at `4b5a2e6` (main server serves `/duel.html`, `/infra.html`, `/duel/ws`): verified P16, P17 (60 → 100 ms relaxation, matched at 10.1 s), P21, P22 (as measured), P23, P25 (desync banner names the seed); P18 partly; DECISIONS 52 (P22 observe wording). |
 
 ### In progress
 
