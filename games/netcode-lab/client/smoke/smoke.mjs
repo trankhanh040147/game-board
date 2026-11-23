@@ -58,21 +58,48 @@ try {
   const bannerOk = await B.waitForFunction(() => /WebSocket fallback/.test(document.getElementById("banner")?.innerText ?? ""), null, { timeout: 3000 }).then(() => true, () => false);
   check("WebSocket fallback banner visible", bannerOk);
 
-  // 2. Move (headless Chromium cannot grant pointer lock, so the lock flag is set directly; keys go through real events)
+  // 2. Play without pointer lock. Headless Chromium rejects requestPointerLock (a real rejected promise), so this is
+  //    the same path an embedded browser view takes. Expect: overlay closes, drag-to-look note, keys move the player.
   await A.click("#start button");
-  const lockMsg = await A.locator(".lockerr").innerText({ timeout: 2000 }).catch(() => "");
-  check("pointer lock request handled (headless refuses it; message shown, no console error)", true, lockMsg || "lock granted");
-  await A.evaluate(() => { document.getElementById("start").style.display = "none"; window.__netlab.input.locked = true; });
-  await A.waitForTimeout(500);
+  const overlayClosed = await A.waitForFunction(() => getComputedStyle(document.getElementById("start")).display === "none", null, { timeout: 3000 }).then(() => true, () => false);
+  const note = await A.locator("#dragnote").isVisible();
+  const lockMsg = await A.locator(".lockerr").textContent().catch(() => "");
+  check("refused pointer lock (rejected promise): overlay closes, drag-to-look note shown", overlayClosed && note, lockMsg || "lock was granted");
   const before = (await state(A)).pos;
   await A.keyboard.down("KeyD"); await A.waitForTimeout(700); await A.keyboard.up("KeyD");
   await A.waitForTimeout(600);
   const after = await state(A);
   const moved = Math.hypot(after.pos.x - before.x, after.pos.z - before.z);
   check("move: own player moves on key input", moved > 0.5, `${moved.toFixed(2)} m`);
+  const yaw0 = await A.evaluate(() => window.__netlab.input.yaw);
+  await A.mouse.move(640, 380); await A.mouse.down({ button: "right" }); await A.mouse.move(540, 380, { steps: 5 }); await A.mouse.up({ button: "right" });
+  const yaw1 = await A.evaluate(() => window.__netlab.input.yaw);
+  check("drag to look turns the view", Math.abs(yaw1 - yaw0) > 0.05, `yaw ${yaw0.toFixed(3)} → ${yaw1.toFixed(3)} rad`);
   const seen = await B.evaluate((id) => { const e = window.__netlab.session.interp.latest()?.entities.get(id); return e ? { x: e.x, z: e.z } : null; }, a0.id);
   check("move: other client sees the mover at the server position", !!seen && Math.hypot(seen.x - after.pos.x, seen.z - after.pos.z) < 0.05,
     seen ? `seen (${seen.x.toFixed(2)}, ${seen.z.toFixed(2)}) vs predicted (${after.pos.x.toFixed(2)}, ${after.pos.z.toFixed(2)})` : "not seen");
+
+  // 2b. requestPointerLock that throws synchronously, as reported from an embedded view (WrongDocumentError).
+  const C = await ctx.newPage();
+  C.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`[smoke-c] ${m.text()}`); });
+  C.on("pageerror", (e) => consoleErrors.push(`[smoke-c] pageerror: ${e.message}`));
+  await C.addInitScript(() => {
+    Element.prototype.requestPointerLock = function () { throw new DOMException("The root document of this element is not valid for pointer lock.", "WrongDocumentError"); };
+  });
+  await C.goto(`${BASE}/?name=smoke-c`);
+  await C.waitForFunction(() => window.__netlab?.session?.ready, null, { timeout: 20000 });
+  await C.click("#start button");
+  const cClosed = await C.waitForFunction(() => getComputedStyle(document.getElementById("start")).display === "none", null, { timeout: 3000 }).then(() => true, () => false);
+  const cMsg = await C.locator(".lockerr").textContent().catch(() => "");
+  const c0 = (await C.evaluate(() => window.__netlab.session.ownView(performance.now())));
+  await C.keyboard.down("KeyA"); await C.waitForTimeout(600); await C.keyboard.up("KeyA"); await C.waitForTimeout(300);
+  const c1 = (await C.evaluate(() => window.__netlab.session.ownView(performance.now())));
+  const cMoved = Math.hypot(c1.x - c0.x, c1.z - c0.z);
+  check("refused pointer lock (sync WrongDocumentError): overlay closes, message names the error, keys move", cClosed && /WrongDocumentError/.test(cMsg) && cMoved > 0.5, `${cMsg} · moved ${cMoved.toFixed(2)} m`);
+  await C.keyboard.press("Escape");
+  const cBack = await C.waitForFunction(() => getComputedStyle(document.getElementById("start")).display !== "none", null, { timeout: 2000 }).then(() => true, () => false);
+  check("Esc leaves drag mode and shows the overlay again", cBack);
+  await C.close();
 
   // 3. Shoot
   skip("shoot", "the server has no hitscan yet (HANDOFF M3); fire input is sent, but no hit result exists to check");

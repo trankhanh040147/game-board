@@ -1,4 +1,6 @@
 // Pointer lock + raw mouse. Produces the player's intent each fixed tick; the WASM codec turns it into bytes.
+// When the browser refuses pointer lock (embedded views, some headless runs), the game falls back to "drag to look":
+// hold a mouse button on the view and move the mouse. Left button still fires.
 
 export interface InputIntent {
   forward: boolean; back: boolean; left: boolean; right: boolean;
@@ -14,54 +16,95 @@ export class InputCapture {
   pitch = 0;
   sensitivity = 0.0022; // radians per mouse count
   locked = false;
+  /** Pointer lock was refused: playing with drag-to-look. */
+  dragMode = false;
   rawMouse = false;
   private keys = new Set<string>();
   private fireHeld = false;
+  private dragging = false;
   /** Fire presses since the last tick, so a click shorter than a tick is not lost. */
   private firePresses = 0;
   /** performance.now() of the last movement-key press, for the input → motion probe. */
   lastMoveKeyAt = -1;
-  onLockChange?: (locked: boolean) => void;
+  /** Called when play starts or stops (lock gained/lost, drag mode entered/left). */
+  onActiveChange?: (active: boolean) => void;
+  onLockError?: (msg: string) => void;
   onFirePress?: () => void;
+
+  get active() { return this.locked || this.dragMode; }
 
   constructor(private canvas: HTMLElement) {
     document.addEventListener("pointerlockchange", () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked) { this.keys.clear(); this.fireHeld = false; }
-      this.onLockChange?.(this.locked);
+      if (this.locked) this.dragMode = false;
+      if (!this.locked) this.release();
+      this.onActiveChange?.(this.active);
     });
     document.addEventListener("mousemove", (e) => {
-      if (!this.locked) return;
+      if (!(this.locked || (this.dragMode && this.dragging))) return;
       this.yaw -= e.movementX * this.sensitivity;
       this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.pitch - e.movementY * this.sensitivity));
     });
-    document.addEventListener("mousedown", (e) => {
-      if (!this.locked || e.button !== 0) return;
+    const down = (e: MouseEvent) => {
+      if (!this.active) return;
+      if (this.dragMode) {
+        if (e.target !== canvas) return; // the Lab panel and other UI keep their clicks
+        this.dragging = true;
+      }
+      if (e.button !== 0) return;
       this.fireHeld = true;
       this.firePresses++;
       this.onFirePress?.();
+    };
+    document.addEventListener("mousedown", down);
+    document.addEventListener("mouseup", (e) => {
+      if (e.button === 0) this.fireHeld = false;
+      if (e.buttons === 0) this.dragging = false;
     });
-    document.addEventListener("mouseup", (e) => { if (e.button === 0) this.fireHeld = false; });
+    canvas.addEventListener("contextmenu", (e) => { if (this.dragMode) e.preventDefault(); });
     document.addEventListener("keydown", (e) => {
-      if (!this.locked) return;
+      if (this.dragMode && e.code === "Escape") { this.stopDrag(); return; }
+      if (!this.active) return;
       if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code) && !this.keys.has(e.code)) this.lastMoveKeyAt = performance.now();
       this.keys.add(e.code);
       if (e.code === "Space") e.preventDefault();
     });
     document.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    addEventListener("blur", () => this.release());
   }
 
-  onLockError?: (msg: string) => void;
+  private release() { this.keys.clear(); this.fireHeld = false; this.dragging = false; }
+
+  stopDrag() {
+    if (!this.dragMode) return;
+    this.dragMode = false;
+    this.release();
+    this.onActiveChange?.(false);
+  }
+
+  /** Leaves play: exits pointer lock or drag mode. */
+  deactivate() {
+    if (this.locked) document.exitPointerLock();
+    this.stopDrag();
+  }
 
   async lock() {
-    // unadjustedMovement = raw mouse without OS acceleration, where the browser supports it.
+    // unadjustedMovement = raw mouse without OS acceleration, where the browser supports it. requestPointerLock may
+    // throw synchronously (older browsers) or return a rejected promise; both land in the catch blocks.
     try {
       await (this.canvas as any).requestPointerLock({ unadjustedMovement: true });
       this.rawMouse = true;
       return;
     } catch { this.rawMouse = false; }
-    try { await (this.canvas as any).requestPointerLock(); }
-    catch (e) { this.onLockError?.(`The browser refused pointer lock: ${(e as Error).message}`); }
+    try {
+      await (this.canvas as any).requestPointerLock();
+      return;
+    } catch (e) {
+      const err = e as Error;
+      this.onLockError?.(`Pointer lock refused by the browser (${err.name}: ${err.message}). Playing without it: drag with the mouse to look.`);
+    }
+    this.dragMode = true;
+    this.onActiveChange?.(true);
   }
 
   sample(): InputIntent {

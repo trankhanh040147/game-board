@@ -126,21 +126,30 @@ async function boot() {
     : null;
 
   go.addEventListener("click", () => input.lock());
-  canvas.addEventListener("click", () => { if (!input.locked && !lab.open) input.lock(); });
+  canvas.addEventListener("click", () => { if (!input.active && !lab.open && !presenter.open) input.lock(); });
+  const dragNote = el("div", { id: "dragnote", class: "hud box" }, "no pointer lock: drag to look · left click fires · Esc for menu");
+  dragNote.style.display = "none";
+  hud.appendChild(dragNote);
   input.onLockError = (msg) => {
     let el2 = card.querySelector<HTMLElement>(".lockerr");
     if (!el2) { el2 = el("div", { class: "bad lockerr" }); card.appendChild(el2); }
     el2.textContent = msg;
   };
-  input.onLockChange = (locked) => { start.style.display = locked || lab.open ? "none" : "flex"; };
+  input.onActiveChange = (active) => {
+    start.style.display = active || lab.open || presenter.open ? "none" : "flex";
+    dragNote.style.display = input.dragMode ? "" : "none";
+  };
   if (!s) input.onFirePress = () => world.rifle.fire(performance.now());
-  presenter.onToggle = (open) => { if (open && input.locked) document.exitPointerLock(); };
+  presenter.onToggle = (open) => {
+    if (open) input.deactivate();
+    start.style.display = open || lab.open || input.active ? "none" : "flex";
+  };
   lab.onToggle = (open) => {
-    if (open && input.locked) document.exitPointerLock();
-    start.style.display = open || input.locked ? "none" : "flex";
+    if (open) input.deactivate();
+    start.style.display = open || presenter.open || input.active ? "none" : "flex";
   };
   const keys = new Set<string>();
-  addEventListener("keydown", (e) => { if (input.locked) keys.add(e.code); });
+  addEventListener("keydown", (e) => { if (input.active) keys.add(e.code); });
   addEventListener("keyup", (e) => keys.delete(e.code));
 
   const loop = new FixedLoop(64, {
